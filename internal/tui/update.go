@@ -26,6 +26,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (design decision D02).
 		return m, loadCmd(m.client)
 
+	case watchUnavailableMsg:
+		// I04: data.Watch failed to start -- surface once in the status line
+		// (view_browse_repo.go) instead of silently never reacting to
+		// on-disk changes; ctrl+r still reloads manually.
+		m.watchUnavailable = true
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

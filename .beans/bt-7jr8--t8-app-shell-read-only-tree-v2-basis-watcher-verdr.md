@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-14T18:34:04Z
-updated_at: 2026-07-14T21:16:58Z
+updated_at: 2026-07-14T21:39:08Z
 parent: bt-blsy
 blocked_by:
     - bt-gbfe
@@ -99,3 +99,16 @@ Accordion (Meta/Body/Beziehungen/Historie) + Beziehungs-Navigation folgt in
 E2 Task 1/2. `detailFocus` schaltet den Fokus bereits um (Border-Farbe
 wechselt), hat aber noch keine eigene Navigation (Tasten sind No-Op, bis E2
 die Section/Feld-Navigation liefert).
+
+## Review-Fixes (Runde 2, Opus-Review)
+
+| Code | Schwere/Nutzen | Beschreibung | Status |
+|------|------|------|------|
+| B01 | medium | Tree-Viewport-Windowing (Cursor-Follow): `treeRows` lieferte ALLE Knoten, `renderPane` clippte nur an Pane-Höhe → Cursor konnte unterhalb des Folds unsichtbar werden. Fix: `windowStart`/`windowAround` (devd-Port `view_browse_project.go:647-670`) fenstert die Rows um den Cursor, bevor sie an `renderPane` gehen. | 🟢 |
+| B02 | low | Zyklus-Beans unsichtbar: Beans in reinem Parent-Zyklus (A→B→A) sind weder Roots (Parent gesetzt) noch Orphans (Parent löst auf) → verschwanden komplett. Fix: `collectCycleOrphans` (strukturelle Erreichbarkeit ab Roots+Orphans, expand-state-unabhängig via `reachableIDs`) sammelt jede unerreichbare Bean und hängt sie flach (ohne Rekursion — Duplikat-Schutz bei angehängten Sub-Bäumen) unter „(verwaist)" an. | 🟢 |
+| I04 | Nutzen: kein stiller Feature-Ausfall mehr | Silent Watch-Failure: schlug `data.Watch` fehl, degradierte die App lautlos (kein Live-Reload, keine Meldung). Fix: `watchUnavailableMsg` (async via Goroutine — inline `p.Send` vor `p.Run()` würde am unbuffered Channel deadlocken) setzt `m.watchUnavailable` → Statuszeile zeigt „watch unavailable — ctrl+r für manuelles Reload". | 🟢 |
+| I05 | Nutzen: Regressionsschutz für alle 3 Findings | Test-Lücken geschlossen: (1) Tab-Fokus-Tausch (Model-Flag + Pane-Akzent-Swap via `renderPane`/`renderDetailPane`), (2) Zyklus-Input (A→B→A, kein Hang, beide Beans unter (verwaist)), (3) Windowing (50 Knoten, Pane-Höhe 10, Cursor bei 40 → in `View()` sichtbar). Alle 3 schlugen vor dem Fix fehl (Kompilierfehler ggü. alter `treeRows`-Signatur bzw. fehlender Orphan-Root) — TDD-Rot-Zustand verifiziert (`git stash` der Fix-Dateien, Tests liefen erneut). | 🟢 |
+
+Betroffene Dateien: `internal/tui/view_browse_repo.go` (`windowStart`/`windowAround`, `collectCycleOrphans`/`reachableIDs`/`sortByTitleThenID`, `treeRows`-Signatur +`bodyH`, Statuszeile), `internal/tui/types.go` (`watchUnavailable`-Feld), `internal/tui/messages.go` (`watchUnavailableMsg`), `internal/tui/update.go` (Update-Case), `internal/tui/app.go` (async `p.Send` bei Watch-Fehler), `internal/tui/update_test.go` (4 neue Tests: `TestTabTogglesDetailFocusAndPaneAccent`, `TestCycleBeansShowUnderOrphanRoot`, `TestTreeWindowingKeepsCursorVisible`, `TestWindowAroundStableAtEdges`).
+
+**Ergebnis:** `command go test ./... -count=1` grün (2x hintereinander), `TestTreeGolden`/`TestTreeGoldenDeterministic` grün — Golden bleibt byte-identisch (100×30-Fixture hat 6 Knoten, weit unter der gefensterten Pane-Höhe, also No-Op-Windowing wie erwartet). `command gofmt -l .` leer, `command go vet ./...` leer.

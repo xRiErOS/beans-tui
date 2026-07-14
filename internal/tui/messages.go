@@ -27,6 +27,15 @@ type beansLoadedMsg struct {
 // B05 doc contract).
 type watchMsg struct{}
 
+// watchUnavailableMsg signals that data.Watch failed to start at all (app.go
+// Run) -- distinct from watchMsg (a live watcher firing). Sent exactly once,
+// asynchronously (app.go: a goroutine, since the unbuffered tea.Program.msgs
+// channel would otherwise deadlock the caller if sent before p.Run() starts
+// consuming it -- same B05-style constraint as watchMsg, just for the
+// startup-failure path instead of the steady-state one). I04 (T8 Opus
+// quality review): must surface in the status line, never a silent degrade.
+type watchUnavailableMsg struct{}
+
 // loadCmd (re)loads all beans via the CLI client, async -- the sole read path
 // for both the initial Init() load and every subsequent reload (ctrl+r,
 // watchMsg).

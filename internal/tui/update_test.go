@@ -3,14 +3,20 @@ package tui
 // update_test.go — TDD coverage for the App-Shell Update dispatcher (T8,
 // implementation-plan.md »E1 Task 8«): cursor movement/expand/collapse,
 // quit-confirm, reload-keeps-cursor-by-ID, and the MANDATORY orphan rule
-// (bean bt-7jr8 / T3-review Q01).
+// (bean bt-7jr8 / T3-review Q01). Also covers the T8 Opus quality-review
+// follow-ups (bean bt-7jr8, Runde 2): tree windowing (B01), cycle-bean
+// visibility (B02), and tab focus-swap accenting (I05 #1).
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"beans-tui/internal/data"
+	"beans-tui/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 // fixtureBeans is a small milestone -> epic -> 2 tasks hierarchy shared by
@@ -307,5 +313,156 @@ func TestOrphanShownUnderSyntheticRoot(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("orphaned bean not visible even with the orphan root expanded")
+	}
+}
+
+// --- T8 Opus quality review, Runde 2 (bean bt-7jr8) ---
+
+// TestTabTogglesDetailFocusAndPaneAccent guards Q01 end-to-end: tab flips
+// m.detailFocus, AND the rendered pane border actually swaps which side
+// carries the Mauve (focused) accent -- not just the model flag. Renders
+// through the exact same renderPane/renderDetailPane calls viewBrowseRepo
+// itself uses (I05 #1).
+func TestTabTogglesDetailFocusAndPaneAccent(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+	mauve := fgEscape(theme.Mauve)
+
+	m := fixtureModel(t, fixtureBeans())
+	m.width, m.height = 80, 24
+	if m.detailFocus {
+		t.Fatal("detailFocus must start false (Tree focused by default)")
+	}
+
+	nodes := m.visibleNodes()
+	treePane := renderPane(pane{title: "Tree", rows: m.treeRows(nodes, !m.detailFocus, 10)}, 30, 10, !m.detailFocus)
+	detailPane := m.renderDetailPane(nodes, 30, 10, m.detailFocus)
+	if !strings.Contains(treePane, mauve) {
+		t.Error("Tree pane not accented while Tree has focus")
+	}
+	if strings.Contains(detailPane, mauve) {
+		t.Error("Detail pane accented while Tree still has focus")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("tab did not flip detailFocus to true")
+	}
+
+	treePane = renderPane(pane{title: "Tree", rows: m.treeRows(nodes, !m.detailFocus, 10)}, 30, 10, !m.detailFocus)
+	detailPane = m.renderDetailPane(nodes, 30, 10, m.detailFocus)
+	if strings.Contains(treePane, mauve) {
+		t.Error("Tree pane still accented after tab moved focus to Detail")
+	}
+	if !strings.Contains(detailPane, mauve) {
+		t.Error("Detail pane not accented after tab moved focus there")
+	}
+}
+
+// TestCycleBeansShowUnderOrphanRoot guards B02: beans trapped in a pure
+// parent cycle (A -> B -> A) are unreachable from any root, but their Parent
+// DOES resolve (to each other) -- so collectOrphans alone would never catch
+// them either. Both must still surface under the synthetic "(verwaist)"
+// root, and flattening a pure cycle must return promptly (no hang).
+func TestCycleBeansShowUnderOrphanRoot(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "cyc-a", Title: "Cycle A", Status: "todo", Type: "task", Priority: "normal", Parent: "cyc-b"},
+		{ID: "cyc-b", Title: "Cycle B", Status: "todo", Type: "task", Priority: "normal", Parent: "cyc-a"},
+	}
+	m := fixtureModel(t, beans) // must return promptly -- no hang on the cycle
+
+	nodes := m.visibleNodes()
+	foundOrphanRoot := false
+	for _, n := range nodes {
+		if n.orphan {
+			foundOrphanRoot = true
+		}
+	}
+	if !foundOrphanRoot {
+		t.Fatal("orphan root missing even though both beans are unreachable (pure cycle)")
+	}
+	for _, b := range m.idx.Roots() {
+		if b.ID == "cyc-a" || b.ID == "cyc-b" {
+			t.Fatal("cycle bean leaked into the real Roots() top level")
+		}
+	}
+
+	m.expanded[orphanRootID] = true
+	nodes = m.visibleNodes()
+	seen := map[string]bool{}
+	for _, n := range nodes {
+		seen[n.id] = true
+	}
+	if !seen["cyc-a"] || !seen["cyc-b"] {
+		t.Fatalf("cycle beans not both visible under (verwaist): nodes=%v", nodeIDs(nodes))
+	}
+}
+
+// fiftyFlatBeans returns 50 flat (unparented) tasks wnd-00..wnd-49 -- a tree
+// taller than any reasonable pane, used to exercise windowing (B01).
+func fiftyFlatBeans() []data.Bean {
+	beans := make([]data.Bean, 50)
+	for i := range beans {
+		beans[i] = data.Bean{
+			ID:       fmt.Sprintf("wnd-%02d", i),
+			Title:    fmt.Sprintf("Window Task %02d", i),
+			Status:   "todo",
+			Type:     "task",
+			Priority: "normal",
+		}
+	}
+	return beans
+}
+
+// TestTreeWindowingKeepsCursorVisible guards B01: renderPane alone only
+// clips rows to the pane height starting from row 0 -- it has no idea where
+// the cursor is. With 50 flat root nodes and a pane far shorter than that,
+// the cursored row must still be part of the rendered window (and a row far
+// from the cursor must have scrolled out, or the "window" isn't limiting
+// anything).
+func TestTreeWindowingKeepsCursorVisible(t *testing.T) {
+	beans := fiftyFlatBeans()
+	m := fixtureModel(t, beans)
+	m.width, m.height = 100, 21 // bodyH-2 == 10 visible rows, far less than 50 nodes
+	m.cursorID = "wnd-40"
+
+	out := m.View()
+	if !strings.Contains(out, "wnd-40") {
+		t.Fatalf("cursored row (wnd-40) not visible in View() with 50 nodes / ~10 visible rows -- windowing missing/broken:\n%s", out)
+	}
+	if strings.Contains(out, "wnd-00") {
+		t.Error("row far from the cursor (wnd-00) still visible -- window did not scroll")
+	}
+}
+
+// TestWindowAroundStableAtEdges guards windowStart/windowAround directly
+// (devd port): fits-entirely is a no-op, the window never runs past either
+// edge, and the cursor stays inside the returned window at every position --
+// no jitter, no out-of-range slice.
+func TestWindowAroundStableAtEdges(t *testing.T) {
+	rows := make([]string, 20)
+	for i := range rows {
+		rows[i] = fmt.Sprintf("row-%02d", i)
+	}
+
+	if got := windowAround(rows, 30, 5); len(got) != 20 {
+		t.Fatalf("windowAround with height >= len(rows) must be a no-op, got %d rows", len(got))
+	}
+
+	for _, cursor := range []int{0, 1, 5, 10, 14, 15, 19} {
+		win := windowAround(rows, 8, cursor)
+		if len(win) != 8 {
+			t.Fatalf("cursor=%d: window has %d rows, want 8", cursor, len(win))
+		}
+		want := fmt.Sprintf("row-%02d", cursor)
+		found := false
+		for _, r := range win {
+			if r == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("cursor=%d: cursored row %q not in window %v", cursor, want, win)
+		}
 	}
 }

@@ -36,6 +36,15 @@ func Run(client *data.Client, repoDir string) error {
 	})
 	if err == nil {
 		defer stop()
+	} else {
+		// I04 (T8 Opus quality review): don't just swallow the error -- tell
+		// the model so it can surface it in the status line. Sent from a
+		// goroutine, NOT inline: p.Send blocks on an unbuffered channel until
+		// the program's event loop is reading it, which only starts inside
+		// p.Run() below -- an inline call here would deadlock before Run()
+		// ever gets to execute (mirrors the B05 constraint on watchMsg's own
+		// onChange callback, just for this one-shot startup-failure message).
+		go p.Send(watchUnavailableMsg{})
 	}
 
 	_, runErr := p.Run()

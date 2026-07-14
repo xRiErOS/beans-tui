@@ -49,12 +49,27 @@ func flattenTree(idx *data.Index, expanded map[string]bool) []treeNode {
 	}
 
 	orphans := collectOrphans(idx)
-	if len(orphans) > 0 {
+	cycles := collectCycleOrphans(idx, orphans)
+	if len(orphans) > 0 || len(cycles) > 0 {
 		open := expanded[orphanRootID]
 		nodes = append(nodes, treeNode{id: orphanRootID, depth: 0, hasKids: true, open: open, orphan: true})
 		if open {
 			for _, b := range orphans {
 				nodes = appendBeanNode(nodes, idx, b, 1, expanded, ancestors)
+			}
+			// B02 (T8 Opus review, bean bt-7jr8): cycle-trapped beans render as
+			// FLAT depth-1 rows -- never recursed into via appendBeanNode. Every
+			// bean whose whole Parent-chain loops back on itself (A -> B -> A)
+			// is, by construction, only reachable downward from another member
+			// of the very same cycle (see collectCycleOrphans), so recursing
+			// would either re-hit the cycle guard for nothing or -- for a bean
+			// merely hanging off a cycle member -- render it a second time here
+			// AND nested under its (also-unreachable) parent. A flat row keeps
+			// the fix simple and duplicate-free: every such bean gets exactly
+			// one visible row, just without its undefined/circular nesting
+			// reconstructed.
+			for _, b := range cycles {
+				nodes = append(nodes, treeNode{id: b.ID, bean: b, depth: 1, hasKids: false})
 			}
 		}
 	}
@@ -101,13 +116,71 @@ func collectOrphans(idx *data.Index) []*data.Bean {
 		}
 		out = append(out, b)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		ti, tj := strings.ToLower(out[i].Title), strings.ToLower(out[j].Title)
+	sortByTitleThenID(out)
+	return out
+}
+
+// sortByTitleThenID is the shared tie-break for every "(verwaist)"-bucket
+// listing (dangling-parent orphans, cycle-trapped beans): Title -> ID,
+// case-insensitive. Deliberately simple (data.sortBeans' exact upstream tier
+// order is unexported and not required for these rare paths) but MUST stay
+// deterministic -- golden-test/PO expectations both depend on it.
+func sortByTitleThenID(beans []*data.Bean) {
+	sort.SliceStable(beans, func(i, j int) bool {
+		ti, tj := strings.ToLower(beans[i].Title), strings.ToLower(beans[j].Title)
 		if ti != tj {
 			return ti < tj
 		}
-		return out[i].ID < out[j].ID
+		return beans[i].ID < beans[j].ID
 	})
+}
+
+// reachableIDs returns every bean ID reachable via idx.Children, descending
+// from roots. Structural, INDEPENDENT of the current expand/collapse UI
+// state on purpose: collapsing a node in the tree must never make its
+// subtree "disappear" from cycle detection -- only from the currently
+// rendered rows (flattenTree's own expanded lookups handle that separately).
+// A bean already visited stops the walk -- guards a cycle attached under a
+// legitimately-reachable bean the same way appendBeanNode's per-path
+// ancestors guard does, just as a global set here since only the full
+// reachable SET is needed, not render order.
+func reachableIDs(idx *data.Index, roots []*data.Bean) map[string]bool {
+	seen := map[string]bool{}
+	var walk func(b *data.Bean)
+	walk = func(b *data.Bean) {
+		if seen[b.ID] {
+			return
+		}
+		seen[b.ID] = true
+		for _, c := range idx.Children[b.ID] {
+			walk(c)
+		}
+	}
+	for _, b := range roots {
+		walk(b)
+	}
+	return seen
+}
+
+// collectCycleOrphans returns every bean reachable from NEITHER a real root
+// NOR a dangling-parent orphan's subtree -- beans trapped in a pure parent
+// cycle (A -> B -> A), or hanging off one. Their own Parent DOES resolve (so
+// collectOrphans misses them) and they can never be a Root() (Parent is
+// non-empty), so without this sweep they are silently invisible. B02 (T8
+// Opus quality review, bean bt-7jr8): beans-legal state -- frontmatter is
+// hand-editable -- must never be dropped; swept into the same synthetic
+// "(verwaist)" root as dangling-parent orphans instead.
+func collectCycleOrphans(idx *data.Index, orphans []*data.Bean) []*data.Bean {
+	anchors := append(append([]*data.Bean{}, idx.Roots()...), orphans...)
+	reachable := reachableIDs(idx, anchors)
+
+	var out []*data.Bean
+	for id, b := range idx.ByID {
+		if !reachable[id] {
+			out = append(out, b)
+		}
+	}
+	sortByTitleThenID(out)
 	return out
 }
 
@@ -155,8 +228,15 @@ func treeRowText(n treeNode) string {
 // the cursor's row only (devd view_browse_project.go:382-398): a leading `▌`
 // bar plus the WHOLE row accent-tinted (own per-cell colors stripped first).
 // focused=false (Detail pane has focus) freezes the cursor muted instead of
-// accent -- only the focused pane's cursor is highlighted (devd D03).
-func (m model) treeRows(nodes []treeNode, focused bool) []string {
+// accent -- only the focused pane's cursor is highlighted (devd D03). bodyH
+// is the pane's available ROW height (renderPane's h minus its own
+// title+separator lines -- Golden Rule #1 still holds: windowing trims the
+// ROWS handed to renderPane, it never forces a Height() on the bordered
+// style itself). B01 (T8 Opus quality review): rows are windowed around the
+// cursor (devd windowAround/windowStart port, view_browse_project.go:
+// 647-670) so a tree taller than the pane never hides the cursor below the
+// fold.
+func (m model) treeRows(nodes []treeNode, focused bool, bodyH int) []string {
 	pos := m.cursorPos(nodes)
 	rows := make([]string, len(nodes))
 	for i, n := range nodes {
@@ -172,7 +252,40 @@ func (m model) treeRows(nodes []treeNode, focused bool) []string {
 			rows[i] = " " + text
 		}
 	}
-	return rows
+	return windowAround(rows, bodyH, pos)
+}
+
+// windowStart computes the window start index so cursor stays visible --
+// centered when there's room, clamped at both edges (devd port:
+// view_browse_project.go:649-661, itself shared there by render + the
+// mouse-click Y->row mapping). Deterministic in cursor+height alone (no
+// hidden state), which is what keeps it jitter-free: the same (n, height,
+// cursor) always yields the same window, it never "remembers" a previous
+// scroll offset.
+func windowStart(n, height, cursor int) int {
+	if height <= 0 || n <= height {
+		return 0
+	}
+	start := cursor - height/2
+	if start < 0 {
+		start = 0
+	}
+	if start+height > n {
+		start = n - height
+	}
+	return start
+}
+
+// windowAround windows rows to height entries so the cursor stays visible
+// (devd port: view_browse_project.go:663-670). A no-op when everything
+// already fits (including height<=0, an init/edge-case fallback -- renderPane
+// itself caps to its own h regardless of how many rows it's handed).
+func windowAround(rows []string, height, cursor int) []string {
+	if height <= 0 || len(rows) <= height {
+		return rows
+	}
+	start := windowStart(len(rows), height, cursor)
+	return rows[start : start+height]
 }
 
 // renderDetailPane renders the placeholder detail preview: title + a meta
@@ -241,7 +354,15 @@ func (m model) viewBrowseRepo() string {
 	localKeys := footer(localHint, innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
-	status := statusBar("", m.err, innerW)
+	// I04 (T8 Opus quality review): a failed data.Watch start (no live
+	// reload) must never degrade silently -- it goes into the same
+	// indicator slot Chrome() uses for the scroll position (Accent, non-
+	// critical), leaving m.err/the Red slot reserved for real load failures.
+	indicator := ""
+	if m.watchUnavailable {
+		indicator = "watch unavailable — ctrl+r für manuelles Reload"
+	}
+	status := statusBar(indicator, m.err, innerW)
 
 	footH := lipgloss.Height(localKeys) + 2             // + status line + divider above footer
 	avail := innerH - lipgloss.Height(head) - footH - 1 // - divider under the top bar
@@ -255,7 +376,7 @@ func (m model) viewBrowseRepo() string {
 
 	lw, rw := masterDetailWidths(innerW, 24)
 	nodes := m.visibleNodes()
-	treeBox := renderPane(pane{title: "Tree", rows: m.treeRows(nodes, !m.detailFocus)}, lw, bodyH, !m.detailFocus)
+	treeBox := renderPane(pane{title: "Tree", rows: m.treeRows(nodes, !m.detailFocus, bodyH-2)}, lw, bodyH, !m.detailFocus)
 	detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
 

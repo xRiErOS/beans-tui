@@ -51,6 +51,13 @@ type model struct {
 	detailFocus bool
 
 	confirmQuit bool
+
+	// watchUnavailable is set once (I04, T8 Opus quality review) when
+	// data.Watch failed to start in app.go's Run: the App-Shell still works
+	// (ctrl+r reloads manually), it just never reacts to on-disk changes on
+	// its own -- this must be surfaced in the status line, never silently
+	// degraded.
+	watchUnavailable bool
 }
 
 // newModel builds the initial (pre-load) App-Shell state.
