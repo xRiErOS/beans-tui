@@ -1,0 +1,301 @@
+package tui
+
+// view_browse_backlog.go — V3 Backlog (design-spec.md §6, E2 Task 5, bean
+// bt-gzu6): parentless+ready beans (idx.Backlog(), E1 Task 3), Master-Detail
+// reusing Task 1's Accordion (via focusedBean(), Task 2) and Task 3/4's
+// shared search+facet predicate (m.beanMatches) -- NOT a second, parallel
+// filter implementation (devd has two parallel Tree-/Backlog-filters,
+// beans-tui consolidates into one, box_filter_facets.go). Sort-Toggle `S`
+// cycles status/priority/created/updated (design-spec §6 V3) instead of a
+// floating sort menu (no V8 overlay for this in the spec, a deliberate
+// simplification vs. devd's backlogSortBox).
+//
+// backlogList staleness note: `/` and `f` route through the SHARED
+// keySearchInput/keyFilterMenu handlers (update.go/box_filter_facets.go),
+// which only know about the Tree's cursorID -- they never touch backlogList.
+// So backlogList.length can go stale relative to backlogVisible()'s current
+// length while the user is typing/toggling facets. keyBacklog resyncs it
+// (setLen) at the top of every key it handles, before any up/down move, so
+// staleness never survives past the next backlog keypress -- rendering
+// itself never depends on backlogList.length (only .cursor), so this is
+// purely a "keep future move() bounds correct" concern, not a render bug.
+
+import (
+	"sort"
+	"strings"
+	"time"
+
+	"beans-tui/internal/data"
+	"beans-tui/internal/theme"
+	keybind "github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+)
+
+// backlogSortModes is the canonical 4-stop Sort-Toggle `S` cycle (bean
+// bt-gzu6 Akzeptanz: "S zyklisch status->prio->created->updated->status").
+//
+// ERRATUM vs. the plan's own sketch (epic-E2-plan.md »Task 5«):
+// `modes := []string{"", "priority", "created", "updated", "status"}`
+// treated "" (the untouched default, meaning "leave idx.Backlog()'s own
+// canonical order in place") as a FIFTH distinct cycle stop alongside
+// "status" -- but "" and "status" render IDENTICALLY (idx.Backlog() is
+// already status-tier ordered, sortBacklog's own "" case is a no-op for
+// exactly that reason). A naive "find current, advance, wrap" over that
+// 5-element slice would wrap from "status" (index 4) back to "" (index 0)
+// instead of to "priority" (index 1) -- a keypress that changes
+// m.backlogSort's STRING value but not the rendered order at all, i.e. a
+// dead 5th keystroke once per lap. That contradicts the bean's own "4
+// modes" wording. Fixed here: "" is an ALIAS for "status" only when
+// LOOKING UP the current position (nextBacklogSort below); once cycling
+// starts, "" is never revisited -- a pure period-4 cycle, always a
+// visible change on every press.
+var backlogSortModes = []string{"status", "priority", "created", "updated"}
+
+// nextBacklogSort advances current to the next Sort-Toggle stop, wrapping.
+func nextBacklogSort(current string) string {
+	if current == "" {
+		current = "status" // alias: idx.Backlog()'s own order IS status-tier order
+	}
+	for i, mode := range backlogSortModes {
+		if mode == current {
+			return backlogSortModes[(i+1)%len(backlogSortModes)]
+		}
+	}
+	return backlogSortModes[0]
+}
+
+// backlogVisible returns idx.Backlog() (E1 Task 3, unchanged) narrowed by
+// the SAME shared search+facet predicate the Tree uses (m.beanMatches, Task
+// 3/4), then ordered per the active Sort-Toggle mode (sortBacklog).
+func (m model) backlogVisible() []*data.Bean {
+	if m.idx == nil {
+		return nil
+	}
+	var out []*data.Bean
+	for _, b := range m.idx.Backlog() {
+		if m.beanMatches(b) {
+			out = append(out, b)
+		}
+	}
+	sortBacklog(out, m.backlogSort)
+	return out
+}
+
+// sortBacklog re-orders beans in place per mode -- "" leaves idx.Backlog()'s
+// own canonical (Status -> Priority -> Type -> Title) order untouched.
+// data.StatusRank/PriorityRank (E2 Task 1) back the status/priority modes;
+// created/updated compare CreatedAt/UpdatedAt via afterOrLast (nil-safe).
+func sortBacklog(beans []*data.Bean, mode string) {
+	switch mode {
+	case "priority":
+		sort.SliceStable(beans, func(i, j int) bool {
+			return data.PriorityRank(beans[i].Priority) < data.PriorityRank(beans[j].Priority)
+		})
+	case "created":
+		sort.SliceStable(beans, func(i, j int) bool { return afterOrLast(beans[i].CreatedAt, beans[j].CreatedAt) })
+	case "updated":
+		sort.SliceStable(beans, func(i, j int) bool { return afterOrLast(beans[i].UpdatedAt, beans[j].UpdatedAt) })
+	case "status":
+		sort.SliceStable(beans, func(i, j int) bool {
+			return data.StatusRank(beans[i].Status) < data.StatusRank(beans[j].Status)
+		})
+	} // "" -- leave idx.Backlog()'s own canonical order in place
+}
+
+// afterOrLast orders newest-first; nil timestamps sort last, never panics.
+func afterOrLast(a, b *time.Time) bool {
+	if a == nil {
+		return false
+	}
+	if b == nil {
+		return true
+	}
+	return a.After(*b)
+}
+
+// backlogSelected returns the bean under backlogList's cursor, or nil for an
+// empty/out-of-range list (pre-load, or every backlog row filtered out).
+func (m model) backlogSelected() *data.Bean {
+	vis := m.backlogVisible()
+	if m.backlogList.cursor < 0 || m.backlogList.cursor >= len(vis) {
+		return nil
+	}
+	return vis[m.backlogList.cursor]
+}
+
+// backlogRowText renders one Backlog row's plain content: status glyph +
+// type icon + ID (Sapphire) + title -- mirrors treeRowText's glyph order
+// (view_browse_repo.go) minus the indent/expand-marker (Backlog is flat, no
+// hierarchy; devd's variable-height block windowing is deliberately NOT
+// ported here, see plan Port-Referenzen -- a beans title is short enough for
+// the existing single-line windowAround, `truncate` handles the rare overlong
+// case exactly like every other row in the app).
+func backlogRowText(b *data.Bean) string {
+	return theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(b.ID) + " " + b.Title
+}
+
+// backlogRows renders every visible Backlog row, applying the same D08
+// cursor treatment as treeRows (view_browse_repo.go): a leading `▌` bar plus
+// the whole row accent-tinted when focused, muted when the Detail pane has
+// focus instead. Windowed around the cursor via the EXISTING windowAround
+// (E1 Task 8) -- no new fenestration mechanism (plan Port-Referenzen).
+func (m model) backlogRows(vis []*data.Bean, focused bool, bodyH int) []string {
+	pos := m.backlogList.cursor
+	rows := make([]string, len(vis))
+	for i, b := range vis {
+		text := backlogRowText(b)
+		if i == pos {
+			plain := ansi.Strip(text)
+			if focused {
+				rows[i] = theme.Accent.Render("▌" + plain)
+			} else {
+				rows[i] = theme.Dim.Render("▌" + plain)
+			}
+		} else {
+			rows[i] = " " + text
+		}
+	}
+	return windowAround(rows, bodyH, pos)
+}
+
+// renderBacklogDetailPane renders the Detail-Accordion (Meta/Body/
+// Beziehungen/Historie, Task 1) for the Backlog's selected bean -- mirrors
+// renderDetailPane (view_browse_repo.go) but keys off backlogList's index
+// cursor into vis instead of a treeNode slice; not consolidated into a
+// shared helper (plan Files list scopes Task 5 to a new file, no
+// view_browse_repo.go edit -- the small duplication here is the accepted
+// cost of that scope boundary).
+func (m model) renderBacklogDetailPane(vis []*data.Bean, w, h int, focused bool) string {
+	var rows []string
+	pos := m.backlogList.cursor
+	if pos >= 0 && pos < len(vis) {
+		b := vis[pos]
+		bodyW := w - 4
+		if bodyW < 1 {
+			bodyW = 1
+		}
+		accW := w - 2
+		if accW < 1 {
+			accW = 1
+		}
+		secs := beanSections(m.idx, b, bodyW)
+		acc := renderAccordion(secs, m.accOpen, accW, focused, m.secCursor, m.fieldCursor)
+		rows = strings.Split(acc, "\n")
+	} else {
+		rows = append(rows, theme.Dim.Render("(no selection)"))
+	}
+	return renderPane(pane{title: "Detail", rows: rows}, w, h, focused)
+}
+
+// viewBacklog renders the two-pane master-detail Backlog view -- mirrors
+// viewBrowseRepo's algebra exactly (view_browse_repo.go) so the frame always
+// fills width x height (Golden Rule #1: no Height() on a bordered style),
+// just with backlogVisible() rows on the left instead of the Tree's
+// treeNode flattening.
+func (m model) viewBacklog() string {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+	innerH := h - 2
+
+	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
+	head := breadcrumb(m.repoLabel(), "Backlog", globalHint, innerW)
+
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog}) + "  tab:focus"
+	localKeys := footer(localHint, innerW)
+
+	div := theme.Dim.Render(strings.Repeat("─", innerW))
+	indicator := ""
+	if m.watchUnavailable {
+		indicator = "watch unavailable — ctrl+r für manuelles Reload"
+	}
+	status := statusBar(indicator, m.err, innerW)
+
+	footH := lipgloss.Height(localKeys) + 2
+	avail := innerH - lipgloss.Height(head) - footH - 1
+	if avail < 4 {
+		avail = 18 // height unknown (init/tests) -> generous fallback, mirrors Chrome()/viewBrowseRepo
+	}
+	bodyH := avail - 2 // both panes add their own border (+2, Golden Rule #1)
+	if bodyH < 1 {
+		bodyH = 1
+	}
+
+	lw, rw := masterDetailWidths(innerW, 24)
+	vis := m.backlogVisible()
+	// Same 1-header-row budget trade as the Tree's search head (Task 3):
+	// the search/filter summary line costs 1 line of the list pane's
+	// bodyH-2 content budget, so the actual rows window to bodyH-3.
+	searchLine := m.treeSearchLine(lw - 2)
+	rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-3)...)
+	listBox := renderPane(pane{title: "Backlog", rows: rows}, lw, bodyH, !m.detailFocus)
+	detailBox := m.renderBacklogDetailPane(vis, rw, bodyH, m.detailFocus)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, listBox, detailBox)
+
+	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
+	out := outerBorder(content, innerW, true)
+
+	if m.filterOpen {
+		out = placeOverlay(out, m.treeFilterBox(), w, h)
+	}
+	if m.confirmQuit {
+		out = placeOverlay(out, m.quitBox(), w, h)
+	}
+	return out
+}
+
+// keyBacklog drives the Backlog view: up/down move backlogList, enter opens
+// Detail focus on the selected bean, S cycles the sort mode, `/`/`f` open
+// the SAME shared search input/filter menu the Tree uses, `b`/esc return to
+// Tree. Detail focus (once entered) delegates to keyDetailFocus verbatim
+// (Task 2) -- focusedBean()'s viewBacklog case (update.go) is what makes
+// that reuse possible without a second Accordion-navigation implementation.
+func (m model) keyBacklog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.detailFocus { // defensive: handleKey already routes detailFocus to keyDetailFocus first
+		return m.keyDetailFocus(msg)
+	}
+
+	// Resync backlogList's length against the CURRENT filtered/sorted view
+	// before touching it -- search/filter toggles routed through the shared
+	// keySearchInput/keyFilterMenu handlers never update backlogList (see
+	// file doc comment), so this is the one place that closes the gap.
+	vis := m.backlogVisible()
+	m.backlogList.setLen(len(vis))
+
+	switch {
+	case keybind.Matches(msg, keys.Sort):
+		m.backlogSort = nextBacklogSort(m.backlogSort)
+		return m, nil
+	case keybind.Matches(msg, keys.Search):
+		return m.openSearchInput()
+	case keybind.Matches(msg, keys.Filter):
+		return m.openFilterMenu()
+	case keybind.Matches(msg, keys.Backlog), keybind.Matches(msg, keys.Back):
+		m.view = viewBrowseRepo
+		return m, nil
+	case keybind.Matches(msg, keys.Enter):
+		if m.focusedBean() != nil {
+			// enterDetailFocus-equivalent (Task 2's tab-handler, update.go):
+			// always re-enter the Accordion at Meta, section level, field
+			// cursor 0.
+			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+			m.detailFocus = true
+		}
+		return m, nil
+	}
+
+	switch navKey(msg.String()) {
+	case "up":
+		m.backlogList.move(-1)
+	case "down":
+		m.backlogList.move(1)
+	}
+	return m, nil
+}

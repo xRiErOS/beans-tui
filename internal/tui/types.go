@@ -20,6 +20,7 @@ type viewID int
 
 const (
 	viewBrowseRepo viewID = iota
+	viewBacklog           // V3 Backlog (E2 Task 5, bean bt-gzu6, design-spec.md §6 V3)
 )
 
 // orphanRootID is the synthetic node ID for the "(verwaist)" root that
@@ -120,6 +121,22 @@ type model struct {
 	filterOpen                                          bool
 	filterItems                                         []ffItem
 	filterMenu                                          listState
+
+	// Backlog `b` (E2 Task 5, bean bt-gzu6, design-spec.md §6 V3): backlogList
+	// is the Backlog master pane's cursor (index-based, listState -- unlike
+	// the Tree's bean-ID cursorID, the Backlog is a flat, non-hierarchical
+	// list, so an index is sufficient and mirrors devd's own backlogCursor
+	// shape). Kept in sync (setLen) by keyBacklog on every keypress it
+	// handles and by the `b`-open case in keyTree, since backlogVisible()'s
+	// LENGTH can change out from under it (search/filter routes through the
+	// SHARED keySearchInput/keyFilterMenu handlers, which know nothing about
+	// backlogList -- view_browse_backlog.go's doc comment has the full
+	// rationale). backlogSort is the active Sort-Toggle `S` mode: ""
+	// (default) leaves idx.Backlog()'s own canonical order in place;
+	// "status"/"priority"/"created"/"updated" are the four cycle stops
+	// (nextBacklogSort, view_browse_backlog.go).
+	backlogList listState
+	backlogSort string
 
 	confirmQuit bool
 

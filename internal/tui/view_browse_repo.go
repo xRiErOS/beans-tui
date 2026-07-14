@@ -535,9 +535,12 @@ func (m model) repoLabel() string {
 }
 
 // View dispatches on viewID (devd port convention: enum + switch in view).
-// T8 ships exactly one view; later epics add cases here, never branches.
+// E2 Task 5 (bean bt-gzu6) adds the first sibling case (viewBacklog); later
+// epics grow this switch further, never branches.
 func (m model) View() string {
 	switch m.view {
+	case viewBacklog:
+		return m.viewBacklog()
 	default:
 		return m.viewBrowseRepo()
 	}

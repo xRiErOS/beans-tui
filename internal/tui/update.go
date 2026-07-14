@@ -162,16 +162,21 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocus {
 		return m.keyDetailFocus(msg)
 	}
+	if m.view == viewBacklog {
+		return m.keyBacklog(msg)
+	}
 	return m.keyTree(msg)
 }
 
 // focusedBean returns the bean the Detail-Accordion currently targets,
 // independent of which view is active (devd port focusedIssue,
-// view_detail_issue.go:20-35) -- view-agnostic so Task 5's Backlog view can
-// reuse keyDetailFocus verbatim once it adds its own case here.
+// view_detail_issue.go:20-35) -- view-agnostic so Task 5's Backlog view
+// (viewBacklog case below, bean bt-gzu6) reuses keyDetailFocus verbatim.
 func (m model) focusedBean() *data.Bean {
 	switch m.view {
-	default: // viewBrowseRepo (T8) -- Task 5 adds a viewBacklog case
+	case viewBacklog: // E2 Task 5: the Backlog list's own selection, NOT the (possibly stale/irrelevant) tree cursor
+		return m.backlogSelected()
+	default: // viewBrowseRepo (T8)
 		nodes := m.visibleNodes()
 		pos := m.cursorPos(nodes)
 		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan {
@@ -289,6 +294,33 @@ func expandAncestorsOf(idx *data.Index, expanded map[string]bool, id string) map
 	return out
 }
 
+// openSearchInput enters the search-input capture state (E2 Task 3, bean
+// bt-4ep2): pre-loads the input with the CURRENT query (re-opening a
+// committed search resumes editing it, mirrors devd's SetValue(m.treeQuery)).
+// Factored out of keyTree (E2 Task 5, bean bt-gzu6): keyBacklog
+// (view_browse_backlog.go) shares this verbatim -- the search head/live
+// filter is ONE piece of shared model state, not a per-view concept.
+func (m model) openSearchInput() (tea.Model, tea.Cmd) {
+	m.searchActive = true
+	m.searchInput.SetValue(m.searchQuery)
+	m.searchInput.CursorEnd()
+	m.searchInput.Focus()
+	return m, textinput.Blink
+}
+
+// openFilterMenu opens the shared facet-filter menu (E2 Task 4, bean
+// bt-9ldr), port devd openTreeFilter minus the loadAllIssues call. Factored
+// out of keyTree (E2 Task 5): keyBacklog (view_browse_backlog.go) shares this
+// verbatim -- ONE filter menu for Tree AND Backlog (design-spec.md US-05,
+// box_filter_facets.go doc comment).
+func (m model) openFilterMenu() (tea.Model, tea.Cmd) {
+	m.filterItems = m.buildFilterItems()
+	m.filterMenu = listState{}
+	m.filterMenu.setLen(len(m.filterItems))
+	m.filterOpen = true
+	return m, nil
+}
+
 // keyTree drives the tree: up/down move the cursor, right/left expand/
 // collapse, enter toggles expand (no-op on a leaf, per task scope). `/`, `f`,
 // `X`, and the esc-cascade's search/filter-clearing rung (E2 Task 3+4) are
@@ -301,21 +333,19 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Port devd keyTree's Search case (view_browse_project.go:689-699),
 		// minus loadAllIssues -- beans-tui already holds the full Index in
 		// memory (no separate "load everything for search" step needed).
-		// Pre-loads the input with the CURRENT query (re-opening a committed
-		// search resumes editing it, mirrors devd's SetValue(m.treeQuery)).
-		m.searchActive = true
-		m.searchInput.SetValue(m.searchQuery)
-		m.searchInput.CursorEnd()
-		m.searchInput.Focus()
-		return m, textinput.Blink
+		return m.openSearchInput()
 	case keybind.Matches(msg, keys.Filter):
 		// E2 Task 4 (bean bt-9ldr), port devd openTreeFilter
 		// (view_browse_project.go:865-874) minus the loadAllIssues call --
 		// beans-tui already holds the full Index in memory.
-		m.filterItems = m.buildFilterItems()
-		m.filterMenu = listState{}
-		m.filterMenu.setLen(len(m.filterItems))
-		m.filterOpen = true
+		return m.openFilterMenu()
+	case keybind.Matches(msg, keys.Backlog):
+		// E2 Task 5 (bean bt-gzu6): `b` opens the Backlog view -- search/
+		// filter state carries over unchanged (ONE shared m.beanMatches
+		// predicate, Task 3/4), only the master list's data source and
+		// cursor representation (backlogList) differ from the Tree.
+		m.view = viewBacklog
+		m.backlogList.setLen(len(m.backlogVisible()))
 		return m, nil
 	case keybind.Matches(msg, keys.FilterClear):
 		// X as a direct top-level reset even with the menu closed (design-
