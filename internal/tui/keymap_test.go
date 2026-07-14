@@ -2,6 +2,7 @@ package tui
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -56,6 +57,58 @@ func TestArrowsAlwaysAlias(t *testing.T) {
 		}
 		if got := navKey(d.arrow); got != d.want {
 			t.Errorf("navKey(%q)=%q, want %q (%s)", d.arrow, got, d.want, d.name)
+		}
+	}
+}
+
+// TestHelpGroupsCoverEveryBindingExactlyOnce is a drift guard (T7 follow-up
+// I02, bean bt-7jr8): reflects over every keybind.Binding field of keyMap and
+// asserts helpGroups() references each one exactly once -- a future added
+// keyMap field that nobody wired into a help group (or a copy-paste that
+// lists one binding twice) fails loudly instead of silently drifting the
+// in-app help / doc-generation source out of sync with the real bindings.
+func TestHelpGroupsCoverEveryBindingExactlyOnce(t *testing.T) {
+	k := newKeyMap()
+	v := reflect.ValueOf(k)
+	typ := v.Type()
+
+	// identity keys a binding by its joined Keys() -- every field in this
+	// keymap binds a distinct key set, so this is a safe, comparable stand-in
+	// for keybind.Binding itself (which isn't usable as a map key directly).
+	type coverage struct {
+		field string
+		count int
+	}
+	byIdentity := map[string]*coverage{}
+	for i := 0; i < v.NumField(); i++ {
+		b, ok := v.Field(i).Interface().(keybind.Binding)
+		if !ok {
+			continue
+		}
+		byIdentity[strings.Join(b.Keys(), ",")] = &coverage{field: typ.Field(i).Name}
+	}
+	if len(byIdentity) == 0 {
+		t.Fatal("no keybind.Binding fields found on keyMap -- reflection scan is broken")
+	}
+
+	for _, g := range k.helpGroups() {
+		for _, b := range g.bindings {
+			id := strings.Join(b.Keys(), ",")
+			c, ok := byIdentity[id]
+			if !ok {
+				t.Errorf("helpGroups() %q references a binding %v that is not a keyMap field", g.title, b.Keys())
+				continue
+			}
+			c.count++
+		}
+	}
+
+	for id, c := range byIdentity {
+		switch {
+		case c.count == 0:
+			t.Errorf("keyMap field %s (%s) is not covered by any helpGroups() entry", c.field, id)
+		case c.count > 1:
+			t.Errorf("keyMap field %s (%s) is covered %d times by helpGroups() (want exactly once)", c.field, id, c.count)
 		}
 	}
 }

@@ -193,3 +193,121 @@ func TestCanvasLinesPadsToRectangle(t *testing.T) {
 		}
 	}
 }
+
+// --- T7 follow-up I01 (bean bt-7jr8, MANDATORY in T8): renderPane
+// (focused-border), borderedPane, tagsInline/tagSwatch, modalPanel ---
+
+// fgEscape returns the raw foreground color escape sequence lipgloss/termenv
+// emit for c under the CURRENT color profile -- the same primitive
+// BorderForeground/Foreground resolve to internally, so tests can assert a
+// specific color is (or isn't) present without hardcoding ANSI byte layout.
+func fgEscape(c lipgloss.Color) string {
+	col := lipgloss.ColorProfile().Color(string(c))
+	return termenv.CSI + col.Sequence(false) + "m"
+}
+
+// TestRenderPaneFocusedBorderColor guards render_shared.go's focused/
+// unfocused border-color swap: focused=true borders Mauve, focused=false
+// borders Overlay (devd D03 pattern: only the focused pane is highlighted).
+func TestRenderPaneFocusedBorderColor(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	p := pane{title: "T", rows: []string{"row one", "row two"}}
+	focused := renderPane(p, 20, 4, true)
+	unfocused := renderPane(p, 20, 4, false)
+
+	mauve := fgEscape(theme.Mauve)
+	overlay := fgEscape(theme.Overlay)
+
+	// Mauve only ever appears via the focused border+title (theme.Header) --
+	// the separator line always renders Dim/Overlay regardless of focus, so
+	// Overlay legitimately appears in BOTH outputs; Mauve is the actual
+	// focus signal and must be exclusive to the focused render.
+	if !strings.Contains(focused, mauve) {
+		t.Errorf("focused renderPane missing the Mauve border escape %q", mauve)
+	}
+	if strings.Contains(unfocused, mauve) {
+		t.Error("unfocused renderPane unexpectedly carries the Mauve (focused) border color")
+	}
+	if !strings.Contains(unfocused, overlay) {
+		t.Errorf("unfocused renderPane missing the Overlay border escape %q", overlay)
+	}
+
+	if focused == unfocused {
+		t.Fatal("renderPane output identical for focused vs unfocused")
+	}
+}
+
+// TestBorderedPanePadsAndCapsToHeight guards borderedPane's Golden-Rule-#1
+// contract: content is padded/capped to exactly h inner lines (never relies
+// on Height()), so the RoundedBorder always adds exactly 2 rows on top.
+func TestBorderedPanePadsAndCapsToHeight(t *testing.T) {
+	short := borderedPane([]string{"one", "two"}, 10, 4, theme.Mauve)
+	if h := lipgloss.Height(short); h != 6 { // h=4 + 2 border rows
+		t.Errorf("borderedPane height=%d, want 6 (h=4 padded + 2 border rows)", h)
+	}
+
+	over := borderedPane([]string{"a", "b", "c", "d", "e"}, 10, 2, theme.Mauve)
+	if h := lipgloss.Height(over); h != 4 { // capped to h=2 + 2 border rows
+		t.Errorf("borderedPane (over-long input) height=%d, want 4 (capped to h=2 + 2 border rows)", h)
+	}
+	if !strings.ContainsAny(over, "╭╮╰╯") {
+		t.Error("borderedPane output missing RoundedBorder corner glyphs")
+	}
+}
+
+// TestTagsInlineAndSwatch guards tagsInline/tagSwatch: empty input renders
+// nothing, each tag renders its name plus a swatch dot, and the hash-derived
+// color is deterministic across calls (fnv is pure -- no time/random leak).
+func TestTagsInlineAndSwatch(t *testing.T) {
+	if got := tagsInline(nil); got != "" {
+		t.Errorf("tagsInline(nil) = %q, want empty string", got)
+	}
+
+	single := tagSwatch("urgent")
+	if !strings.Contains(single, "urgent") {
+		t.Errorf("tagSwatch missing the tag name: %q", single)
+	}
+	if !strings.Contains(single, "●") {
+		t.Errorf("tagSwatch missing the swatch dot: %q", single)
+	}
+	if tagSwatch("urgent") != tagSwatch("urgent") {
+		t.Error("tagSwatch is not deterministic for the same tag name")
+	}
+
+	multi := tagsInline([]string{"urgent", "backend"})
+	if !strings.Contains(multi, "urgent") || !strings.Contains(multi, "backend") {
+		t.Errorf("tagsInline missing one of the tag names: %q", multi)
+	}
+	if got := strings.Count(multi, "●"); got != 2 {
+		t.Errorf("tagsInline rendered %d swatch dots, want 2", got)
+	}
+}
+
+// TestModalPanelIncludesHeaderBodyFooter guards modal.go's modalPanel:
+// header title + body + (optional) footer all show up, wrapped in modalBox's
+// RoundedBorder.
+func TestModalPanelIncludesHeaderBodyFooter(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	out := modalPanel("Title Here", "body line", "footer hint", 30, theme.Mauve)
+	if !strings.Contains(out, "Title Here") {
+		t.Error("modalPanel missing the header title")
+	}
+	if !strings.Contains(out, "body line") {
+		t.Error("modalPanel missing the body")
+	}
+	if !strings.Contains(out, "footer hint") {
+		t.Error("modalPanel missing the footer hint")
+	}
+	if !strings.ContainsAny(out, "╭╮╰╯") {
+		t.Error("modalPanel missing RoundedBorder corner glyphs (modalBox)")
+	}
+
+	noFooter := modalPanel("T", "body", "", 30, theme.Mauve)
+	if !strings.Contains(noFooter, "body") {
+		t.Error("modalPanel (no footer) missing the body")
+	}
+}

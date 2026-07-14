@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"beans-tui/internal/data"
+	"beans-tui/internal/tui"
+
 	"github.com/spf13/cobra"
 )
 
@@ -21,8 +24,17 @@ func newTUICmd() *cobra.Command {
 	}
 }
 
-// runTUI startet die eigentliche TUI. Stub — die Implementierung folgt in
-// späteren Tasks (Datenlayer, Theme, App-Shell).
+// runTUI startet die eigentliche TUI: FindRepo (Discovery aufwärts vom
+// gegebenen Pfad, Default cwd) -> Client -> tui.Run (AltScreen+Mouse,
+// implementation-plan.md »E1 Task 8«).
 func runTUI(path string) error {
-	return nil
+	if path == "" {
+		path = "."
+	}
+	repoDir, err := data.FindRepo(path)
+	if err != nil {
+		return err
+	}
+	client := &data.Client{RepoDir: repoDir}
+	return tui.Run(client, repoDir)
 }

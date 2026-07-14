@@ -32,6 +32,16 @@ var debounceDuration = 150 * time.Millisecond
 // (T8) always reacts with a full reload (Client.List + NewIndex), never a
 // partial/incremental update (design decision D02).
 //
+// B05 (MANDATORY, bean bt-7jr8): onChange runs ON THE WATCHER GOROUTINE
+// ITSELF (synchronously, from inside the select loop below), so it must
+// NEVER call the returned stop synchronously from within the callback --
+// stop blocks until this very goroutine exits (see stoppedCh below), so
+// calling it from inside onChange deadlocks the watcher forever. The T8
+// consumer (internal/tui) only ever dispatches an async tea.Msg from
+// onChange (tea.Program.Send, documented safe to call from any goroutine)
+// and calls stop solely from its own teardown path, after the tea.Program
+// has stopped running.
+//
 // Scope cut: the watched directory is hardcoded to ".beans" (design-spec
 // D02/D06 convention). Reading a custom `beans.path` from .beans.yml is
 // out of scope for this function -- callers relying on a non-default

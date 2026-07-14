@@ -125,3 +125,31 @@ func TestChromeUnborderedNoOuterFrame(t *testing.T) {
 		t.Error("unbordered Chrome output contains RoundedBorder corner glyphs")
 	}
 }
+
+// TestChromeFallbackAvailOverride guards the avail<4 fallback path (T7
+// follow-up I03, bean bt-7jr8): ChromeOpts.fallbackAvail is a test hook that
+// overrides the hardcoded 18-line default once the computed body height
+// drops below 4 (a real terminal too short to fit the chrome). A tiny Height
+// forces that branch; the two calls share every other opt, so the ONLY
+// difference in output height must be exactly (default 18) - (override 5).
+func TestChromeFallbackAvailOverride(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	base := ChromeOpts{
+		Width: 80, Height: 4, Bordered: true, // tiny height forces avail<4
+		Repo: "bt", Body: "body", FooterHint: "enter: open",
+	}
+	withDefault := Chrome(base)
+
+	overridden := base
+	overridden.fallbackAvail = 5
+	withOverride := Chrome(overridden)
+
+	if lipgloss.Height(withDefault) == lipgloss.Height(withOverride) {
+		t.Fatal("fallbackAvail override had no effect on Chrome() output height -- avail<4 path may not be exercised, or the field is dead")
+	}
+	if diff := lipgloss.Height(withDefault) - lipgloss.Height(withOverride); diff != 13 {
+		t.Errorf("height delta between default fallback (18) and override (5) = %d, want 13", diff)
+	}
+}
