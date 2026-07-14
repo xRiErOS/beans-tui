@@ -1,11 +1,11 @@
 ---
 # bt-2jve
 title: 'T2 Master-Detail-Verdrahtung: Section/Feld-Fokus, Beziehungs-Sprung, Map-Ownership (I01), nil-Guard (Q01)'
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-14T21:57:17Z
-updated_at: 2026-07-14T21:57:17Z
+updated_at: 2026-07-14T22:24:07Z
 parent: bt-aq5s
 blocked_by:
     - bt-ms0k
@@ -32,3 +32,9 @@ Plan: docs/plans/v1-port/epic-E2-plan.md »Task 2«.
 - [ ] view_browse_repo.go renderDetailPane nutzt jetzt beanSections+renderAccordion
       (T1) statt Platzhalter
 - [ ] tree.golden ggf. regeneriert (-update) + Determinismus-Test weiter grün
+
+
+## Übernommene Findings aus E2-T1-Quality-Review (PFLICHT in diesem Task)
+- [ ] B01: metaSectionBody + historieSectionBody bekommen bodyW und wrappen via wrapText (Muster relationsSectionBody) — sonst Pane-Overflow bei langen Tags/ETag
+- [ ] I02: glowRender baut Renderer pro Aufruf — bewusste Entscheidung beim Verdrahten: Kosten akzeptieren (upstream-gleich) ODER Cache keyed (bean.ID, ETag, width) im Model. Entscheidung im Code dokumentieren.
+- [ ] I03 (optional): glowRender-Fallback ungewrappt — wrappen oder als Restrisiko kommentieren
