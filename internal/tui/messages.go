@@ -45,3 +45,34 @@ func loadCmd(c *data.Client) tea.Cmd {
 		return beansLoadedMsg{beans: beans, err: err}
 	}
 }
+
+// searchBleveResultMsg carries the result of an async data.Client.Search
+// call (E2 Task 3, bean bt-4ep2), tagged with the query it answers. Update
+// (applyBleveResult, update.go) discards it if m.searchQuery has moved on in
+// the meantime -- staleness guard chosen over a debounce timer (E2 Task 3
+// commit rationale, keySearchInput/dispatchBleveIfDue doc comments): every
+// qualifying (>=3 char) keystroke dispatches its own beans-CLI subprocess,
+// but only the response matching the CURRENT query is ever applied.
+type searchBleveResultMsg struct {
+	query string
+	ids   []string
+	err   error
+}
+
+// searchCmd runs an async Bleve full-text search via data.Client.Search,
+// tagging the result with query (design-spec.md §6 V2: "-S-Bleve-Modus ab 3
+// Zeichen"). Only the resolved bean IDs are kept -- beanMatchesSearch
+// (view_browse_repo.go) only ever needs ID membership, not the full Bean.
+func searchCmd(c *data.Client, query string) tea.Cmd {
+	return func() tea.Msg {
+		beans, err := c.Search(query)
+		if err != nil {
+			return searchBleveResultMsg{query: query, err: err}
+		}
+		ids := make([]string, len(beans))
+		for i, b := range beans {
+			ids[i] = b.ID
+		}
+		return searchBleveResultMsg{query: query, ids: ids}
+	}
+}

@@ -1,6 +1,8 @@
 package data
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -99,5 +101,50 @@ func TestListErrorIncludesStderr(t *testing.T) {
 	const wantSubstr = "no .beans directory found"
 	if !strings.Contains(err.Error(), wantSubstr) {
 		t.Errorf("List() error = %q, want it to contain %q", err.Error(), wantSubstr)
+	}
+}
+
+// TestClientSearchInvokesBleveFlagAndReturnsMatches guards data.Client.Search
+// (E2 Task 3, bean bt-4ep2): `beans list --json --full --search <query>`,
+// same JSON contract as List. A dedicated 4th fixture bean is written
+// directly here (not folded into newTestRepo's shared 3-bean fixture) --
+// TestListReturnsAllBeansWithBody asserts len(beans)==3 against that shared
+// fixture, so a Search-only fixture bean must not leak into it.
+func TestClientSearchInvokesBleveFlagAndReturnsMatches(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	const fixture = `---
+# tt-gldn
+title: Golden Search Fixture
+status: todo
+type: task
+priority: normal
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+
+Body mentions golden explicitly for the Bleve full-text search test.
+`
+	if err := os.WriteFile(filepath.Join(repo, ".beans", "tt-gldn--golden-search-fixture.md"), []byte(fixture), 0o644); err != nil {
+		t.Fatalf("write search fixture: %v", err)
+	}
+
+	c := &Client{RepoDir: repo}
+	beans, err := c.Search("golden")
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(beans) == 0 {
+		t.Fatal("Search(\"golden\") returned no matches against a fixture repo containing one")
+	}
+	found := false
+	for _, b := range beans {
+		if b.ID == "tt-gldn" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Search(\"golden\") results = %v, want tt-gldn included", beans)
 	}
 }

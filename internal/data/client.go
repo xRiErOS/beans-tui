@@ -28,6 +28,25 @@ func (c *Client) List() ([]Bean, error) {
 	return beans, nil
 }
 
+// Search runs a Bleve full-text query (title+body) via `beans list -S`, with
+// the same --full/--json contract as List (E2 Task 3, bean bt-4ep2,
+// design-spec.md §6 V2: "Bleve-Modus ab 3 Zeichen"). The query itself is not
+// validated/escaped here -- the beans CLI's Bleve query-string syntax
+// (fuzzy/wildcard/field-scoped) passes straight through, same as List's own
+// thin-wrapper contract.
+func (c *Client) Search(query string) ([]Bean, error) {
+	out, err := c.run("list", "--json", "--full", "--search", query)
+	if err != nil {
+		return nil, err
+	}
+
+	var beans []Bean
+	if err := json.Unmarshal(out, &beans); err != nil {
+		return nil, fmt.Errorf("beans list --search: parse output: %w", err)
+	}
+	return beans, nil
+}
+
 // run executes `beans <args>` with RepoDir as the working directory and
 // returns stdout. On failure, stdout is still returned alongside the error
 // (rather than nil) -- mutations.go's classifyError parses it as a JSON

@@ -184,9 +184,170 @@ func collectCycleOrphans(idx *data.Index, orphans []*data.Bean) []*data.Bean {
 	return out
 }
 
-// visibleNodes flattens the model's current idx+expanded state.
+// visibleNodes flattens the model's current idx+expanded state -- switches
+// to the filtered flattening (flattenTreeFiltered) while a search query is
+// active (E2 Task 3, bean bt-4ep2). Task 4 generalizes this switch to
+// m.treeActive()/m.beanMatches (search OR facets combined); Task 3's
+// treeSearchActive()/beanMatchesSearch stay in place as the search-only half
+// that combined predicate calls into.
 func (m model) visibleNodes() []treeNode {
+	if m.treeSearchActive() {
+		return flattenTreeFiltered(m.idx, m.expanded, m.beanMatchesSearch)
+	}
 	return flattenTree(m.idx, m.expanded)
+}
+
+// treeSearchActive reports whether a local/Bleve search query is currently
+// narrowing the tree (E2 Task 3; Task 4 extends this with facet state via a
+// combined treeActive()).
+func (m model) treeSearchActive() bool {
+	return strings.TrimSpace(m.searchQuery) != ""
+}
+
+// beanMatchesSearch is the search half of the combined filter predicate
+// (Task 4 AND-combines this with facet criteria as beanMatches). Below the
+// Bleve threshold (<3 chars), or while a Bleve response for THIS exact query
+// hasn't arrived yet, it falls back to an immediate local title+ID substring
+// match (case-insensitive) -- once searchBleveFor catches up to the current
+// query, the Bleve result set becomes authoritative instead (design-spec.md
+// §6 V2: "Bleve-Modus ab 3 Zeichen").
+func (m model) beanMatchesSearch(b *data.Bean) bool {
+	q := strings.ToLower(strings.TrimSpace(m.searchQuery))
+	if q == "" {
+		return true
+	}
+	if len(q) >= 3 && m.searchBleveFor == m.searchQuery {
+		return m.searchBleveIDs[b.ID]
+	}
+	return strings.Contains(strings.ToLower(b.Title), q) || strings.Contains(strings.ToLower(b.ID), q)
+}
+
+// flattenTreeFiltered mirrors flattenTree's depth-first walk but only shows
+// a subtree the caller has actually expanded (devd DD2-178 parity,
+// view_browse_project.go:215-238, wörtlich portiert per plan Port-Referenzen:
+// a manually collapsed ancestor stays collapsed even if a descendant
+// matches -- it renders as ONE collapsed context row, never force-expanded).
+// Every real root, the orphan bucket, AND the cycle-bean sweep go through
+// the SAME predicate: an orphan/cycle bucket with zero matches is omitted
+// entirely, matching entries render exactly like the unfiltered tree.
+func flattenTreeFiltered(idx *data.Index, expanded map[string]bool, match func(*data.Bean) bool) []treeNode {
+	if idx == nil {
+		return nil
+	}
+
+	var nodes []treeNode
+	ancestors := map[string]bool{}
+	for _, b := range idx.Roots() {
+		if ns, hit := filteredBeanNode(idx, b, 0, expanded, ancestors, match); hit {
+			nodes = append(nodes, ns...)
+		}
+	}
+
+	orphans := collectOrphans(idx)
+	cycles := collectCycleOrphans(idx, orphans)
+	var orphanNodes []treeNode
+	for _, b := range orphans {
+		if ns, hit := filteredBeanNode(idx, b, 1, expanded, ancestors, match); hit {
+			orphanNodes = append(orphanNodes, ns...)
+		}
+	}
+	var cycleHits []*data.Bean
+	for _, b := range cycles {
+		if match(b) {
+			cycleHits = append(cycleHits, b)
+		}
+	}
+
+	if len(orphanNodes) > 0 || len(cycleHits) > 0 {
+		open := expanded[orphanRootID]
+		nodes = append(nodes, treeNode{id: orphanRootID, depth: 0, hasKids: true, open: open, orphan: true})
+		if open {
+			nodes = append(nodes, orphanNodes...)
+			for _, b := range cycleHits { // cycle beans render flat (depth 1), same as flattenTree
+				nodes = append(nodes, treeNode{id: b.ID, bean: b, depth: 1, hasKids: false})
+			}
+		}
+	}
+	return nodes
+}
+
+// filteredBeanNode is flattenTreeFiltered's recursive per-bean step. hit
+// reports whether b or anything reachable below it matches: match(b) itself,
+// OR (if b is expanded) any expanded-visible child hit, OR (if b is
+// collapsed) a structural, expand-state-INDEPENDENT scan of the whole
+// subtree below (subtreeHasMatch) -- so a collapsed ancestor still renders
+// as ONE collapsed context row when a match exists somewhere beneath it,
+// without ever being force-expanded (devd DD2-178 parity, see
+// flattenTreeFiltered's own doc comment). ancestors guards a Parent-cycle
+// exactly like appendBeanNode's own defensive guard (only threaded through
+// the EXPANDED/recursing branch, mirroring appendBeanNode).
+func filteredBeanNode(idx *data.Index, b *data.Bean, depth int, expanded map[string]bool, ancestors map[string]bool, match func(*data.Bean) bool) ([]treeNode, bool) {
+	if ancestors[b.ID] {
+		return nil, false
+	}
+	children := idx.Children[b.ID]
+	open := expanded[b.ID]
+	self := match(b)
+
+	if !open {
+		if !self && !subtreeHasMatch(idx, children, b.ID, match) {
+			return nil, false
+		}
+		return []treeNode{{id: b.ID, bean: b, depth: depth, hasKids: len(children) > 0, open: false}}, true
+	}
+
+	ancestors[b.ID] = true
+	var childNodes []treeNode
+	anyChildHit := false
+	for _, c := range children {
+		if ns, hit := filteredBeanNode(idx, c, depth+1, expanded, ancestors, match); hit {
+			anyChildHit = true
+			childNodes = append(childNodes, ns...)
+		}
+	}
+	delete(ancestors, b.ID)
+
+	if !self && !anyChildHit {
+		return nil, false
+	}
+	nodes := append([]treeNode{{id: b.ID, bean: b, depth: depth, hasKids: len(children) > 0, open: true}}, childNodes...)
+	return nodes, true
+}
+
+// subtreeHasMatch is a structural (expand-state-INDEPENDENT) scan used only
+// for a COLLAPSED node (filteredBeanNode): whether match hits anywhere below
+// it, so it still renders as a single collapsed context row without being
+// force-expanded (devd DD2-178, view_browse_project.go:215-238's documented
+// PO decision -- "a manually collapsed node stays collapsed even if it
+// contains a match"). skip excludes the collapsed node itself (already
+// checked by the caller as `self`); its own local visited set guards a
+// Parent-cycle reachable under a collapsed node, independent of the caller's
+// DFS-path ancestors set (different concern: this walks unconditionally
+// downward, ignoring expand state entirely).
+func subtreeHasMatch(idx *data.Index, beans []*data.Bean, skip string, match func(*data.Bean) bool) bool {
+	seen := map[string]bool{skip: true}
+	var walk func(b *data.Bean) bool
+	walk = func(b *data.Bean) bool {
+		if seen[b.ID] {
+			return false
+		}
+		seen[b.ID] = true
+		if match(b) {
+			return true
+		}
+		for _, c := range idx.Children[b.ID] {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, b := range beans {
+		if walk(b) {
+			return true
+		}
+	}
+	return false
 }
 
 // cursorPos finds m.cursorID's index in nodes, defaulting to 0 (covers both
@@ -325,6 +486,31 @@ func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string
 	return renderPane(pane{title: "Detail", rows: rows}, w, h, focused)
 }
 
+// searchShield is the search head row's glyph (U+2315 TELEPHONE RECORDER,
+// port devd treeSearchLine view_browse_project.go:1099-1117 -- devd's own
+// comment there notes it replaced an ambiguous-width lookalike, DD2-53; kept
+// verbatim here for the same EAW-neutral reason).
+const searchShield = "⌕"
+
+// treeSearchLine renders the Tree pane's persistent search head row (design-
+// spec.md §6 V2 "Such-/Filterkopf", port devd treeSearchLine
+// view_browse_project.go:1099-1117): the live textinput while typing, the
+// committed query in Red once active (DD2-53 "Filter aktiv" signal -- Task 4
+// extends this red state to cover facets too), or a muted hint when idle.
+func (m model) treeSearchLine(w int) string {
+	if m.searchActive {
+		return truncate(searchShield+" "+m.searchInput.View(), w)
+	}
+	if m.treeSearchActive() {
+		line := searchShield + " " + m.searchQuery
+		if m.searchBleveLoading {
+			line += " …"
+		}
+		return truncate(lipgloss.NewStyle().Foreground(theme.Red).Render(line), w)
+	}
+	return truncate(theme.Muted.Render(searchShield+" / search"), w)
+}
+
 // repoLabel is the breadcrumb `> repo` segment: the repo directory's base
 // name (design-spec.md §7's "> repo: Titel" format; port-adaptation vs.
 // devd's project slug, view.go's breadcrumb doc comment).
@@ -363,7 +549,7 @@ func (m model) viewBrowseRepo() string {
 	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
 	head := breadcrumb(m.repoLabel(), "Browse", globalHint, innerW)
 
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Refresh}) + "  tab:focus"
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh}) + "  tab:focus"
 	localKeys := footer(localHint, innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
@@ -389,7 +575,14 @@ func (m model) viewBrowseRepo() string {
 
 	lw, rw := masterDetailWidths(innerW, 24)
 	nodes := m.visibleNodes()
-	treeBox := renderPane(pane{title: "Tree", rows: m.treeRows(nodes, !m.detailFocus, bodyH-2)}, lw, bodyH, !m.detailFocus)
+	// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
+	// pane's rows, costing 1 line of its bodyH-2 content budget -- the actual
+	// tree rows window to bodyH-3 (one less than T8/E1's bodyH-2) so the
+	// combined [searchLine, ...treeRows] slice still fits renderPane's own
+	// Golden-Rule-#1 line cap.
+	searchLine := m.treeSearchLine(lw - 2)
+	treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-3)...)
+	treeBox := renderPane(pane{title: "Tree", rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
 	detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
 

@@ -6,7 +6,11 @@ package tui
 // viewID enum + a single model struct, no devd-API coupling (data layer is
 // beans-native from the start, design-spec.md §3.1/§13).
 
-import "beans-tui/internal/data"
+import (
+	"beans-tui/internal/data"
+
+	"github.com/charmbracelet/bubbles/textinput"
+)
 
 // viewID enumerates the top-level screens. T8 ships exactly one (the Browse
 // Primat-View, design-spec.md §6 V2); later epics add Backlog/Detail/
@@ -82,6 +86,26 @@ type model struct {
 	// transition (handleKey).
 	secCursor, accOpen, detailLevel, fieldCursor int
 
+	// Suche `/` (E2 Task 3, bean bt-4ep2, design-spec.md §6 V2): searchActive
+	// is the textinput-focused typing state (single-key shortcuts inactive
+	// while true, design-spec §7); searchQuery is the committed-OR-live query
+	// (updated on every keystroke, mirrors devd's treeQuery -- there is no
+	// separate "live preview vs. committed" split, enter only blurs the
+	// input). searchBleveIDs/searchBleveFor answer the async Bleve half: once
+	// searchQuery reaches >=3 chars, searchBleveFor tags which query the
+	// CURRENT searchBleveIDs answers -- a searchBleveResultMsg whose query no
+	// longer matches m.searchQuery on arrival is discarded (staleness guard,
+	// messages.go). searchBleveIDs is always REPLACED wholesale with a fresh
+	// map (never mutated in place), so it does not need the I01
+	// cloneBoolMap convention above -- there is no shared-backing-array
+	// hazard when every writer assigns a brand-new map value.
+	searchActive       bool
+	searchInput        textinput.Model
+	searchQuery        string
+	searchBleveIDs     map[string]bool
+	searchBleveFor     string
+	searchBleveLoading bool
+
 	confirmQuit bool
 
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
@@ -94,10 +118,16 @@ type model struct {
 
 // newModel builds the initial (pre-load) App-Shell state.
 func newModel(client *data.Client, repoDir string) model {
+	ti := textinput.New() // E2 Task 3: Tree search box (port devd app.go treeSearch)
+	ti.Placeholder = "Suche (Titel/ID, ab 3 Zeichen zusätzlich Bleve)"
+	ti.Prompt = ""
+	ti.CharLimit = 80
+
 	return model{
-		view:     viewBrowseRepo,
-		client:   client,
-		repoDir:  repoDir,
-		expanded: map[string]bool{},
+		view:        viewBrowseRepo,
+		client:      client,
+		repoDir:     repoDir,
+		expanded:    map[string]bool{},
+		searchInput: ti,
 	}
 }

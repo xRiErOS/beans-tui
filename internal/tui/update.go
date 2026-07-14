@@ -6,9 +6,12 @@ package tui
 // update.go.
 
 import (
+	"strings"
+
 	"beans-tui/internal/data"
 
 	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -33,10 +36,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.watchUnavailable = true
 		return m, nil
 
+	case searchBleveResultMsg:
+		return m.applyBleveResult(msg), nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
+}
+
+// applyBleveResult applies an async Bleve search result (E2 Task 3, bean
+// bt-4ep2) -- discarded if the query has moved on since the request was
+// dispatched (staleness guard, chosen over a debounce timer: every
+// qualifying keystroke dispatches its own beans-CLI subprocess, but only the
+// response tagged for the CURRENT searchQuery is ever applied; see
+// messages.go's searchBleveResultMsg doc comment for the full rationale).
+func (m model) applyBleveResult(msg searchBleveResultMsg) model {
+	if msg.query != m.searchQuery {
+		return m // stale -- searchQuery has moved on since this request was sent
+	}
+	m.searchBleveLoading = false
+	if msg.err != nil {
+		m.err = msg.err.Error()
+		return m
+	}
+	ids := make(map[string]bool, len(msg.ids))
+	for _, id := range msg.ids {
+		ids[id] = true
+	}
+	m.searchBleveIDs = ids
+	m.searchBleveFor = msg.query
+	return m
 }
 
 // applyLoaded rebuilds the Index from a (initial or reload) beansLoadedMsg
@@ -84,6 +114,18 @@ func (m model) applyLoaded(msg beansLoadedMsg) model {
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.confirmQuit {
 		return m.keyConfirmQuit(msg)
+	}
+
+	// E2 Task 3 (bean bt-4ep2, design-spec.md §7: "Single-Keys inaktiv bei
+	// fokussierter Texteingabe"): the search input captures EVERY key except
+	// enter/esc while focused -- typing "q" or "tab" must produce that
+	// character in the search box, not quit/focus-swap. Checked before the
+	// ctrl+c/q/tab switch below, mirroring how m.confirmQuit's modal already
+	// captures input ahead of that same switch (keyConfirmQuit does not
+	// special-case ctrl+c either -- same existing precedent, applied here for
+	// consistency rather than introducing a second, partial-capture pattern).
+	if m.searchActive {
+		return m.keySearchInput(msg)
 	}
 
 	switch msg.String() {
@@ -239,8 +281,37 @@ func expandAncestorsOf(idx *data.Index, expanded map[string]bool, id string) map
 }
 
 // keyTree drives the tree: up/down move the cursor, right/left expand/
-// collapse, enter toggles expand (no-op on a leaf, per task scope).
+// collapse, enter toggles expand (no-op on a leaf, per task scope). `/` and
+// the esc-cascade's search-clearing rung (E2 Task 3, bean bt-4ep2) are
+// checked FIRST, ahead of the len(nodes)==0 short-circuit below -- opening
+// the search box or clearing an active query must work even on an empty/
+// pre-load tree.
 func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case keybind.Matches(msg, keys.Search):
+		// Port devd keyTree's Search case (view_browse_project.go:689-699),
+		// minus loadAllIssues -- beans-tui already holds the full Index in
+		// memory (no separate "load everything for search" step needed).
+		// Pre-loads the input with the CURRENT query (re-opening a committed
+		// search resumes editing it, mirrors devd's SetValue(m.treeQuery)).
+		m.searchActive = true
+		m.searchInput.SetValue(m.searchQuery)
+		m.searchInput.CursorEnd()
+		m.searchInput.Focus()
+		return m, textinput.Blink
+	case keybind.Matches(msg, keys.Back):
+		if m.treeSearchActive() { // esc-cascade Rung 2: committed query -> clear (Task 4 extends this to also clear facet filters)
+			m.searchQuery = ""
+			m.searchBleveIDs = nil
+			m.searchBleveFor = ""
+			return m.resetCursorToFirstVisible(), nil
+		}
+		// Rung 3 (existing behavior): no-op -- no Lobby fallback in E2
+		// (design-spec.md §12 E5, plan Task 3 Port-Referenzen: the cascade
+		// ends here, a documented Scope-Cut rather than a TBD).
+		return m, nil
+	}
+
 	nodes := m.visibleNodes()
 	if len(nodes) == 0 {
 		return m, nil
@@ -274,6 +345,82 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.setExpanded(n, !n.open), nil
 	}
 	return m, nil
+}
+
+// keySearchInput drives the active search textinput (E2 Task 3, bean
+// bt-4ep2, port devd keyTreeSearch view_browse_project.go:1073-1097): every
+// keystroke updates m.searchQuery LIVE (immediate local filter, not just on
+// commit) and resets the cursor to the freshly filtered list's first row
+// (mirrors devd's unconditional treeCursor=0). enter commits (blurs the
+// input; the filter/query itself is NOT cleared). esc cancels AND clears the
+// query entirely (esc-cascade Rung 1 -- distinct from enter). Both also
+// dispatch an async Bleve search once the query is due (maybeBleveCmd).
+func (m model) keySearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		m.searchActive = false
+		m.searchInput.Blur()
+		m.searchQuery = strings.TrimSpace(m.searchInput.Value())
+		m = m.resetCursorToFirstVisible()
+		return m.dispatchBleveIfDue(nil)
+	case tea.KeyEsc:
+		m.searchActive = false
+		m.searchInput.Blur()
+		m.searchInput.SetValue("")
+		m.searchQuery = ""
+		return m.resetCursorToFirstVisible(), nil
+	}
+
+	var inputCmd tea.Cmd
+	m.searchInput, inputCmd = m.searchInput.Update(msg)
+	m.searchQuery = strings.TrimSpace(m.searchInput.Value())
+	m = m.resetCursorToFirstVisible()
+	return m.dispatchBleveIfDue(inputCmd)
+}
+
+// resetCursorToFirstVisible parks the cursor on the (newly filtered) node
+// list's first row -- called on every search keystroke/clear, mirrors devd's
+// unconditional `m.treeCursor = 0` (view_browse_project.go:1073-1097): a
+// bean ID, not an index, is beans-tui's own cursor representation (T8), so
+// the equivalent reset is "first visible node's ID" rather than a bare 0.
+func (m model) resetCursorToFirstVisible() model {
+	nodes := m.visibleNodes()
+	if len(nodes) == 0 {
+		m.cursorID = ""
+		return m
+	}
+	m.cursorID = nodes[0].id
+	return m
+}
+
+// dispatchBleveIfDue is keySearchInput's shared tail: batches an extra Cmd
+// (the textinput's own Update cmd, or nil) together with maybeBleveCmd()'s
+// dispatch when one is due, flagging searchBleveLoading so the search head
+// (treeSearchLine) can surface it.
+func (m model) dispatchBleveIfDue(extra tea.Cmd) (tea.Model, tea.Cmd) {
+	bleve := m.maybeBleveCmd()
+	if bleve == nil {
+		return m, extra
+	}
+	m.searchBleveLoading = true
+	return m, tea.Batch(extra, bleve)
+}
+
+// maybeBleveCmd returns a searchCmd dispatch when the current searchQuery
+// has reached the Bleve threshold (>=3 chars, design-spec.md §6 V2) and
+// differs from the query the current searchBleveIDs answer (searchBleveFor)
+// -- nil below the threshold, or when nothing has changed since the last
+// dispatch. Deliberately NOT debounced (E2 Task 3 commit rationale, bean
+// bt-4ep2): the plan's own design (and the bean's Akzeptanz criteria) choose
+// a staleness guard on the RESPONSE (applyBleveResult) over delaying the
+// REQUEST with a timer -- every qualifying keystroke may dispatch its own
+// beans-CLI subprocess, but only the freshest response is ever applied.
+func (m model) maybeBleveCmd() tea.Cmd {
+	q := m.searchQuery
+	if len(q) < 3 || q == m.searchBleveFor {
+		return nil
+	}
+	return searchCmd(m.client, q)
 }
 
 // setExpanded sets n's expand state in m.expanded; a no-op for leaves. I01
