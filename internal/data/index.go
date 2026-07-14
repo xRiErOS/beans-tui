@@ -191,3 +191,25 @@ func rank(order map[string]int, val string) int {
 	}
 	return len(order)
 }
+
+// SortBeans is the exported single-source sort (Status -> Priority -> Type ->
+// Title) every consumer OUTSIDE this package must use for bean lists it
+// itself assembles (e.g. resolved Blocking/BlockedBy IDs) -- I03 (bean
+// bt-7jr8 T8-review): a second, ad-hoc tie-break in the tui package would
+// violate the "single place sort order is defined" contract this file
+// already asserts for its own callers.
+func SortBeans(beans []*Bean) { sortBeans(beans) }
+
+// StatusRank exposes the status tier position (see statusOrder) for callers
+// that need to compare two beans' status without a full SortBeans call
+// (e.g. the Backlog sort-toggle, E2 Task 5).
+func StatusRank(status string) int { return rank(statusOrder, status) }
+
+// PriorityRank exposes the priority tier position, empty treated as "normal"
+// (mirrors sortBeans' own empty-priority handling).
+func PriorityRank(priority string) int {
+	if priority == "" {
+		priority = "normal"
+	}
+	return rank(priorityOrder, priority)
+}

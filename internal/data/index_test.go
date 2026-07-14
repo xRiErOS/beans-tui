@@ -117,6 +117,46 @@ func TestUnknownEnumValuesSortLast(t *testing.T) {
 	assertIDOrder(t, idx.Children["par1"], []string{"b-scrapped", "b-blocked"})
 }
 
+// TestSortBeansExportedMatchesCanonicalTierOrder guards the I03-preparation
+// export (bean bt-ms0k / bt-7jr8 T8-review): SortBeans must be the exact
+// same single-source order sortBeans already provides for Index's own
+// methods, now usable by callers outside this package (E2 Task 1's
+// Beziehungen section resolves Blocking/BlockedBy IDs into []*Bean itself
+// and must not invent a second, parallel tie-break).
+func TestSortBeansExportedMatchesCanonicalTierOrder(t *testing.T) {
+	beans := []*Bean{
+		{ID: "b", Status: "todo", Priority: "normal", Type: "task", Title: "B"},
+		{ID: "a", Status: "in-progress", Priority: "high", Type: "bug", Title: "A"},
+	}
+	SortBeans(beans)
+	if beans[0].ID != "a" { // in-progress sorts before todo
+		t.Fatalf("SortBeans order = %v, want a before b", beans)
+	}
+}
+
+// TestStatusRankOrdersLifecycle guards the exported StatusRank wrapper
+// reproducing statusOrder's documented tier order.
+func TestStatusRankOrdersLifecycle(t *testing.T) {
+	if !(StatusRank("in-progress") < StatusRank("todo") &&
+		StatusRank("todo") < StatusRank("draft") &&
+		StatusRank("draft") < StatusRank("completed") &&
+		StatusRank("completed") < StatusRank("scrapped")) {
+		t.Fatal("StatusRank does not reproduce the documented tier order")
+	}
+}
+
+// TestPriorityRankEmptyDefaultsNormal guards the exported PriorityRank
+// wrapper's empty-priority handling (mirrors sortBeans' own "" -> "normal").
+func TestPriorityRankEmptyDefaultsNormal(t *testing.T) {
+	if PriorityRank("") != PriorityRank("normal") {
+		t.Fatalf("PriorityRank(\"\") = %d, want == PriorityRank(normal) = %d",
+			PriorityRank(""), PriorityRank("normal"))
+	}
+	if !(PriorityRank("critical") < PriorityRank("high") && PriorityRank("high") < PriorityRank("normal")) {
+		t.Fatal("PriorityRank does not reproduce the documented tier order")
+	}
+}
+
 func TestWithTagToReview(t *testing.T) {
 	beans := []Bean{
 		{ID: "tag-a", Status: "todo", Priority: "normal", Type: "task", Title: "Alpha", Tags: []string{"to-review", "misc"}},
