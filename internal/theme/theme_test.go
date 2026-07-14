@@ -26,8 +26,12 @@ func TestStatusColorMapping(t *testing.T) {
 		}
 	}
 
-	if got := StatusColor("some-unknown-status"); got != Text {
-		t.Errorf("StatusColor(unknown) = %q, want fallback Text %q", got, Text)
+	if got := StatusColor("some-unknown-status"); got != Subtext {
+		t.Errorf("StatusColor(unknown) = %q, want fallback Subtext %q", got, Subtext)
+	}
+
+	if icon := StatusIcon("some-unknown-status"); !strings.Contains(icon, fallbackGlyphChar) || strings.Contains(icon, statusGlyph) {
+		t.Errorf("StatusIcon(unknown) = %q, want fallback glyph %q not status glyph %q", icon, fallbackGlyphChar, statusGlyph)
 	}
 }
 

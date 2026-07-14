@@ -90,17 +90,20 @@ var statusColor = map[string]lipgloss.Color{
 	"scrapped":    Red,
 }
 
-// StatusColor liefert die Farbe für einen beans-Status (Fallback: Text — unbekannte
-// Enum-Werte neutral statt falsch-signalisierend; siehe fallbackGlyph für den
-// zugehörigen Glyph-Fallback).
+// StatusColor liefert die Farbe für einen beans-Status (Fallback: Subtext — Text ist
+// bereits an den echten Status "todo" vergeben, ein Text-Fallback würde also mit einem
+// realen Status kollidieren, Farbe=Bedeutung-Prinzip verletzt; siehe fallbackGlyph für
+// den zugehörigen Glyph-Fallback). Der Type-Fallback (icons.go TypeIcon/TypeStyle)
+// bleibt bewusst bei Text: kein realer Typ (Peach/Mauve/Green/Blue/Red) nutzt Text,
+// dort besteht die Kollision nicht.
 func StatusColor(status string) lipgloss.Color {
 	if col, ok := statusColor[status]; ok {
 		return col
 	}
-	return Text
+	return Subtext
 }
 
-// StatusStyle liefert den lipgloss-Style für einen Status (Default: Text via StatusColor).
+// StatusStyle liefert den lipgloss-Style für einen Status (Default: Subtext via StatusColor).
 func StatusStyle(status string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(StatusColor(status))
 }
