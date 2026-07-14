@@ -44,6 +44,7 @@ type keyMap struct {
 	Section keybind.Binding // 1…9 — accordion section jump
 
 	FilterClear keybind.Binding // X — reset filters
+	Toggle      keybind.Binding // space/x — toggle facet checkbox (E2 Task 4, bean bt-9ldr)
 
 	// Node-focused (act on the focused tree/list node).
 	Status    keybind.Binding // s — status menu (all node types)
@@ -83,6 +84,7 @@ func newKeyMap() keyMap {
 		Section: keybind.NewBinding(keybind.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"), keybind.WithHelp("1…9", "Section")),
 
 		FilterClear: keybind.NewBinding(keybind.WithKeys("X"), keybind.WithHelp("X", "Clear filters")),
+		Toggle:      keybind.NewBinding(keybind.WithKeys(" ", "x"), keybind.WithHelp("space/x", "Toggle facet")),
 
 		Status:    keybind.NewBinding(keybind.WithKeys("s"), keybind.WithHelp("s", "Status menu")),
 		Assign:    keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Assign parent")),
@@ -111,7 +113,7 @@ func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Reviews, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
-		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank}},
+		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle}},
 	}
 }
 

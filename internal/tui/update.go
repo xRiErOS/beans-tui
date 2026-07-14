@@ -128,6 +128,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keySearchInput(msg)
 	}
 
+	// E2 Task 4 (bean bt-9ldr): the facet-filter menu is a floating overlay
+	// that fully captures input, same precedent as m.searchActive just above
+	// (and m.confirmQuit at the very top of this function) -- single-key
+	// shortcuts like `q`/`tab` must not leak through to the Tree underneath
+	// while the menu is open.
+	if m.filterOpen {
+		return m.keyFilterMenu(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c": // immediate quit, no confirm (bean bt-7jr8: distinct from `q`)
 		return m, tea.Quit
@@ -281,11 +290,11 @@ func expandAncestorsOf(idx *data.Index, expanded map[string]bool, id string) map
 }
 
 // keyTree drives the tree: up/down move the cursor, right/left expand/
-// collapse, enter toggles expand (no-op on a leaf, per task scope). `/` and
-// the esc-cascade's search-clearing rung (E2 Task 3, bean bt-4ep2) are
+// collapse, enter toggles expand (no-op on a leaf, per task scope). `/`, `f`,
+// `X`, and the esc-cascade's search/filter-clearing rung (E2 Task 3+4) are
 // checked FIRST, ahead of the len(nodes)==0 short-circuit below -- opening
-// the search box or clearing an active query must work even on an empty/
-// pre-load tree.
+// the search box/filter menu or clearing an active query/facet must work
+// even on an empty/pre-load tree.
 func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case keybind.Matches(msg, keys.Search):
@@ -299,11 +308,28 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchInput.CursorEnd()
 		m.searchInput.Focus()
 		return m, textinput.Blink
+	case keybind.Matches(msg, keys.Filter):
+		// E2 Task 4 (bean bt-9ldr), port devd openTreeFilter
+		// (view_browse_project.go:865-874) minus the loadAllIssues call --
+		// beans-tui already holds the full Index in memory.
+		m.filterItems = m.buildFilterItems()
+		m.filterMenu = listState{}
+		m.filterMenu.setLen(len(m.filterItems))
+		m.filterOpen = true
+		return m, nil
+	case keybind.Matches(msg, keys.FilterClear):
+		// X as a direct top-level reset even with the menu closed (design-
+		// spec.md, mirrors devd's esc-cascade also clearing filters below) --
+		// wired to the SAME clearFacets() helper keyFilterMenu's own X-case
+		// uses (box_filter_facets.go).
+		m = m.clearFacets()
+		return m.resetCursorToFirstVisible(), nil
 	case keybind.Matches(msg, keys.Back):
-		if m.treeSearchActive() { // esc-cascade Rung 2: committed query -> clear (Task 4 extends this to also clear facet filters)
+		if m.treeActive() { // esc-cascade Rung 2: committed query AND/OR active facets -> clear both in one step (Task 4 generalizes Task 3's search-only rung, devd parity view_browse_project.go:725-736)
 			m.searchQuery = ""
 			m.searchBleveIDs = nil
 			m.searchBleveFor = ""
+			m = m.clearFacets()
 			return m.resetCursorToFirstVisible(), nil
 		}
 		// Rung 3 (existing behavior): no-op -- no Lobby fallback in E2

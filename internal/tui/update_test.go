@@ -316,6 +316,62 @@ func TestOrphanShownUnderSyntheticRoot(t *testing.T) {
 	}
 }
 
+// TestOrphanBucketUsesCanonicalStatusPriorityTypeTitleOrder guards I03
+// closure (bean bt-9ldr, E2 Task 4): the orphan bucket must sort via
+// data.SortBeans (Status -> Priority -> Type -> Title, the single-source
+// order Index.Children/Roots() already use), NOT the tree package's own
+// title-only sortByTitleThenID -- the fixture titles are picked so
+// alphabetical-title order and canonical-status order DISAGREE, making the
+// assertion a real discriminator.
+func TestOrphanBucketUsesCanonicalStatusPriorityTypeTitleOrder(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "root", Title: "Root", Type: "milestone", Status: "todo"},
+		{ID: "orph-z", Title: "Z orphan", Status: "todo", Type: "task", Priority: "normal", Parent: "missing"},
+		{ID: "orph-a", Title: "A orphan", Status: "in-progress", Type: "task", Priority: "critical", Parent: "missing"},
+	}
+	m := fixtureModel(t, beans)
+	m.expanded[orphanRootID] = true
+	nodes := m.visibleNodes()
+	// canonical order ranks in-progress before todo -> orph-a (in-progress)
+	// must render before orph-z (todo); orph-a also happens to win
+	// alphabetically here, but TestOrphanBucketUsesCanonicalOrderOverTitle
+	// below picks titles where the two orders disagree, so this pair alone
+	// is a sanity check, not the sole discriminator.
+	var order []string
+	for _, n := range nodes {
+		if n.bean != nil && n.bean.Parent == "missing" {
+			order = append(order, n.id)
+		}
+	}
+	if len(order) != 2 || order[0] != "orph-a" {
+		t.Fatalf("orphan order = %v, want [orph-a orph-z] (canonical status tier, not title)", order)
+	}
+}
+
+// TestOrphanBucketUsesCanonicalOrderOverTitle is the real discriminator for
+// I03: titles are picked so alphabetical order and canonical status order
+// DISAGREE ("Alpha" alphabetically first but "scrapped" sorts last) -- this
+// fails under the old sortByTitleThenID (title-only) and passes only under
+// data.SortBeans.
+func TestOrphanBucketUsesCanonicalOrderOverTitle(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "orph-alpha", Title: "Alpha orphan", Status: "scrapped", Type: "task", Priority: "normal", Parent: "missing"},
+		{ID: "orph-zulu", Title: "Zulu orphan", Status: "in-progress", Type: "task", Priority: "normal", Parent: "missing"},
+	}
+	m := fixtureModel(t, beans)
+	m.expanded[orphanRootID] = true
+	nodes := m.visibleNodes()
+	var order []string
+	for _, n := range nodes {
+		if n.bean != nil && n.bean.Parent == "missing" {
+			order = append(order, n.id)
+		}
+	}
+	if len(order) != 2 || order[0] != "orph-zulu" {
+		t.Fatalf("orphan order = %v, want [orph-zulu orph-alpha] (in-progress before scrapped, contradicting alphabetical title order)", order)
+	}
+}
+
 // --- T8 Opus quality review, Runde 2 (bean bt-7jr8) ---
 
 // TestTabTogglesDetailFocusAndPaneAccent guards Q01 end-to-end: tab flips

@@ -293,6 +293,38 @@ func TestSearchBleveStaleResultDiscardedWhenQueryChangedMeanwhile(t *testing.T) 
 	}
 }
 
+// TestSearchIDSubstringHitStaysVisibleAfterBleveResultArrives guards I01 (E2-
+// T3-Review finding, PFLICHT carried into bean bt-9ldr/Task 4): once a Bleve
+// response for the CURRENT query lands, beanMatchesSearch must UNION the
+// local ID-substring match with the Bleve result set, not replace it
+// outright -- Bleve's full-text index covers title+body (client.go Search
+// doc comment) but not necessarily an arbitrary ID substring, so a bean that
+// only matched by ID must not flicker out of the tree the instant the async
+// Bleve response arrives (its Bleve result set may legitimately be empty for
+// that bean).
+func TestSearchIDSubstringHitStaysVisibleAfterBleveResultArrives(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "tk-1", Title: "Something Else Entirely", Status: "todo", Type: "task", Priority: "normal"},
+	}
+	m := fixtureModel(t, beans)
+	m.searchQuery = "tk-1" // matches the ID substring only, NOT the title
+	if !m.beanMatchesSearch(m.idx.ByID["tk-1"]) {
+		t.Fatal("setup: ID-substring match must hold before any Bleve response arrives")
+	}
+
+	// The (simulated) Bleve title+body search finds nothing for this bean --
+	// its title/body contain no token resembling "tk-1" -- so the response
+	// arrives empty, tagged for the current query.
+	m = step(t, m, searchBleveResultMsg{query: "tk-1", ids: nil})
+	if m.searchBleveFor != "tk-1" {
+		t.Fatalf("setup: searchBleveFor = %q, want \"tk-1\" (authoritative Bleve response must have applied)", m.searchBleveFor)
+	}
+
+	if !m.beanMatchesSearch(m.idx.ByID["tk-1"]) {
+		t.Fatal("ID-substring match must stay visible (UNIONed) once the authoritative Bleve response arrives, not disappear")
+	}
+}
+
 // TestSearchBleveResultAppliedWhenQueryStillCurrent is the positive
 // counterpart: a result tagged for the model's current query is applied.
 func TestSearchBleveResultAppliedWhenQueryStillCurrent(t *testing.T) {

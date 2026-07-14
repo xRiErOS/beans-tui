@@ -106,6 +106,21 @@ type model struct {
 	searchBleveFor     string
 	searchBleveLoading bool
 
+	// Facetten-Filter `f`/`X` (E2 Task 4, bean bt-9ldr, design-spec.md §6
+	// US-05): ONE shared filter state for Tree (this task) AND Backlog (Task
+	// 5 reuses it unchanged, same view-agnostic pattern as focusedBean()).
+	// filterStatus/filterType/filterPriority/filterTag are COPY-ON-WRITE
+	// (I01 doc-stamp above) -- every toggle clones via cloneBoolMap before
+	// writing. filterItems is the flattened menu row list built fresh each
+	// time the menu opens (buildFilterItems, box_filter_facets.go);
+	// filterMenu is its cursor (listState, first non-test consumer since
+	// E1). filterOpen mirrors searchActive's "floating overlay fully
+	// captures input" precedent (handleKey).
+	filterStatus, filterType, filterPriority, filterTag map[string]bool
+	filterOpen                                          bool
+	filterItems                                         []ffItem
+	filterMenu                                          listState
+
 	confirmQuit bool
 
 	// watchUnavailable is set once (I04, T8 Opus quality review) when

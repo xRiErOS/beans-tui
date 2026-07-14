@@ -11,7 +11,6 @@ package tui
 
 import (
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"beans-tui/internal/data"
@@ -99,12 +98,15 @@ func appendBeanNode(nodes []treeNode, idx *data.Index, b *data.Bean, depth int, 
 
 // collectOrphans returns every bean whose Parent is set but does not resolve
 // to a known bean (dangling parent -- beans-legal, `beans check` only
-// reports it as broken_links). Sorted Title -> ID for determinism: idx.ByID
-// iteration order is a Go map, so this must never be rendered unsorted (would
-// break golden-test determinism and PO expectations alike). data.sortBeans
-// itself is unexported to this package, so this uses its own simple, stable
-// tie-break -- exact upstream tier order is not required for the rare orphan
-// path.
+// reports it as broken_links). Sorted via data.SortBeans (Status -> Priority
+// -> Type -> Title) for determinism: idx.ByID iteration order is a Go map,
+// so this must never be rendered unsorted (would break golden-test
+// determinism and PO expectations alike). I03 (bean bt-7jr8 T8-review,
+// closed E2 Task 4/bean bt-9ldr): this used to run its own ad-hoc
+// title-only tie-break (sortByTitleThenID) because data.sortBeans was
+// unexported at the time -- now that data.SortBeans is exported (E2 Task 1),
+// the orphan bucket uses the SAME single-source order as every other bean
+// list in the app instead of a second, parallel sort definition.
 func collectOrphans(idx *data.Index) []*data.Bean {
 	var out []*data.Bean
 	for _, b := range idx.ByID {
@@ -116,23 +118,8 @@ func collectOrphans(idx *data.Index) []*data.Bean {
 		}
 		out = append(out, b)
 	}
-	sortByTitleThenID(out)
+	data.SortBeans(out)
 	return out
-}
-
-// sortByTitleThenID is the shared tie-break for every "(verwaist)"-bucket
-// listing (dangling-parent orphans, cycle-trapped beans): Title -> ID,
-// case-insensitive. Deliberately simple (data.sortBeans' exact upstream tier
-// order is unexported and not required for these rare paths) but MUST stay
-// deterministic -- golden-test/PO expectations both depend on it.
-func sortByTitleThenID(beans []*data.Bean) {
-	sort.SliceStable(beans, func(i, j int) bool {
-		ti, tj := strings.ToLower(beans[i].Title), strings.ToLower(beans[j].Title)
-		if ti != tj {
-			return ti < tj
-		}
-		return beans[i].ID < beans[j].ID
-	})
 }
 
 // reachableIDs returns every bean ID reachable via idx.Children, descending
@@ -180,19 +167,20 @@ func collectCycleOrphans(idx *data.Index, orphans []*data.Bean) []*data.Bean {
 			out = append(out, b)
 		}
 	}
-	sortByTitleThenID(out)
+	data.SortBeans(out)
 	return out
 }
 
 // visibleNodes flattens the model's current idx+expanded state -- switches
-// to the filtered flattening (flattenTreeFiltered) while a search query is
-// active (E2 Task 3, bean bt-4ep2). Task 4 generalizes this switch to
-// m.treeActive()/m.beanMatches (search OR facets combined); Task 3's
-// treeSearchActive()/beanMatchesSearch stay in place as the search-only half
-// that combined predicate calls into.
+// to the filtered flattening (flattenTreeFiltered) whenever search OR facets
+// are narrowing the tree (m.treeActive(), box_filter_facets.go, E2 Task 4).
+// m.beanMatches AND-combines Task 3's beanMatchesSearch with Task 4's
+// beanMatchesFacets; both stay in place as the individual halves that
+// combined predicate calls into (Backlog, E2 Task 5, reuses beanMatches
+// unchanged).
 func (m model) visibleNodes() []treeNode {
-	if m.treeSearchActive() {
-		return flattenTreeFiltered(m.idx, m.expanded, m.beanMatchesSearch)
+	if m.treeActive() {
+		return flattenTreeFiltered(m.idx, m.expanded, m.beanMatches)
 	}
 	return flattenTree(m.idx, m.expanded)
 }
@@ -205,19 +193,28 @@ func (m model) treeSearchActive() bool {
 }
 
 // beanMatchesSearch is the search half of the combined filter predicate
-// (Task 4 AND-combines this with facet criteria as beanMatches). Below the
-// Bleve threshold (<3 chars), or while a Bleve response for THIS exact query
-// hasn't arrived yet, it falls back to an immediate local title+ID substring
-// match (case-insensitive) -- once searchBleveFor catches up to the current
-// query, the Bleve result set becomes authoritative instead (design-spec.md
-// §6 V2: "Bleve-Modus ab 3 Zeichen").
+// (Task 4 AND-combines this with facet criteria as beanMatches,
+// box_filter_facets.go). Below the Bleve threshold (<3 chars), or while a
+// Bleve response for THIS exact query hasn't arrived yet, it falls back to
+// an immediate local title+ID substring match (case-insensitive) -- once
+// searchBleveFor catches up to the current query, the Bleve result set
+// becomes authoritative (design-spec.md §6 V2: "Bleve-Modus ab 3 Zeichen").
+//
+// I01 (E2-T3-Review finding, PFLICHT carried into bean bt-9ldr/Task 4): the
+// authoritative-Bleve branch UNIONs the local ID-substring match back in
+// rather than replacing it outright. Rationale: data.Client.Search runs a
+// title+body full-text query (client.go doc comment) -- it does not
+// necessarily index an arbitrary ID substring as a token, so a bean that
+// only matched the query by ID would otherwise flicker OUT of the tree the
+// instant the async Bleve response for the same query lands, even though
+// the user's query still substring-matches its ID exactly as it did before.
 func (m model) beanMatchesSearch(b *data.Bean) bool {
 	q := strings.ToLower(strings.TrimSpace(m.searchQuery))
 	if q == "" {
 		return true
 	}
 	if len(q) >= 3 && m.searchBleveFor == m.searchQuery {
-		return m.searchBleveIDs[b.ID]
+		return m.searchBleveIDs[b.ID] || strings.Contains(strings.ToLower(b.ID), q)
 	}
 	return strings.Contains(strings.ToLower(b.Title), q) || strings.Contains(strings.ToLower(b.ID), q)
 }
@@ -495,17 +492,33 @@ const searchShield = "⌕"
 // treeSearchLine renders the Tree pane's persistent search head row (design-
 // spec.md §6 V2 "Such-/Filterkopf", port devd treeSearchLine
 // view_browse_project.go:1099-1117): the live textinput while typing, the
-// committed query in Red once active (DD2-53 "Filter aktiv" signal -- Task 4
-// extends this red state to cover facets too), or a muted hint when idle.
+// committed query AND/OR the active-facet summary in Red once either is
+// active (DD2-53 "Filter aktiv" signal, E2 Task 4/bean bt-9ldr: extended to
+// cover facets alongside search), or a muted hint when neither is active.
+// The idle-hint text is deliberately UNCHANGED from Task 3 (no "f filter"
+// addition) so the existing tree.golden fixture (no search/filter state)
+// keeps rendering byte-identical -- only the active-state branches grew.
 func (m model) treeSearchLine(w int) string {
 	if m.searchActive {
-		return truncate(searchShield+" "+m.searchInput.View(), w)
-	}
-	if m.treeSearchActive() {
-		line := searchShield + " " + m.searchQuery
-		if m.searchBleveLoading {
-			line += " …"
+		line := searchShield + " " + m.searchInput.View()
+		if fs := m.filterSummary(); fs != "" {
+			line += "  " + fs
 		}
+		return truncate(line, w)
+	}
+	if m.treeActive() {
+		var parts []string
+		if m.treeSearchActive() {
+			q := m.searchQuery
+			if m.searchBleveLoading {
+				q += " …"
+			}
+			parts = append(parts, q)
+		}
+		if fs := m.filterSummary(); fs != "" {
+			parts = append(parts, fs)
+		}
+		line := searchShield + " " + strings.Join(parts, "  ")
 		return truncate(lipgloss.NewStyle().Foreground(theme.Red).Render(line), w)
 	}
 	return truncate(theme.Muted.Render(searchShield+" / search"), w)
@@ -589,6 +602,9 @@ func (m model) viewBrowseRepo() string {
 	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
 	out := outerBorder(content, innerW, true)
 
+	if m.filterOpen {
+		out = placeOverlay(out, m.treeFilterBox(), w, h)
+	}
 	if m.confirmQuit {
 		out = placeOverlay(out, m.quitBox(), w, h)
 	}
