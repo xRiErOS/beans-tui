@@ -12,6 +12,8 @@ import (
 	keybind "github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+
+	"beans-tui/internal/theme"
 )
 
 // TestBreadcrumbFormat guards the beans-tui breadcrumb format `> repo: Title`
@@ -98,7 +100,7 @@ func TestModalBoxHasRoundedBorder(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii)
 
-	out := modalBox("line one\nline two", 30, lipgloss.Color("#c6a0f6"))
+	out := modalBox("line one\nline two", 30, theme.Mauve)
 	if !strings.ContainsAny(out, "╭╮╰╯") {
 		t.Error("modalBox output missing RoundedBorder corner glyphs")
 	}
