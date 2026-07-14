@@ -29,10 +29,13 @@ func (c *Client) List() ([]Bean, error) {
 }
 
 // run executes `beans <args>` with RepoDir as the working directory and
-// returns stdout. On failure, the returned error wraps stderr so callers
-// (and tests) see the actual beans-CLI diagnostic, not just an exit code.
-// stderr is only appended when non-empty, to avoid a dangling ": " on
-// failures where the CLI wrote nothing to stderr.
+// returns stdout. On failure, stdout is still returned alongside the error
+// (rather than nil) -- mutations.go's classifyError parses it as a JSON
+// error envelope when present. The error itself wraps the first line of
+// stderr so callers (and tests) see the actual beans-CLI diagnostic without
+// cobra's ~25-line usage dump (B03). stderr is only appended when
+// non-empty, to avoid a dangling ": " on failures where the CLI wrote
+// nothing to stderr.
 func (c *Client) run(args ...string) ([]byte, error) {
 	cmd := exec.Command("beans", args...)
 	cmd.Dir = c.RepoDir
@@ -41,11 +44,26 @@ func (c *Client) run(args ...string) ([]byte, error) {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 
 	if err := cmd.Run(); err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return nil, fmt.Errorf("beans %s: %w: %s", args[0], err, msg)
+		if msg := firstLine(stderr.String()); msg != "" {
+			return stdout.Bytes(), fmt.Errorf("beans %s: %w: %s", args[0], err, msg)
 		}
-		return nil, fmt.Errorf("beans %s: %w", args[0], err)
+		return stdout.Bytes(), fmt.Errorf("beans %s: %w", args[0], err)
 	}
 
 	return stdout.Bytes(), nil
+}
+
+// firstLine trims cobra's error output down to just the diagnostic line,
+// dropping the "\nUsage:\n..." flag-help dump that cobra appends after
+// every CLI error (B03). Without this, every wrapped error embedded ~25
+// lines of usage text, which isn't toast-suitable.
+func firstLine(stderr string) string {
+	s := strings.TrimSpace(stderr)
+	if i := strings.Index(s, "\nUsage:"); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
 }

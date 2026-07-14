@@ -73,3 +73,35 @@ Workaround hier: `tags` liegt auf `tt-epic` (nicht mutations-getestet),
 `tt-task` (Ziel der SetStatus/Conflict/AppendBody-Roundtrips) bleibt frei
 von hand-geschriebenem `tags`. Kein Fix im bt-Code nötig/möglich (Upstream-
 Verhalten); zur Kenntnis für künftige Fixture-Arbeit dokumentiert.
+
+## Review-Fixes (Runde 2)
+
+Aus T4-Quality-Review (B01/B02+I01/B03/I02), alle vier umgesetzt:
+
+- [x] B01 (critical): `Create()` übergab den Titel als bare positional Arg —
+  ein `-`-führender Titel (`"--force"`, `"- fix bug"`) wurde von cobra als
+  unbekannte Flag geparst. Fix: `--` Separator vor dem Titel, alle Flags
+  davor (`args = append(args, "--json", "--", opts.Title)`). Regression:
+  `TestCreateTitleWithLeadingDash`.
+- [x] B02 (high) + I01: `strings.Contains(err.Error(), "etag mismatch")`
+  false-positived bei User-Werten, die in andere CLI-Fehler durchschlagen
+  (z.B. `--type "etag mismatch"` → VALIDATION_ERROR fälschlich als Conflict
+  erkannt). Fix: `run()` gibt stdout jetzt auch bei Fehler zurück; neues
+  `classifyError()` parst zuerst den JSON-Envelope
+  (`{"success":false,"error":"...","code":"..."}`, empirisch gegen die echte
+  Binary verifiziert) — `code == "CONFLICT"` → `ErrConflict`-wrapped, andere
+  Codes → Fehler aus der Envelope-Message. Stderr-Substring-Fallback bleibt
+  nur für Envelope-lose Pre-Flight-Fehler (z.B. "no .beans directory
+  found"). Regression: `TestValidationErrorContainingEtagMismatchIsNotConflict`.
+- [x] B03 (medium): `run()`s Fehler enthielt cobras ~25-zeiligen
+  Usage-Dump aus stderr. Fix: neues `firstLine()` kappt vor `"\nUsage:"`
+  bzw. nach der ersten Zeile — Fehler sind jetzt toast-tauglich.
+  `TestListErrorIncludesStderr` bleibt unverändert grün (Substring "no
+  .beans directory found" liegt vor dem Usage-Block).
+- [x] I02 (minor): `Delete()` nutzt jetzt `--json` statt `--force` (impliziert
+  `--force` laut `beans delete --help`) — konsistent mit allen anderen
+  Mutationen, gleiche Envelope-Fehlerbehandlung.
+
+Alle Tests grün (`command go test ./...`), `gofmt -l .` leer,
+`go vet ./...` clean. Scope: nur `internal/data/{mutations.go,client.go}` +
+Tests, keine Setter-Signatur-Änderungen, kein TUI-Code.

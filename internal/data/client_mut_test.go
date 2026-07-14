@@ -84,6 +84,56 @@ func TestCreateReturnsNewBean(t *testing.T) {
 	}
 }
 
+func TestCreateTitleWithLeadingDash(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	const title = "- fix bug"
+	created, err := client.Create(CreateOpts{Title: title, Type: "task"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.Title != title {
+		t.Errorf("Create() bean.Title = %q, want %q", created.Title, title)
+	}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	found := findBean(t, beans, created.ID)
+	if found.Title != title {
+		t.Errorf("List() bean.Title = %q, want %q", found.Title, title)
+	}
+}
+
+func TestValidationErrorContainingEtagMismatchIsNotConflict(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	// The literal string "etag mismatch" here is user-supplied (an invalid
+	// --type value), not a real conflict -- the CLI reports this as a
+	// VALIDATION_ERROR, not CONFLICT. A naive strings.Contains(err.Error(),
+	// "etag mismatch") check would misclassify this as ErrConflict (B02).
+	err = client.SetType(task.ID, "etag mismatch", task.ETag)
+	if err == nil {
+		t.Fatal("SetType() with invalid type: error = nil, want error")
+	}
+	if errors.Is(err, ErrConflict) {
+		t.Errorf("SetType() error = %v, want NOT errors.Is(err, ErrConflict)", err)
+	}
+}
+
 func TestConflictOnStaleETag(t *testing.T) {
 	requireBeansBinary(t)
 

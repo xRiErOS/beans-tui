@@ -19,8 +19,13 @@ var ErrConflict = errors.New("beans: stale etag (conflict)")
 //
 //	Error: etag mismatch: provided <old>, current is <new>
 //
-// Matching on this substring (rather than exit code alone) is what lets
-// update() distinguish a conflict from any other update failure.
+// This is now only a FALLBACK for failures that never print a JSON error
+// envelope to stdout (e.g. pre-flight errors like "no .beans directory
+// found" -- the command aborts before beans ever marshals a response).
+// Whenever an envelope IS present, classifyError below parses its "code"
+// field instead: matching on this substring alone false-positives when a
+// user-supplied value (e.g. --type "etag mismatch") echoes into an
+// unrelated error message (B02).
 const conflictSubstring = "etag mismatch"
 
 // apiResponse mirrors the `{"success":true,"bean":{...}}` shape returned by
@@ -28,6 +33,50 @@ const conflictSubstring = "etag mismatch"
 type apiResponse struct {
 	Success bool `json:"success"`
 	Bean    Bean `json:"bean"`
+}
+
+// errorEnvelope mirrors the `{"success":false,"error":"...","code":"..."}`
+// shape the beans CLI prints to STDOUT (not stderr) when `create`/`update`
+// fail after starting to process the command -- verified empirically
+// against beans 0.4.2 (e.g. code "CONFLICT" on --if-match mismatch, code
+// "VALIDATION_ERROR" on an invalid --type/--status/etc value). Pre-flight
+// failures (no .beans directory, unknown flag) never reach this point, so
+// stdout is empty and there's nothing to unmarshal -- see classifyError.
+type errorEnvelope struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+	Code    string `json:"code"`
+}
+
+// classifyError turns a failed `create`/`update` invocation into the error
+// callers should see. It prefers the JSON error envelope on stdout (B02):
+// code "CONFLICT" becomes an ErrConflict-wrapped error; any other code
+// becomes an error built from the envelope's own message text. Only when
+// stdout carries no such envelope (pre-flight failures that abort before
+// beans prints anything) does it fall back to sniffing cmdErr's stderr-derived
+// message for conflictSubstring.
+func classifyError(id string, stdout []byte, cmdErr error) error {
+	var env errorEnvelope
+	if json.Unmarshal(stdout, &env) == nil && env.Code != "" {
+		if env.Code == "CONFLICT" {
+			if id != "" {
+				return fmt.Errorf("%w: bean %s: %s", ErrConflict, id, env.Error)
+			}
+			return fmt.Errorf("%w: %s", ErrConflict, env.Error)
+		}
+		if id != "" {
+			return fmt.Errorf("beans: %s: bean %s: %s", env.Code, id, env.Error)
+		}
+		return fmt.Errorf("beans: %s: %s", env.Code, env.Error)
+	}
+
+	if strings.Contains(cmdErr.Error(), conflictSubstring) {
+		if id != "" {
+			return fmt.Errorf("%w: bean %s: %s", ErrConflict, id, cmdErr)
+		}
+		return fmt.Errorf("%w: %s", ErrConflict, cmdErr)
+	}
+	return cmdErr
 }
 
 // CreateOpts are the fields accepted by Create. Title is required; every
@@ -44,11 +93,18 @@ type CreateOpts struct {
 	Body      string
 }
 
-// Create creates a new bean via `beans create <title> ... --json` and
+// Create creates a new bean via `beans create ... --json -- <title>` and
 // returns the bean as reported by the CLI (including its freshly minted ID
 // and ETag).
+//
+// The title is placed AFTER a `--` separator, following every flag (B01):
+// passed as a bare positional argument, a title starting with `-` (e.g.
+// "--force", "- fix bug") is misparsed by cobra as an unknown flag. `--`
+// tells cobra "everything after this is positional", which is the
+// documented, verified fix (`beans create --type task --json -- --fix login
+// bug` creates a bean titled "--fix login bug").
 func (c *Client) Create(opts CreateOpts) (Bean, error) {
-	args := []string{"create", opts.Title, "--json"}
+	args := []string{"create"}
 	if opts.Type != "" {
 		args = append(args, "--type", opts.Type)
 	}
@@ -70,10 +126,11 @@ func (c *Client) Create(opts CreateOpts) (Bean, error) {
 	if opts.Body != "" {
 		args = append(args, "--body", opts.Body)
 	}
+	args = append(args, "--json", "--", opts.Title)
 
 	out, err := c.run(args...)
 	if err != nil {
-		return Bean{}, err
+		return Bean{}, classifyError("", out, err)
 	}
 
 	var resp apiResponse
@@ -85,21 +142,20 @@ func (c *Client) Create(opts CreateOpts) (Bean, error) {
 
 // update runs `beans update <id> --if-match <etag> <args...> --json`, the
 // shared plumbing behind every setter/toggle below. On any failure it
-// checks stderr for the ETag-conflict fragment and, if found, wraps
-// ErrConflict so callers can errors.Is against it; any other failure is
-// returned as-is (already carrying stderr context from run()).
+// delegates to classifyError, which parses the CLI's JSON error envelope
+// (B02) to distinguish a genuine ETag conflict (code "CONFLICT", wrapped as
+// ErrConflict so callers can errors.Is against it) from any other failure
+// (e.g. a VALIDATION_ERROR whose message happens to contain the word
+// "etag").
 func (c *Client) update(id, etag string, args ...string) error {
 	fullArgs := append([]string{"update", id, "--if-match", etag}, args...)
 	fullArgs = append(fullArgs, "--json")
 
-	_, err := c.run(fullArgs...)
+	out, err := c.run(fullArgs...)
 	if err == nil {
 		return nil
 	}
-	if strings.Contains(err.Error(), conflictSubstring) {
-		return fmt.Errorf("%w: bean %s: %s", ErrConflict, id, err)
-	}
-	return err
+	return classifyError(id, out, err)
 }
 
 // SetStatus sets a bean's status (see Bean.Status for valid values).
@@ -160,9 +216,13 @@ func (c *Client) AppendBody(id, text, etag string) error {
 }
 
 // Delete deletes a bean outright. `beans delete` normally prompts for
-// confirmation on the CLI; --force skips that prompt (and any
-// reference/child warnings) since bt drives this non-interactively.
+// confirmation on the CLI; --json skips that prompt (and any
+// reference/child warnings) since bt drives this non-interactively --
+// --json implies --force on the real binary (verified against beans
+// 0.4.2's `beans delete --help`), and passing it also gets Delete the same
+// JSON-envelope error reporting as every other mutation (I02), even though
+// the parsed body isn't currently surfaced to callers.
 func (c *Client) Delete(id string) error {
-	_, err := c.run("delete", id, "--force")
+	_, err := c.run("delete", id, "--json")
 	return err
 }
