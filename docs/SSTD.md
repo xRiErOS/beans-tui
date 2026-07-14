@@ -12,4 +12,4 @@
   je Epos) — autonome Commits direkt auf `main`, kein Worktree-Zwang.
 - **Subagents: Sonnet** (Fable nur Supervisor), Opus nur in Ausnahmen.
 - Referenz-Quellen: devd-TUI `~/Obsidian/tools/DeveloperDashboard/apps/cli-go` ·
-  KC-Bundle `devdash-tui` · beans-Library `github.com/hmans/beans@v0.4.2`.
+  KC-Bundle `devdash-tui` · beans-CLI 0.4.2 (Datenlayer via Subprocess, D02).

@@ -33,16 +33,19 @@ Beans = Abnahme) laufen über die TUI.
 - **Go 1.26 + bubbletea/bubbles/lipgloss/huh/glamour** — identisch zur devd-TUI. Der
   UI-Code der devd-TUI (Eriks eigener Code) wird als Port-Basis übernommen; der Datenlayer
   wird ausgetauscht.
-- **Datenlayer: beans als Go-Library, in-process.** `github.com/hmans/beans@v0.4.2`
-  (= installierte Binary-Version) via `pkg/beancore` (Core: Laden, Mutationen, fsnotify-Watch
-  + Subscribe) und `pkg/bean`/`pkg/config` (Modell, Enums, Farben, Sortierung).
-  Kein HTTP, kein Subprocess, kein Fork. GraphQL-Layer (`pkg/beangraph`) nur falls Filter-
-  Wiederverwendung lohnt — primär direkt gegen `beancore.Core`.
-- **Konsistenz:** Schreiboperationen über dieselben Core-Pfade wie die beans-CLI; ETag/
-  optimistic concurrency (`if-match`) wird bei Formular-Saves genutzt (Konflikt → Toast + Reload).
-- **Live-Reload:** `Core.StartWatching()` + `Subscribe()` — externe Änderungen (Agent,
-  `beans update` in anderem Terminal) erscheinen ohne Neustart. Kern-Feature für
-  „besser mit Agenten interagieren".
+- **Datenlayer: beans-CLI als Subprocess.** Verifiziert: beans v0.4.2 (letztes Release =
+  installiertes Binary) exponiert KEINE importierbaren `pkg/`-Packages (alles `internal/`;
+  die `pkg/`-Struktur existiert nur im ungetaggten Dev-Klon). Daher: Reads via
+  `beans list --json --full` (+ In-Memory-Index in der TUI), Volltext via `beans list -S`
+  (Bleve), Mutationen via `beans create/update/delete --json` mit `--if-match`
+  (optimistic locking), Fallback für berechnete Felder: `beans graphql` (CLI, ohne Server).
+  Vorteil: das beans-Binary bleibt die eine Autorität (lean-stack-Prinzip), TUI ist
+  versions-entkoppelt; Subprocess-Latenz (~20-50 ms) für TUI unkritisch.
+- **Konsistenz:** ETag aus `--json`-Output; Formular-Saves senden `--if-match`
+  (Konflikt → Toast + Reload).
+- **Live-Reload:** eigener fsnotify-Watcher auf `.beans/` (+ `archive/`), Debounce ~150 ms
+  → Reload über CLI. Externe Änderungen (Agent, `beans update` in anderem Terminal)
+  erscheinen ohne Neustart. Kern-Feature für „besser mit Agenten interagieren".
 
 ### 3.2 Projekt / Repo
 
@@ -211,17 +214,17 @@ Abnahme v1 = alle Stories validiert erfüllt (Nachweis je Story im Validierungs-
 
 | Risiko | Behandlung |
 |---|---|
-| `pkg/`-API von beans v0.4.2 weicht vom beans-src-Klon ab (Klon neuer als Tag) | E1-Spike gegen das gepinnte Modul, nicht gegen den Klon; bei API-Lücken Feature lokal nachbauen statt upgraden |
+| beans-CLI-Flags/JSON-Shape ändern sich bei Upgrade | Version-Guard beim Start (`beans version`, getestet gegen 0.4.x); Datenlayer als einzige CLI-Berührungsfläche (ein Package) |
 | devd-Code-Port zieht API-Client-Reste mit | Port-Reihenfolge: Theme/Primitive zuerst, Views einzeln, Datenlayer von Anfang an beans-nativ (kein Adapter auf devd-Typen) |
-| Bleve-Suche über Library ohne Server verfügbar? | E1-Spike verifiziert; Fallback: eigene Substring-/Fuzzy-Suche über geladene beans (im Speicher, unkritisch bei <1000 beans) |
-| ETag/Watcher-Races (eigene Mutation triggert Reload) | Debounce vorhanden (100 ms); eigene Writes markieren+ignorieren, Cursor-Restore testen (US-10) |
+| Subprocess-Latenz spürbar bei Massen-Mutationen | Reads gebündelt (ein `list --json --full` je Reload), Mutationen einzeln + optimistisches UI-Update vor Reload |
+| Watcher-Races (eigene Mutation triggert Reload) | Debounce ~150 ms; eigene Writes markieren+ignorieren, Cursor-Restore testen (US-10) |
 
 ## 14. Entscheidungen
 
 | Code | Hintergrund | Entscheidung | Status |
 |---|---|---|---|
 | D01 | Stack-Wahl | Go/bubbletea, devd-TUI-Code als Port-Basis, kein Neuaufbau in Ink/TS | 🟢 |
-| D02 | Datenzugriff | beans als Go-Library in-process (`pkg/beancore` u.a., Pin v0.4.2) — kein Fork, kein Subprocess, kein HTTP | 🟢 |
+| D02 | Datenzugriff | beans-CLI-Subprocess (`--json`/`--if-match`/`-S`), eigener fsnotify-Watcher — kein Library-Import möglich (v0.4.2 nur `internal/`), kein Fork, kein HTTP. Revidiert nach Modul-Verifikation | 🟢 |
 | D03 | Projekt-Ort | Eigenes Repo `tools/beans-tui/beans-tui-repository`, Binary `bt`, main-direkt (Worktree-Weiche, Solo+sequentielle Agent-Kette) | 🟢 |
 | D04 | Review-Abbildung | Tag-Konvention `to-review`/`rework` + Body-Feedback-Abschnitte; PO schließt (completed) exklusiv via TUI | 🟢 |
 | D05 | Entitäten-Reduktion | Memories/Docs/Notes/ToDos entfallen (Autoritäts-Trennung lean-stack: Wissen→OKF, Docs→Repo) | 🟢 |

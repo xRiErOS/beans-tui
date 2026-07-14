@@ -1,7 +1,9 @@
 # beans-tui
 
 PO-Cockpit-TUI für beans-Repos — Port der DevDash-TUI (`dd`) auf das beans-Framework.
-Binary `bt`, Go/bubbletea, beans als Go-Library in-process (`github.com/hmans/beans@v0.4.2`).
+Binary `bt`, Go/bubbletea. Datenlayer: beans-CLI-Subprocess (`beans list --json --full`,
+`update --if-match`, `-S` Bleve-Suche) + eigener fsnotify-Watcher — beans-Binary bleibt die
+eine Autorität; v0.4.2 exponiert keine importierbaren Packages (alles `internal/`).
 
 ## Pointer
 
