@@ -5,10 +5,14 @@ import (
 	"strings"
 )
 
-// Index is an immutable, in-memory snapshot over a set of beans, built once
-// per load/reload from Client.List() output. Views (tree, backlog, tag
-// filters) consume only Index methods -- there is no incremental update
+// Index is an in-memory snapshot over a set of beans, built once per
+// load/reload from Client.List() output -- there is no incremental update
 // path (YAGNI): a reload just builds a fresh Index.
+//
+// ByID and Children are exported for cheap read access. Consumers MUST NOT
+// mutate the maps, their slices, or the underlying *Bean values -- this is
+// not enforced by the type system, only by convention. All ordering must go
+// through sortBeans; do not re-sort or append to Children entries directly.
 type Index struct {
 	// ByID looks up a bean by its short ID.
 	ByID map[string]*Bean
@@ -112,6 +116,11 @@ func (idx *Index) WithTag(tag string) []*Bean {
 
 // Sort orders mirror beans 0.4.2's config defaults (implementation-plan.md
 // »E1 Task 3«). Values not listed here sort last within their tier.
+//
+// Scope cut: these are hardcoded beans-0.4.2 defaults only. This does not
+// read custom status/priority/type names from .beans.yml, and upstream's
+// manual fractional-order tier is deliberately not implemented here (out of
+// scope per plan Task 3).
 var (
 	statusOrder = map[string]int{
 		"in-progress": 0,
@@ -142,6 +151,11 @@ var (
 // (case-insensitive), matching beans upstream ordering. This is the single
 // place sort order is defined; every Index method reuses it. Empty
 // priority is treated as "normal" (beans 0.4.2 default).
+//
+// Deliberate deviation: sort.SliceStable is used for a deterministic order
+// on full ties (same status/priority/type/title), rather than sort.Slice.
+// Upstream beans sorts with a non-stable sort -- this is not guaranteed to
+// produce byte-for-byte parity with upstream ordering on ties.
 func sortBeans(beans []*Bean) {
 	sort.SliceStable(beans, func(i, j int) bool {
 		a, b := beans[i], beans[j]

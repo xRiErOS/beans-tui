@@ -103,6 +103,20 @@ func TestBacklogExcludesParented(t *testing.T) {
 	assertIDOrder(t, idx.Backlog(), []string{"bl-todo-task", "bl-draft-bug"})
 }
 
+func TestUnknownEnumValuesSortLast(t *testing.T) {
+	beans := []Bean{
+		// unrecognized status ("blocked") -> falls back to sort-last (rank
+		// len(statusOrder)), so it must sort after "scrapped" (rank 4), the
+		// last recognized status value.
+		{ID: "b-blocked", Parent: "par1", Status: "blocked", Priority: "normal", Type: "task", Title: "Alpha"},
+		{ID: "b-scrapped", Parent: "par1", Status: "scrapped", Priority: "normal", Type: "task", Title: "Alpha"},
+	}
+
+	idx := NewIndex(beans)
+
+	assertIDOrder(t, idx.Children["par1"], []string{"b-scrapped", "b-blocked"})
+}
+
 func TestWithTagToReview(t *testing.T) {
 	beans := []Bean{
 		{ID: "tag-a", Status: "todo", Priority: "normal", Type: "task", Title: "Alpha", Tags: []string{"to-review", "misc"}},
