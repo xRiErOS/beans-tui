@@ -1,11 +1,11 @@
 ---
 # bt-7jr8
 title: T8 App-Shell + read-only Tree (V2-Basis) + Watcher-Verdrahtung
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-14T18:34:04Z
-updated_at: 2026-07-14T20:09:02Z
+updated_at: 2026-07-14T20:55:24Z
 parent: bt-blsy
 blocked_by:
     - bt-gbfe
@@ -28,3 +28,10 @@ beans erlaubt dangling parents (.md frei editierbar; `beans check` meldet broken
 
 ## Ergänzung aus T5-Re-Review (B05, PFLICHT in diesem Task)
 - [ ] Doc-Zeile an Watch() ergänzen: onChange darf stop() NIEMALS synchron (aus dem Callback heraus) aufrufen — Deadlock. T8-Consumer nutzt async Dispatch (tea-Msg), stop() nur im Teardown-Pfad.
+
+
+## Ergänzungen aus T7-Quality-Review (PFLICHT in diesem Task)
+- [ ] I01: Unit-Tests für renderPane (focused-Border), borderedPane, tagsInline/tagSwatch, modalPanel nachziehen (Muster primitives_test.go)
+- [ ] I02: Reflection-Test: helpGroups() deckt JEDES keyMap-Binding genau einmal ab (Drift-Guard)
+- [ ] I03: ChromeOpts.fallbackAvail: Test für avail<4-Fallback-Pfad schreiben ODER Feld entfernen (YAGNI)
+- [ ] Q01: tab-Fokus-Tausch Tree↔Detail hier implementieren (View-lokal, nicht in keymap.Right — bewusst aus devd-Right entfernt)

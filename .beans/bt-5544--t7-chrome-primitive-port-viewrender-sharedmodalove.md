@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-14T18:34:04Z
-updated_at: 2026-07-14T20:39:09Z
+updated_at: 2026-07-14T20:55:24Z
 parent: bt-blsy
 blocked_by:
     - bt-8q9c
@@ -66,3 +66,7 @@ Concern for T8: chrome functions are pure/parameterized by design — the
 App-Shell model will need to translate its state into `ChromeOpts` (and into
 `breadcrumb`/`footer`/`masterDetailWidths` args directly for non-Chrome
 call sites) rather than finding `model`-coupled helpers to call directly.
+
+
+## Korrektur (Q02 aus Quality-Review)
+Dependency-Angabe oben korrigiert: bubbletea wurde in T7 NICHT hinzugefügt (kein Import in Chrome-Primitiven) — kommt erst mit T8 (App-Shell/tea.Program). Hinzugefügt wurden bubbles, x/ansi, termenv (direkt).
