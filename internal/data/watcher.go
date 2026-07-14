@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -19,10 +20,12 @@ const watchedOps = fsnotify.Create | fsnotify.Write | fsnotify.Remove | fsnotify
 // should leave it at the default 150ms.
 var debounceDuration = 150 * time.Millisecond
 
-// Watch starts an fsnotify watch on <repoDir>/.beans (and, if it exists,
-// <repoDir>/.beans/archive) and calls onChange once a burst of matching
-// filesystem events (Create/Write/Remove/Rename) settles for
-// debounceDuration -- a burst of N events yields exactly one onChange
+// Watch starts an fsnotify watch on <repoDir>/.beans (and
+// <repoDir>/.beans/archive, watched if present at start OR created later --
+// fsnotify is non-recursive, so Watch dynamically Add()s archive/ the
+// moment it observes the Create event for it) and calls onChange once a
+// burst of matching filesystem events (Create/Write/Remove/Rename) settles
+// for debounceDuration -- a burst of N events yields exactly one onChange
 // call after the quiet period, not N calls.
 //
 // onChange takes no arguments and carries no event payload: the consumer
@@ -35,8 +38,9 @@ var debounceDuration = 150 * time.Millisecond
 // beans.path will not get watch coverage.
 //
 // Watch returns a stop func that shuts down the watcher goroutine cleanly.
-// stop is idempotent and safe to call more than once. After stop() returns,
-// no further onChange calls will occur.
+// stop is idempotent, safe to call more than once, and synchronous: it
+// blocks until the watcher goroutine has fully exited. After stop()
+// returns, no further onChange calls will occur.
 func Watch(repoDir string, onChange func()) (stop func(), err error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -46,20 +50,23 @@ func Watch(repoDir string, onChange func()) (stop func(), err error) {
 	beansDir := filepath.Join(repoDir, ".beans")
 	if err := watcher.Add(beansDir); err != nil {
 		watcher.Close()
-		return nil, err
+		return nil, fmt.Errorf("watch %s: %w", beansDir, err)
 	}
 
 	archiveDir := filepath.Join(beansDir, "archive")
 	if info, statErr := os.Stat(archiveDir); statErr == nil && info.IsDir() {
 		if err := watcher.Add(archiveDir); err != nil {
 			watcher.Close()
-			return nil, err
+			return nil, fmt.Errorf("watch %s: %w", archiveDir, err)
 		}
 	}
 
 	done := make(chan struct{})
+	stoppedCh := make(chan struct{})
 
 	go func() {
+		defer close(stoppedCh)
+
 		var timer *time.Timer
 		var timerC <-chan time.Time
 
@@ -70,14 +77,6 @@ func Watch(repoDir string, onChange func()) (stop func(), err error) {
 		}()
 
 		for {
-			// Prioritize shutdown: if done is already closed, exit before
-			// considering any newly-fired timer or fs event.
-			select {
-			case <-done:
-				return
-			default:
-			}
-
 			select {
 			case <-done:
 				return
@@ -88,6 +87,13 @@ func Watch(repoDir string, onChange func()) (stop func(), err error) {
 				}
 				if event.Op&watchedOps == 0 {
 					continue
+				}
+				if event.Op&fsnotify.Create != 0 && filepath.Clean(event.Name) == archiveDir {
+					// fsnotify is non-recursive: archive/ was not present
+					// (or not yet watched) at Watch() time. Now that it
+					// exists, start watching it too. Ignore the error --
+					// keep watching .beans regardless (T5 review B02).
+					_ = watcher.Add(archiveDir)
 				}
 				if timer == nil {
 					timer = time.NewTimer(debounceDuration)
@@ -121,6 +127,7 @@ func Watch(repoDir string, onChange func()) (stop func(), err error) {
 		once.Do(func() {
 			close(done)
 			watcher.Close()
+			<-stoppedCh
 		})
 	}
 
