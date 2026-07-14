@@ -1,11 +1,11 @@
 ---
 # bt-8q9c
 title: 'T6 Theme-Port: Catppuccin-Token + beans-Enum-Mapping'
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-14T18:34:04Z
-updated_at: 2026-07-14T18:34:04Z
+updated_at: 2026-07-14T20:09:02Z
 parent: bt-blsy
 blocked_by:
     - bt-snkb
