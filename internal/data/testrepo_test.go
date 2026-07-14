@@ -32,7 +32,24 @@ beans:
 // prefix "tt-") containing 3 fixture beans — a milestone, an epic (child of
 // the milestone), and a task (child of the epic) — written as real .md
 // files with YAML frontmatter, matching the on-disk format beans itself
-// produces. It returns the repo root directory.
+// produces. The milestone carries "blocking: [tt-task]", the epic carries
+// "tags", and the task carries "blocked_by: [tt-mlst]", so List() callers
+// exercise the full JSON contract (slice fields), not just the scalar ones.
+//
+// Deliberate placement quirk: "tags" specifically sits on the epic, not the
+// task, because of a real beans 0.4.2 CLI bug found while building this
+// fixture -- for a bean whose on-disk frontmatter includes a hand-authored
+// "tags:" block, the ETag `list`/`show` report does not match the ETag
+// `update --if-match`'s conflict check computes internally (verified in
+// isolation: "blocked_by"/"blocking"/"parent" do NOT have this divergence,
+// only "tags" does; a bean's ETag becomes consistent again once beans
+// itself has rewritten the file once, e.g. via any successful update). The
+// task fixture is what client_mut_test.go drives through SetStatus/
+// SetPriority/AppendBody/Delete round-trips using a List()-obtained ETag,
+// so it must stay free of hand-authored "tags" to keep those tests
+// deterministic. See bt-tknb concerns for the upstream bug report.
+//
+// It returns the repo root directory.
 func newTestRepo(t *testing.T) string {
 	t.Helper()
 
@@ -55,6 +72,8 @@ type: milestone
 priority: high
 created_at: 2026-01-01T00:00:00Z
 updated_at: 2026-01-01T00:00:00Z
+blocking:
+    - tt-task
 ---
 
 Milestone fixture body.
@@ -68,6 +87,9 @@ priority: normal
 created_at: 2026-01-01T00:00:00Z
 updated_at: 2026-01-01T00:00:00Z
 parent: tt-mlst
+tags:
+    - urgent
+    - backend
 ---
 
 Epic fixture body.
@@ -81,6 +103,8 @@ priority: normal
 created_at: 2026-01-01T00:00:00Z
 updated_at: 2026-01-01T00:00:00Z
 parent: tt-epic
+blocked_by:
+    - tt-mlst
 ---
 
 Task fixture body.

@@ -1,6 +1,10 @@
 package data
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func TestListReturnsAllBeansWithBody(t *testing.T) {
 	requireBeansBinary(t)
@@ -47,6 +51,26 @@ func TestListReturnsAllBeansWithBody(t *testing.T) {
 		t.Errorf("epic.Parent = %q, want %q", epic.Parent, "tt-mlst")
 	}
 
+	// JSON-contract regression guard (I01): tags/blocking/blocked_by must
+	// round-trip as parsed slices, not just be present-or-absent.
+	wantTags := []string{"urgent", "backend"}
+	if !reflect.DeepEqual(epic.Tags, wantTags) {
+		t.Errorf("epic.Tags = %v, want %v", epic.Tags, wantTags)
+	}
+	wantBlockedBy := []string{"tt-mlst"}
+	if !reflect.DeepEqual(task.BlockedBy, wantBlockedBy) {
+		t.Errorf("task.BlockedBy = %v, want %v", task.BlockedBy, wantBlockedBy)
+	}
+
+	milestone, ok := byID["tt-mlst"]
+	if !ok {
+		t.Fatalf("tt-mlst not found")
+	}
+	wantBlocking := []string{"tt-task"}
+	if !reflect.DeepEqual(milestone.Blocking, wantBlocking) {
+		t.Errorf("milestone.Blocking = %v, want %v", milestone.Blocking, wantBlocking)
+	}
+
 	for _, b := range beans {
 		if b.Body == "" {
 			t.Errorf("bean %s: Body is empty, want non-empty (--full)", b.ID)
@@ -68,5 +92,12 @@ func TestListErrorIncludesStderr(t *testing.T) {
 	_, err := client.List()
 	if err == nil {
 		t.Fatal("List() error = nil, want error (no beans repo in RepoDir)")
+	}
+
+	// The beans CLI's own diagnostic must survive the wrap -- this is what
+	// makes the error actionable instead of a bare exit-code failure.
+	const wantSubstr = "no .beans directory found"
+	if !strings.Contains(err.Error(), wantSubstr) {
+		t.Errorf("List() error = %q, want it to contain %q", err.Error(), wantSubstr)
 	}
 }
