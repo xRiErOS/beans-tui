@@ -20,4 +20,4 @@ eine Autorität; v0.4.2 exponiert keine importierbaren Packages (alles `internal
 - Datei-Namenskonvention `internal/tui/`: `<art>_<verb>_<entität>.go` (`view_`/`form_`/`box_`/`picker_`/`overlay_`); Infrastruktur ohne Präfix.
 - Keymap Single Source: `internal/tui/keymap.go` — Help-Overlay wird daraus generiert.
 - Theme-Token nur aus `internal/theme/` (Catppuccin Macchiato, TrueColor) — keine Hex-Literale in Views.
-- Review-Flow-Konvention: Tag `to-review` (Agent) → PO passt (`completed`) oder rejected (Tag `rework` + `## Review <datum>`-Body-Abschnitt). Agent setzt NIE `completed`.
+- Review-Flow-Konvention (gilt für **Epic-/Milestone-beans**): Tag `to-review` (Agent) → PO passt (`completed`) oder rejected (Tag `rework` + `## Review <datum>`-Body-Abschnitt). Agent setzt bei Epics/Milestones NIE `completed`. **Implementierungs-Task-beans** sind dagegen agent-abschließbar (completed nach grünen Tests + Review-Durchlauf) — Plan-Ritual in docs/plans/v1-port/implementation-plan.md.

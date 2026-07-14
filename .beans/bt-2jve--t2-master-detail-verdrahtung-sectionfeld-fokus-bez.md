@@ -1,13 +1,11 @@
 ---
 # bt-2jve
 title: 'T2 Master-Detail-Verdrahtung: Section/Feld-Fokus, Beziehungs-Sprung, Map-Ownership (I01), nil-Guard (Q01)'
-status: in-progress
+status: completed
 type: task
 priority: high
-tags:
-    - to-review
 created_at: 2026-07-14T21:57:17Z
-updated_at: 2026-07-14T22:36:23Z
+updated_at: 2026-07-14T22:37:17Z
 parent: bt-aq5s
 blocked_by:
     - bt-ms0k
