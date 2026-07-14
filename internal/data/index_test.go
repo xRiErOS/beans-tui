@@ -1,0 +1,118 @@
+package data
+
+import "testing"
+
+// idsOf extracts IDs in order, for compact order assertions.
+func idsOf(beans []*Bean) []string {
+	ids := make([]string, len(beans))
+	for i, b := range beans {
+		ids[i] = b.ID
+	}
+	return ids
+}
+
+func assertIDOrder(t *testing.T, got []*Bean, want []string) {
+	t.Helper()
+
+	gotIDs := idsOf(got)
+	if len(gotIDs) != len(want) {
+		t.Fatalf("got %d beans %v, want %d beans %v", len(gotIDs), gotIDs, len(want), want)
+	}
+	for i := range want {
+		if gotIDs[i] != want[i] {
+			t.Fatalf("order mismatch at %d: got %v, want %v", i, gotIDs, want)
+		}
+	}
+}
+
+func TestIndexChildrenSorted(t *testing.T) {
+	beans := []Bean{
+		// status=scrapped -> last overall regardless of anything else.
+		{ID: "b-task-zeta", Parent: "par1", Status: "scrapped", Priority: "normal", Type: "task", Title: "Zeta"},
+		// status=in-progress -> first overall.
+		{ID: "b-inprog", Parent: "par1", Status: "in-progress", Priority: "critical", Type: "bug", Title: "Omega"},
+		// status=todo, priority=low, type=task.
+		{ID: "b-task-mango", Parent: "par1", Status: "todo", Priority: "low", Type: "task", Title: "Mango"},
+		// status=todo, priority="" (defaults to normal), type=task.
+		{ID: "b-task-normal", Parent: "par1", Status: "todo", Priority: "", Type: "task", Title: "Normal-ish"},
+		// status=todo, priority=critical, type=feature.
+		{ID: "b-feat-banana", Parent: "par1", Status: "todo", Priority: "critical", Type: "feature", Title: "Banana"},
+		// status=todo, priority=critical, type=epic, title differs only by case from b-epic-apple.
+		{ID: "b-epic-banana", Parent: "par1", Status: "todo", Priority: "critical", Type: "epic", Title: "banana"},
+		{ID: "b-epic-apple", Parent: "par1", Status: "todo", Priority: "critical", Type: "epic", Title: "Apple"},
+		// unrelated parent, must not leak into par1's children.
+		{ID: "b-other-child", Parent: "par2", Status: "todo", Priority: "critical", Type: "epic", Title: "Aaa"},
+	}
+
+	idx := NewIndex(beans)
+
+	assertIDOrder(t, idx.Children["par1"], []string{
+		"b-inprog",      // in-progress
+		"b-epic-apple",  // todo, critical, epic, "Apple" < "banana" (case-insensitive)
+		"b-epic-banana", // todo, critical, epic
+		"b-feat-banana", // todo, critical, feature (type rank after epic)
+		"b-task-normal", // todo, normal (empty priority default), task
+		"b-task-mango",  // todo, low, task
+		"b-task-zeta",   // scrapped
+	})
+}
+
+func TestRootsMilestonesFirst(t *testing.T) {
+	beans := []Bean{
+		{ID: "r-task", Status: "todo", Priority: "normal", Type: "task", Title: "Alpha"},
+		{ID: "r-milestone", Status: "todo", Priority: "normal", Type: "milestone", Title: "Zulu"},
+		{ID: "r-epic", Status: "todo", Priority: "normal", Type: "epic", Title: "Mid"},
+		// has a parent -> must never show up in Roots(), regardless of type filter.
+		{ID: "r-child", Parent: "r-milestone", Status: "todo", Priority: "normal", Type: "task", Title: "Beta"},
+	}
+
+	idx := NewIndex(beans)
+
+	t.Run("no filter", func(t *testing.T) {
+		assertIDOrder(t, idx.Roots(), []string{"r-milestone", "r-epic", "r-task"})
+	})
+
+	t.Run("filtered to task", func(t *testing.T) {
+		assertIDOrder(t, idx.Roots("task"), []string{"r-task"})
+	})
+
+	t.Run("filtered to milestone and epic", func(t *testing.T) {
+		assertIDOrder(t, idx.Roots("milestone", "epic"), []string{"r-milestone", "r-epic"})
+	})
+}
+
+func TestBacklogExcludesParented(t *testing.T) {
+	beans := []Bean{
+		// parented task -> excluded even though status=todo.
+		{ID: "bl-parented-task", Parent: "par-x", Status: "todo", Priority: "normal", Type: "task", Title: "Parented"},
+		// parentless todo task -> included.
+		{ID: "bl-todo-task", Status: "todo", Priority: "normal", Type: "task", Title: "Todo Task"},
+		// parentless draft bug -> included.
+		{ID: "bl-draft-bug", Status: "draft", Priority: "normal", Type: "bug", Title: "Draft Bug"},
+		// parentless milestone -> excluded by type, regardless of status.
+		{ID: "bl-milestone", Status: "todo", Priority: "normal", Type: "milestone", Title: "Milestone"},
+		// parentless epic -> excluded by type, regardless of status.
+		{ID: "bl-epic", Status: "draft", Priority: "normal", Type: "epic", Title: "Epic"},
+		// parentless completed task -> excluded by status.
+		{ID: "bl-completed-task", Status: "completed", Priority: "normal", Type: "task", Title: "Completed"},
+	}
+
+	idx := NewIndex(beans)
+
+	// Status order: todo (1) before draft (2).
+	assertIDOrder(t, idx.Backlog(), []string{"bl-todo-task", "bl-draft-bug"})
+}
+
+func TestWithTagToReview(t *testing.T) {
+	beans := []Bean{
+		{ID: "tag-a", Status: "todo", Priority: "normal", Type: "task", Title: "Alpha", Tags: []string{"to-review", "misc"}},
+		{ID: "tag-b", Status: "todo", Priority: "normal", Type: "task", Title: "Bravo", Tags: []string{"misc"}},
+		{ID: "tag-c", Status: "in-progress", Priority: "normal", Type: "task", Title: "Charlie", Tags: []string{"to-review"}},
+		{ID: "tag-d", Status: "todo", Priority: "normal", Type: "task", Title: "Delta"},
+	}
+
+	idx := NewIndex(beans)
+
+	// Status order: in-progress (0) before todo (1).
+	assertIDOrder(t, idx.WithTag("to-review"), []string{"tag-c", "tag-a"})
+}
