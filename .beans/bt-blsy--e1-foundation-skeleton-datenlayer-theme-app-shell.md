@@ -1,11 +1,11 @@
 ---
 # bt-blsy
 title: E1 Foundation — Skeleton, Datenlayer, Theme, App-Shell
-status: todo
+status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-14T18:32:41Z
-updated_at: 2026-07-14T18:33:08Z
+updated_at: 2026-07-14T18:36:11Z
 parent: bt-apmy
 ---
 
