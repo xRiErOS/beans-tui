@@ -435,6 +435,238 @@ func TestTreeWindowingKeepsCursorVisible(t *testing.T) {
 	}
 }
 
+// --- E2 Task 2 (bean bt-2jve): I01 (expanded-map copy-on-write), Q01 (Init()
+// nil-guard covered in app_test.go), Fokus-Maschine (keyDetailFocus). ---
+
+// TestSetExpandedDoesNotMutateSharedMapAcrossModelCopies guards I01 (bean
+// bt-7jr8, T8-review): setExpanded must clone m.expanded before writing, not
+// mutate the shared backing map in place -- a struct copy (Go map values are
+// reference types) must never see the other copy's expand-state change.
+func TestSetExpandedDoesNotMutateSharedMapAcrossModelCopies(t *testing.T) {
+	base := model{expanded: map[string]bool{}}
+	copy1 := base // struct copy -- map HEADER copied, backing array still shared pre-fix
+	node := treeNode{id: "x", hasKids: true}
+	copy2 := copy1.setExpanded(node, true)
+
+	if copy1.expanded["x"] {
+		t.Error("copy1.expanded was mutated by copy2's setExpanded call -- " +
+			"expanded is a shared map, not copy-on-write (I01, bean bt-7jr8 T8-review)")
+	}
+	if !copy2.expanded["x"] {
+		t.Error("copy2.expanded should carry the new expand state")
+	}
+}
+
+// fixtureBeansWithBlocking is a milestone with two epics, bean-a (under
+// ep-1, Blocking bean-b) and bean-b (under ep-2) -- used to exercise the
+// Beziehungen-field jump + ancestor-expand (bean-b's ancestor ep-2 starts
+// collapsed, so the jump must expand it).
+func fixtureBeansWithBlocking() []data.Bean {
+	return []data.Bean{
+		{ID: "ms-1", Title: "Milestone", Status: "todo", Type: "milestone", Priority: "normal"},
+		{ID: "ep-1", Title: "Epic One", Status: "todo", Type: "epic", Priority: "normal", Parent: "ms-1"},
+		{ID: "ep-2", Title: "Epic Two", Status: "todo", Type: "epic", Priority: "normal", Parent: "ms-1"},
+		{ID: "bean-a", Title: "Bean A", Status: "todo", Type: "task", Priority: "normal", Parent: "ep-1", Blocking: []string{"bean-b"}},
+		{ID: "bean-b", Title: "Bean B", Status: "todo", Type: "task", Priority: "normal", Parent: "ep-2"},
+	}
+}
+
+// TestFocusedBeanDispatchesOnTreeCursorInBrowseView guards focusedBean()'s
+// Browse-view dispatch (devd port focusedIssue, view_detail_issue.go:20-35):
+// in viewBrowseRepo it must return the currently tree-cursored bean.
+func TestFocusedBeanDispatchesOnTreeCursorInBrowseView(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.cursorID = "ms-1"
+	b := m.focusedBean()
+	if b == nil || b.ID != "ms-1" {
+		t.Fatalf("focusedBean() = %v, want ms-1", b)
+	}
+}
+
+// TestDetailFocusDigitJumpOpensMatchingSection guards the ziffer-jump: "3"
+// while detailFocus jumps straight to the Beziehungen section (0-based
+// secCursor==2, 1-based accOpen==3 per renderAccordion's digit header).
+func TestDetailFocusDigitJumpOpensMatchingSection(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.cursorID = "ms-1"
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3'))
+	if m.secCursor != 2 || m.accOpen != 3 {
+		t.Fatalf("digit jump '3': secCursor=%d accOpen=%d, want 2/3", m.secCursor, m.accOpen)
+	}
+}
+
+// TestDetailFocusUpDownMovesSectionCursorClampedAtEnds guards section-level
+// i/k navigation: 4 fixed sections, down/up both clamp at the ends instead
+// of running past them.
+func TestDetailFocusUpDownMovesSectionCursorClampedAtEnds(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.cursorID = "ms-1"
+	m = step(t, m, keyMsg(tea.KeyTab))
+	for i := 0; i < 5; i++ { // 5 downs on 4 sections must clamp at index 3
+		m = step(t, m, keyMsg(tea.KeyDown))
+	}
+	if m.secCursor != 3 {
+		t.Fatalf("secCursor after 5x down = %d, want 3 (clamped)", m.secCursor)
+	}
+	for i := 0; i < 5; i++ {
+		m = step(t, m, keyMsg(tea.KeyUp))
+	}
+	if m.secCursor != 0 {
+		t.Fatalf("secCursor after 5x up = %d, want 0 (clamped)", m.secCursor)
+	}
+}
+
+// TestDetailFocusRightEntersFieldLevelOnlyForBeziehungenSection guards that
+// right/l is a no-op on a fieldless section (Meta) but enters field level on
+// Beziehungen (the only section carrying relationFields in E2).
+func TestDetailFocusRightEntersFieldLevelOnlyForBeziehungenSection(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+	m = step(t, m, keyMsg(tea.KeyTab)) // secCursor=0 (Meta)
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.detailLevel != 0 {
+		t.Fatal("right on Meta (no fields) must stay at section level")
+	}
+	m = step(t, m, runeMsg('3')) // Beziehungen
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.detailLevel != 1 {
+		t.Fatal("right on Beziehungen (has fields) must enter field level")
+	}
+}
+
+// TestDetailFocusEnterOnRelationJumpsCursorAndExitsToTree guards the
+// Beziehungs-Sprung: enter on a resolved relationField moves the tree cursor
+// to the target bean, exits detail focus, AND expands the target's ancestor
+// chain so it is actually visible in the next visibleNodes() call.
+func TestDetailFocusEnterOnRelationJumpsCursorAndExitsToTree(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.width, m.height = 100, 30
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3')) // Beziehungen
+	if m.secCursor != 2 || m.accOpen != 3 {
+		t.Fatalf("setup: secCursor=%d accOpen=%d, want 2/3", m.secCursor, m.accOpen)
+	}
+	m = step(t, m, keyMsg(tea.KeyRight)) // field level: fields = [Parent ep-1, Blocking bean-b]
+	if m.detailLevel != 1 {
+		t.Fatal("setup: expected field level")
+	}
+	m = step(t, m, keyMsg(tea.KeyDown)) // fieldCursor 0 (ep-1) -> 1 (bean-b)
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.cursorID != "bean-b" {
+		t.Fatalf("cursorID after enter-jump = %q, want bean-b", m.cursorID)
+	}
+	if m.detailFocus {
+		t.Fatal("enter-jump must exit detail focus")
+	}
+	if !m.expanded["ep-2"] {
+		t.Fatal("bean-b's parent (ep-2) must be expanded after the jump so it is visible")
+	}
+	found := false
+	for _, n := range m.visibleNodes() {
+		if n.id == "bean-b" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("bean-b not visible in the tree after the relation-jump (ancestor expand missing)")
+	}
+}
+
+// TestDetailFocusEnterOnUnresolvedRelationIsNoOp guards the jump-guard: a
+// relationField with beanID == "" (dangling reference) must not move the
+// cursor or exit detail focus.
+func TestDetailFocusEnterOnUnresolvedRelationIsNoOp(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "dangling-1", Title: "Dangling Bean", Status: "todo", Type: "task", Priority: "normal",
+			BlockedBy: []string{"does-not-exist"}},
+	}
+	m := fixtureModel(t, beans)
+	m.width, m.height = 100, 30
+	m.cursorID = "dangling-1"
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3')) // Beziehungen
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.detailLevel != 1 {
+		t.Fatal("setup: expected field level")
+	}
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if !m.detailFocus {
+		t.Fatal("enter on an unresolved relation must NOT exit detail focus")
+	}
+	if m.detailLevel != 1 {
+		t.Fatal("enter on an unresolved relation must stay in field level")
+	}
+	if m.cursorID != "dangling-1" {
+		t.Fatal("enter on an unresolved relation must not move the tree cursor")
+	}
+}
+
+// TestDetailFocusLeftAtFieldLevelReturnsToSectionLevel guards left/j at
+// field level: it steps back to section level without exiting detail focus.
+func TestDetailFocusLeftAtFieldLevelReturnsToSectionLevel(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3'))
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.detailLevel != 1 {
+		t.Fatal("setup: expected field level")
+	}
+	m = step(t, m, keyMsg(tea.KeyLeft))
+	if m.detailLevel != 0 {
+		t.Fatal("left at field level must return to section level")
+	}
+	if !m.detailFocus {
+		t.Fatal("left at field level must NOT exit detail focus")
+	}
+}
+
+// TestDetailFocusLeftAtSectionLevelExitsDetailFocus guards left/j at section
+// level: it exits detail focus entirely (back to Tree focus).
+func TestDetailFocusLeftAtSectionLevelExitsDetailFocus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.cursorID = "ms-1"
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("setup: expected detail focus on")
+	}
+	m = step(t, m, keyMsg(tea.KeyLeft))
+	if m.detailFocus {
+		t.Fatal("left at section level must exit detail focus")
+	}
+}
+
+// TestKeyDetailFocusOnOrphanRootExitsGracefully is a defensive nil-safety
+// test for focusedBean()'s orphan-guard: cursoring the synthetic
+// "(verwaist)" root itself (not a real bean) must never panic and must exit
+// detail focus rather than getting stuck.
+func TestKeyDetailFocusOnOrphanRootExitsGracefully(t *testing.T) {
+	beans := append(fixtureBeans(), data.Bean{
+		ID: "orph-1", Title: "Orphan", Status: "todo", Type: "task", Priority: "normal", Parent: "missing",
+	})
+	m := fixtureModel(t, beans)
+	m.cursorID = orphanRootID
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyRight)) // must not panic
+	if m.detailFocus {
+		t.Fatal("keyDetailFocus on an orphan-root cursor (no focusable bean) must exit detail focus")
+	}
+}
+
 // TestWindowAroundStableAtEdges guards windowStart/windowAround directly
 // (devd port): fits-entirely is a no-op, the window never runs past either
 // edge, and the cursor stays inside the returned window at every position --

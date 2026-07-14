@@ -11,6 +11,7 @@ import (
 
 	"beans-tui/internal/data"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -173,6 +174,26 @@ func TestBeanSectionsBeziehungenDanglingReferenceShowsUnresolvedNotJumpable(t *t
 	}
 }
 
+// TestBeanSectionsMetaWrapsLongContentToBodyWidth guards B01 (E2-T1-quality-
+// review finding, MANDATORY carry-over into Task 2): metaSectionBody must
+// wrap via wrapText like relationsSectionBody already does -- otherwise a
+// bean with many/long tags overflows the Detail pane's bordered width.
+func TestBeanSectionsMetaWrapsLongContentToBodyWidth(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "wrap-meta", Title: "Wrap Meta", Status: "todo", Type: "task", Priority: "normal",
+			Tags: []string{"a-very-long-tag-name-one", "a-very-long-tag-name-two", "a-very-long-tag-name-three"}},
+	}
+	idx := data.NewIndex(beans)
+	const bodyW = 20
+	secs := beanSections(idx, idx.ByID["wrap-meta"], bodyW)
+
+	for _, line := range strings.Split(ansi.Strip(secs[0].body), "\n") {
+		if w := lipgloss.Width(line); w > bodyW {
+			t.Errorf("Meta line exceeds bodyW=%d (got %d): %q", bodyW, w, line)
+		}
+	}
+}
+
 // TestBeanSectionsHistorieShowsCreatedUpdatedETag guards the Historie
 // section: nil CreatedAt/UpdatedAt render a placeholder, never a zero-time
 // string ("0001-01-01...").
@@ -205,5 +226,25 @@ func TestBeanSectionsHistorieShowsCreatedUpdatedETag(t *testing.T) {
 	}
 	if !strings.Contains(hist, "abc123") {
 		t.Errorf("Historie missing ETag: %q", hist)
+	}
+}
+
+// TestBeanSectionsHistorieWrapsLongETagToBodyWidth guards B01 (E2-T1-quality-
+// review finding, MANDATORY carry-over into Task 2): historieSectionBody must
+// wrap via wrapText -- otherwise a long ETag overflows the Detail pane's
+// bordered width.
+func TestBeanSectionsHistorieWrapsLongETagToBodyWidth(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "wrap-hist", Title: "Wrap Hist", Status: "todo", Type: "task", Priority: "normal",
+			ETag: strings.Repeat("etagchunk-", 5)},
+	}
+	idx := data.NewIndex(beans)
+	const bodyW = 20
+	secs := beanSections(idx, idx.ByID["wrap-hist"], bodyW)
+
+	for _, line := range strings.Split(ansi.Strip(secs[3].body), "\n") {
+		if w := lipgloss.Width(line); w > bodyW {
+			t.Errorf("Historie line exceeds bodyW=%d (got %d): %q", bodyW, w, line)
+		}
 	}
 }

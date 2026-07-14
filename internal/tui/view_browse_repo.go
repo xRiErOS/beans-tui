@@ -288,24 +288,37 @@ func windowAround(rows []string, height, cursor int) []string {
 	return rows[start : start+height]
 }
 
-// renderDetailPane renders the placeholder detail preview: title + a meta
-// line (status/type/priority/tags) of the cursored bean, via theme tokens
-// only. The full accordion (Meta/Body/Beziehungen/Historie sections) is E2
-// scope (design-spec.md §6 V4) -- this is deliberately minimal.
+// renderDetailPane renders the Detail-Accordion (Meta/Body/Beziehungen/
+// Historie, design-spec.md §6 V4) for the cursored bean -- E2 Task 2 wiring,
+// replacing T8's title+meta-line placeholder. w/w-2/w-4 mirror renderPane's
+// own truncate(rows[i], w-2) content budget (render_shared.go) and
+// renderAccordion's own PaddingLeft(2)-eats-into-Width(w) contract
+// (accordion.go doc comment) -- bodyW = w-4 is NOT an arbitrary number.
+//
+// Scrolling when a section's content exceeds the pane height: no separate
+// scroll-offset state is added here (out of plan scope) -- rows are simply
+// split and handed to renderPane, whose existing Golden-Rule-#1 line cap
+// (render_shared.go: `for i := 0; ... && len(lines) < h`) already prevents
+// any overflow past the pane's border, the same mechanism the Tree pane
+// relies on. A true scroll-with-indicator (mirroring Chrome()'s scrollView)
+// is not needed yet: exclusive-open sections keep the open section's content
+// near the top, and digit-jump/1-4 always re-opens from row 0.
 func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string {
 	pos := m.cursorPos(nodes)
 	var rows []string
 	if pos >= 0 && pos < len(nodes) && !nodes[pos].orphan && nodes[pos].bean != nil {
 		b := nodes[pos].bean
-		rows = append(rows, theme.Header.Render(b.Title))
-		meta := theme.StatusStyle(b.Status).Render(b.Status) + "  " + theme.TypeStyle(b.Type).Render(b.Type)
-		if b.Priority != "" {
-			meta += "  " + theme.Priority(b.Priority)
+		bodyW := w - 4
+		if bodyW < 1 {
+			bodyW = 1
 		}
-		if t := tagsInline(b.Tags); t != "" {
-			meta += "  " + t
+		accW := w - 2
+		if accW < 1 {
+			accW = 1
 		}
-		rows = append(rows, meta)
+		secs := beanSections(m.idx, b, bodyW)
+		acc := renderAccordion(secs, m.accOpen, accW, focused, m.secCursor, m.fieldCursor)
+		rows = strings.Split(acc, "\n")
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}

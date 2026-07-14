@@ -7,11 +7,19 @@ package tui
 // this app is always dark, see devd DD2-24).
 
 import (
+	"errors"
+
 	"beans-tui/internal/data"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// errNilClient is Q01's (bean bt-7jr8, T8-review) surfaced load error: a nil
+// data.Client is a caller-side construction bug (Run() must build one before
+// newModel), but Init() must never let that turn into a nil-deref panic --
+// see Init() below.
+var errNilClient = errors.New("bt: nil beans client (Run() must construct a data.Client before newModel)")
 
 // Run starts the bt TUI against repoDir (an already-resolved beans repo, see
 // data.FindRepo) using client for all reads. AltScreen + mouse (wheel/click)
@@ -53,5 +61,11 @@ func Run(client *data.Client, repoDir string) error {
 
 // Init kicks off the initial async load (spinnerless, per plan scope).
 func (m model) Init() tea.Cmd {
+	if m.client == nil { // Q01 (bean bt-7jr8 T8-review): the nil-client invariant is
+		// otherwise only enforced by convention at Run()'s call site -- this guard
+		// turns a would-be nil-deref panic (inside loadCmd -> Client.List -> run)
+		// into a normal, status-line-surfaced load error instead.
+		return func() tea.Msg { return beansLoadedMsg{err: errNilClient} }
+	}
 	return loadCmd(m.client)
 }

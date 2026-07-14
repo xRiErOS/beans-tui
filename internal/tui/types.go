@@ -27,6 +27,27 @@ const (
 // (beans IDs are `<prefix>-<n-chars>`, never containing \x00).
 const orphanRootID = "\x00orphans"
 
+// I01 (bean bt-7jr8, T8-review): every map[string]bool field on model
+// (expanded, and E2's new filter facet sets) is COPY-ON-WRITE, never mutated
+// in place. Rationale: model is a value-receiver Elm architecture (design-
+// spec.md §3.3) -- Go map values are reference types, so mutating one
+// in-place silently aliases every other struct copy holding the same map
+// header (e.g. an old model variable a test kept around, or a future
+// undo/diff feature). Bubbletea's own single-active-model discipline
+// (Update always returns a fresh value, the caller discards the old one)
+// currently hides this hazard, but it is not guaranteed to stay hidden as
+// more map fields are added (E2 Task 4's filter facets) -- so every setter
+// clones via cloneBoolMap before writing, closing the hazard permanently at
+// negligible cost (these maps are always small: expand state + a handful of
+// filter selections).
+func cloneBoolMap(src map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
 // model is the App-Shell state. T8 wires the read-only Tree (design-spec.md
 // §6 V2 basis) + async load/reload/watch; mutation state (forms, pickers,
 // menus) lands in E2/E3 as new fields on this same struct (devd port
@@ -49,6 +70,17 @@ type model struct {
 	// view-local `tab` handling, deliberately NOT routed through keymap.Right
 	// (which stays the tree's expand key).
 	detailFocus bool
+
+	// Detail-Accordion focus machine (E2 Task 2, bean bt-2jve, port devd
+	// view_detail_issue.go's detailFocusView): secCursor/accOpen track the
+	// section level (0-based cursor / 1-based exclusive-open, kept as two
+	// fields since renderAccordion's `open` param is 1-based per its digit
+	// header while every other cursor in this codebase is 0-based).
+	// detailLevel 0 = section level, 1 = field level (Beziehungen only).
+	// fieldCursor indexes the currently open section's fields when
+	// detailLevel == 1. All four reset on every `tab`-into-detail-focus
+	// transition (handleKey).
+	secCursor, accOpen, detailLevel, fieldCursor int
 
 	confirmQuit bool
 

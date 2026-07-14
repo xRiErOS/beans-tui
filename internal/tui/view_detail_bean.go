@@ -20,19 +20,22 @@ import (
 // renderAccordion).
 func beanSections(idx *data.Index, b *data.Bean, bodyW int) []accordionSection {
 	var secs []accordionSection
-	secs = append(secs, accordionSection{title: "Meta", body: metaSectionBody(b)})
+	secs = append(secs, accordionSection{title: "Meta", body: metaSectionBody(b, bodyW)})
 	secs = append(secs, accordionSection{title: "Body", body: bodySectionBody(b, bodyW)})
 	rel, fields := relationsSectionBody(idx, b, bodyW)
 	secs = append(secs, accordionSection{title: "Beziehungen", body: rel, fields: fields})
-	secs = append(secs, accordionSection{title: "Historie", body: historieSectionBody(b)})
+	secs = append(secs, accordionSection{title: "Historie", body: historieSectionBody(b, bodyW)})
 	return secs
 }
 
 // metaSectionBody renders Status/Type/Priority/Tags via the existing themed
 // helpers (theme.StatusStyle/TypeStyle/Priority, render_shared.go's
 // tagsInline) -- no new theme code, mirrors renderDetailPane's meta line
-// (view_browse_repo.go) but as a full, labeled section.
-func metaSectionBody(b *data.Bean) string {
+// (view_browse_repo.go) but as a full, labeled section. B01 (E2-T1-quality-
+// review, MANDATORY carry-over into Task 2): wrapped via wrapText like
+// relationsSectionBody already does -- a bean with many/long tags must wrap
+// inside the Detail pane's bordered width instead of overflowing it.
+func metaSectionBody(b *data.Bean, bodyW int) string {
 	var lines []string
 	lines = append(lines, theme.Muted.Render("Status: ")+theme.StatusStyle(b.Status).Render(b.Status))
 	lines = append(lines, theme.Muted.Render("Type: ")+theme.TypeStyle(b.Type).Render(b.Type))
@@ -46,7 +49,7 @@ func metaSectionBody(b *data.Bean) string {
 	} else {
 		lines = append(lines, theme.Muted.Render("Tags: ")+theme.Dim.Render("(none)"))
 	}
-	return strings.Join(lines, "\n")
+	return wrapText(strings.Join(lines, "\n"), bodyW)
 }
 
 // bodySectionBody renders b.Body via glowRender (glamour), with a muted
@@ -151,8 +154,10 @@ func relationsSectionBody(idx *data.Index, b *data.Bean, bodyW int) (string, []r
 }
 
 // historieSectionBody renders CreatedAt/UpdatedAt/ETag. nil timestamps show a
-// muted placeholder instead of Go's zero-time string.
-func historieSectionBody(b *data.Bean) string {
+// muted placeholder instead of Go's zero-time string. B01 (E2-T1-quality-
+// review, MANDATORY carry-over into Task 2): wrapped via wrapText -- a long
+// ETag must wrap instead of overflowing the Detail pane's bordered width.
+func historieSectionBody(b *data.Bean, bodyW int) string {
 	fmtTime := func(t *time.Time) string {
 		if t == nil {
 			return theme.Dim.Render("(unknown)")
@@ -167,5 +172,5 @@ func historieSectionBody(b *data.Bean) string {
 		etag = theme.Dim.Render("(none)")
 	}
 	lines = append(lines, theme.Muted.Render("ETag: ")+etag)
-	return strings.Join(lines, "\n")
+	return wrapText(strings.Join(lines, "\n"), bodyW)
 }

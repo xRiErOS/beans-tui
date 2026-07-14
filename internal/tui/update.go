@@ -93,6 +93,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.requestQuit()
 	case "tab": // Q01: view-local Tree<->Detail focus swap
 		m.detailFocus = !m.detailFocus
+		if m.detailFocus {
+			// enterDetailFocus-equivalent (devd view_detail_issue.go:236-243,
+			// E2 Task 2): always re-enter the Detail-Accordion at Meta,
+			// section level, field cursor 0 -- a stale cursor position from a
+			// PREVIOUS detail-focus visit (possibly on a different bean, whose
+			// section/field shape may differ) must never leak into this one.
+			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+		}
 		return m, nil
 	}
 
@@ -101,11 +109,104 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.detailFocus {
-		// Detail-pane navigation lands in E2 (full accordion); T8's
-		// placeholder preview has nothing interactive yet.
-		return m, nil
+		return m.keyDetailFocus(msg)
 	}
 	return m.keyTree(msg)
+}
+
+// focusedBean returns the bean the Detail-Accordion currently targets,
+// independent of which view is active (devd port focusedIssue,
+// view_detail_issue.go:20-35) -- view-agnostic so Task 5's Backlog view can
+// reuse keyDetailFocus verbatim once it adds its own case here.
+func (m model) focusedBean() *data.Bean {
+	switch m.view {
+	default: // viewBrowseRepo (T8) -- Task 5 adds a viewBacklog case
+		nodes := m.visibleNodes()
+		pos := m.cursorPos(nodes)
+		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan {
+			return nil
+		}
+		return nodes[pos].bean
+	}
+}
+
+// keyDetailFocus drives the two-level Detail focus machine (Section cursor
+// <-> Field cursor within Beziehungen; devd port view_detail_issue.go:
+// 281-392). Port deviation vs. devd: no separate "header edit fields" layer
+// (devd's section index 0) -- E2 has no edit-field concept (E3 scope), so
+// section index 0 is Meta directly, no off-by-one vs. devd's secCursor-1.
+func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	b := m.focusedBean()
+	if b == nil { // defensive guard: orphan-root cursor, no focusable bean
+		m.detailFocus = false
+		return m, nil
+	}
+	secs := beanSections(m.idx, b, 40) // width is render-time only; section COUNT is fixed (4)
+
+	if s := msg.String(); len(s) == 1 && s[0] >= '1' && s[0] <= '4' {
+		m.secCursor = int(s[0]-'0') - 1
+		m.accOpen = int(s[0] - '0')
+		m.detailLevel = 0
+		m.fieldCursor = 0
+		return m, nil
+	}
+
+	switch navKey(msg.String()) {
+	case "up":
+		if m.detailLevel == 0 && m.secCursor > 0 {
+			m.secCursor--
+			m.accOpen = m.secCursor + 1
+		} else if m.detailLevel == 1 && m.fieldCursor > 0 {
+			m.fieldCursor--
+		}
+		return m, nil
+	case "down":
+		if m.detailLevel == 0 && m.secCursor < len(secs)-1 {
+			m.secCursor++
+			m.accOpen = m.secCursor + 1
+		} else if m.detailLevel == 1 && m.fieldCursor < len(secs[m.secCursor].fields)-1 {
+			m.fieldCursor++
+		}
+		return m, nil
+	case "right":
+		if m.detailLevel == 0 && len(secs[m.secCursor].fields) > 0 {
+			m.detailLevel = 1
+			m.fieldCursor = 0
+		}
+		return m, nil
+	case "left":
+		if m.detailLevel == 1 {
+			m.detailLevel = 0
+		} else {
+			m.detailFocus = false
+		}
+		return m, nil
+	}
+
+	if keybind.Matches(msg, keys.Enter) && m.detailLevel == 1 {
+		f := secs[m.secCursor].fields[m.fieldCursor]
+		if f.beanID == "" {
+			return m, nil // unresolved reference -- nothing to jump to
+		}
+		m.expanded = expandAncestorsOf(m.idx, m.expanded, f.beanID) // I01: clone-based
+		m.cursorID = f.beanID
+		m.detailFocus = false
+		return m, nil
+	}
+	return m, nil
+}
+
+// expandAncestorsOf returns a NEW expanded map (I01 copy-on-write) with every
+// ancestor of id (walking Parent up to a root) marked expanded, so a
+// relation-jump target is guaranteed visible in the next visibleNodes() call.
+func expandAncestorsOf(idx *data.Index, expanded map[string]bool, id string) map[string]bool {
+	out := cloneBoolMap(expanded)
+	b, ok := idx.ByID[id]
+	for ok && b.Parent != "" {
+		out[b.Parent] = true
+		b, ok = idx.ByID[b.Parent]
+	}
+	return out
 }
 
 // keyTree drives the tree: up/down move the cursor, right/left expand/
@@ -146,11 +247,14 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// setExpanded sets n's expand state in m.expanded; a no-op for leaves.
+// setExpanded sets n's expand state in m.expanded; a no-op for leaves. I01
+// (bean bt-7jr8 T8-review): clones m.expanded via cloneBoolMap before writing
+// -- expanded is COPY-ON-WRITE (types.go doc-stamp), never mutated in place.
 func (m model) setExpanded(n treeNode, open bool) model {
 	if !n.hasKids {
 		return m
 	}
+	m.expanded = cloneBoolMap(m.expanded)
 	if open {
 		m.expanded[n.id] = true
 	} else {

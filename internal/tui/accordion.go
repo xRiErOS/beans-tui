@@ -110,6 +110,29 @@ func fieldStrip(fields []relationField, active, w int) string {
 // TTY -> an dasselbe Profil gekoppelt wie die Goldens) wird der plain
 // "notty"-Style genutzt, damit Golden-Snapshots ANSI-frei und stabil bleiben
 // (port devd editor.go:102-126, verbatim).
+//
+// I02 (E2-T1-quality-review, decision made at Task 2 wiring time): this
+// constructs a brand-new glamour.TermRenderer on EVERY call -- and, now that
+// view_browse_repo.go's renderDetailPane wires beanSections into the live
+// View() path, that means once per render tick while the Body section is
+// open (every keypress, not just on bean-change). Decision: ACCEPT the cost
+// rather than add a cache -- this mirrors devd's own upstream editor.go
+// behavior 1:1 (same per-call construction there), bean bodies are typically
+// a few KB of markdown (well under interactive-latency budgets), and E2 has
+// no profiling evidence of this being a hot path. If profiling ever shows
+// otherwise, the fix is a cache keyed by (bean.ID, bean.ETag, width) on
+// model -- NOT implemented here (YAGNI until proven necessary).
+//
+// I03 (optional, E2-T1-quality-review): the two error-fallback paths below
+// return the raw, UNWRAPPED markdown source verbatim. Accepted residual
+// risk, not fixed here: both errors are effectively unreachable in practice
+// (NewTermRenderer fails only on invalid style/option construction -- both
+// hardcoded/valid here -- and Render() failing on well-formed markdown input
+// is exceedingly rare), and the raw-text fallback already goes through
+// bodySectionBody's caller-side wrapText-wrapped siblings (Meta/Historie) --
+// only the Body section itself could, in the extremely unlikely error case,
+// render an unwrapped line. Wrapping the fallback (wrapText(md, width)) would
+// be the fix if this is ever observed in practice.
 func glowRender(md string, width int) string {
 	if strings.TrimSpace(md) == "" {
 		return ""
