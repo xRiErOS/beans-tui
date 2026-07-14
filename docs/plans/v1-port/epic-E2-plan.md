@@ -482,6 +482,8 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
     return m, nil
 }
 
+// ERRATUM (E2-T2-Review B01): Snippet ohne visited-set — Endlosschleife bei
+// Parent-Zyklus. Implementiert MIT visited-set, siehe update.go.
 // expandAncestorsOf returns a NEW expanded map (I01 copy-on-write) with every
 // ancestor of id (walking Parent up to a root) marked expanded, so a
 // relation-jump target is guaranteed visible in the next visibleNodes() call.

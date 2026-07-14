@@ -483,16 +483,33 @@ func TestFocusedBeanDispatchesOnTreeCursorInBrowseView(t *testing.T) {
 	}
 }
 
-// TestDetailFocusDigitJumpOpensMatchingSection guards the ziffer-jump: "3"
-// while detailFocus jumps straight to the Beziehungen section (0-based
-// secCursor==2, 1-based accOpen==3 per renderAccordion's digit header).
+// TestDetailFocusDigitJumpOpensMatchingSection guards the ziffer-jump 1..4:
+// each digit jumps straight to its matching section (0-based secCursor,
+// 1-based accOpen per renderAccordion's digit header). Table-driven (I02,
+// Review-Runde 2, bean bt-2jve) -- previously only '3' had coverage; this
+// folds it into the same table alongside 1/2/4.
 func TestDetailFocusDigitJumpOpensMatchingSection(t *testing.T) {
-	m := fixtureModel(t, fixtureBeans())
-	m.cursorID = "ms-1"
-	m = step(t, m, keyMsg(tea.KeyTab))
-	m = step(t, m, runeMsg('3'))
-	if m.secCursor != 2 || m.accOpen != 3 {
-		t.Fatalf("digit jump '3': secCursor=%d accOpen=%d, want 2/3", m.secCursor, m.accOpen)
+	cases := []struct {
+		digit         rune
+		wantSecCursor int
+		wantAccOpen   int
+	}{
+		{'1', 0, 1},
+		{'2', 1, 2},
+		{'3', 2, 3},
+		{'4', 3, 4},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.digit), func(t *testing.T) {
+			m := fixtureModel(t, fixtureBeans())
+			m.cursorID = "ms-1"
+			m = step(t, m, keyMsg(tea.KeyTab))
+			m = step(t, m, runeMsg(tc.digit))
+			if m.secCursor != tc.wantSecCursor || m.accOpen != tc.wantAccOpen {
+				t.Fatalf("digit jump '%c': secCursor=%d accOpen=%d, want %d/%d",
+					tc.digit, m.secCursor, m.accOpen, tc.wantSecCursor, tc.wantAccOpen)
+			}
+		})
 	}
 }
 
@@ -696,5 +713,117 @@ func TestWindowAroundStableAtEdges(t *testing.T) {
 		if !found {
 			t.Errorf("cursor=%d: cursored row %q not in window %v", cursor, want, win)
 		}
+	}
+}
+
+// --- E2-T2 Quality-Review, Runde 2 (bean bt-2jve) ---
+
+// TestExpandAncestorsOfHandlesParentCycle guards B01 (Critical, Review-Runde
+// 2): expandAncestorsOf's ancestor walk had no visited-set, so a Parent
+// cycle in the on-disk data (A -> B -> A -- beans-legal, frontmatter is
+// hand-editable) hung it forever on any relation-jump into the cycle,
+// freezing the whole TUI. Run with a bounded `go test -timeout` so a
+// regression fails loudly (timeout) instead of hanging the suite.
+func TestExpandAncestorsOfHandlesParentCycle(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "cyc-a", Title: "Cycle A", Status: "todo", Type: "task", Priority: "normal", Parent: "cyc-b"},
+		{ID: "cyc-b", Title: "Cycle B", Status: "todo", Type: "task", Priority: "normal", Parent: "cyc-a"},
+	}
+	idx := data.NewIndex(beans)
+
+	out := expandAncestorsOf(idx, map[string]bool{}, "cyc-a")
+	if !out["cyc-b"] {
+		t.Error("expandAncestorsOf did not mark cyc-a's immediate parent (cyc-b) expanded")
+	}
+}
+
+// TestFieldCursorClampsAfterReloadShrinksRelations guards B02 (Critical,
+// Review-Runde 2): m.secCursor/m.fieldCursor are model state that survives a
+// beansLoadedMsg reload untouched -- if a watch-reload shrinks the focused
+// bean's Beziehungen fields while the user is parked at field level,
+// keyDetailFocus's `secs[m.secCursor].fields[m.fieldCursor]` indexed out of
+// range and panicked. Repro: drill into field 1 of 2, reload down to 1
+// relation, press enter -- must not panic, must clamp to a sane state.
+func TestFieldCursorClampsAfterReloadShrinksRelations(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "root-1", Title: "Root", Status: "todo", Type: "task", Priority: "normal",
+			Blocking: []string{"blk-1", "blk-2"}},
+		{ID: "blk-1", Title: "Blocker One", Status: "todo", Type: "task", Priority: "normal"},
+		{ID: "blk-2", Title: "Blocker Two", Status: "todo", Type: "task", Priority: "normal"},
+	}
+	m := fixtureModel(t, beans)
+	m.width, m.height = 100, 30
+	m.cursorID = "root-1"
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3'))         // Beziehungen
+	m = step(t, m, keyMsg(tea.KeyRight)) // field level, fieldCursor 0 (blk-1)
+	if m.detailLevel != 1 {
+		t.Fatal("setup: expected field level")
+	}
+	m = step(t, m, keyMsg(tea.KeyDown)) // fieldCursor 1 (blk-2) -- field 2 of 2
+	if m.fieldCursor != 1 {
+		t.Fatalf("setup: fieldCursor = %d, want 1", m.fieldCursor)
+	}
+
+	// A watch-reload shrinks root-1's Blocking down to 1 entry while the
+	// user is still parked at field index 1 -- fieldCursor is now stale
+	// relative to the freshly computed secs.
+	shrunk := []data.Bean{
+		{ID: "root-1", Title: "Root", Status: "todo", Type: "task", Priority: "normal",
+			Blocking: []string{"blk-1"}},
+		{ID: "blk-1", Title: "Blocker One", Status: "todo", Type: "task", Priority: "normal"},
+	}
+	m = step(t, m, beansLoadedMsg{beans: shrunk})
+
+	// A key press right after the reload (no jump side-effect: "up" only
+	// decrements if fieldCursor > 0) must clamp the stale fieldCursor into
+	// range for the shrunk section without panicking -- direct clamp
+	// evidence, still focused on root-1.
+	m = step(t, m, keyMsg(tea.KeyUp))
+	if m.fieldCursor != 0 {
+		t.Fatalf("fieldCursor after reload+clamp = %d, want 0 (only 1 field left)", m.fieldCursor)
+	}
+
+	// Enter must not panic either, even though fieldCursor was stale
+	// relative to the pre-reload (2-field) section shape: clamped to the
+	// sole remaining (resolved) relation, it now behaves like a normal
+	// relation-jump -- itself sane B02 behavior, not a special case.
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	if m.fieldCursor < 0 {
+		t.Fatalf("fieldCursor went negative: %d", m.fieldCursor)
+	}
+}
+
+// TestTabReentryResetsStaleDetailFocusState guards I01 (Important,
+// Review-Runde 2): re-entering detail focus after having drilled into a deep
+// section/field state must never leak that state into the new visit -- tab
+// always re-enters the accordion at Meta/section level/field 0 (Q01,
+// handleKey's tab case, update.go). Previously untested end-to-end.
+func TestTabReentryResetsStaleDetailFocusState(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+
+	m = step(t, m, keyMsg(tea.KeyTab)) // tab in
+	m = step(t, m, runeMsg('3'))       // section 3 (Beziehungen)
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.secCursor != 2 || m.accOpen != 3 || m.detailLevel != 1 {
+		t.Fatalf("setup: secCursor=%d accOpen=%d detailLevel=%d, want 2/3/1",
+			m.secCursor, m.accOpen, m.detailLevel)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyTab)) // tab out
+	if m.detailFocus {
+		t.Fatal("setup: tab did not exit detail focus")
+	}
+	m = step(t, m, keyMsg(tea.KeyTab)) // tab back in
+	if !m.detailFocus {
+		t.Fatal("setup: tab did not re-enter detail focus")
+	}
+	if m.secCursor != 0 || m.accOpen != 1 || m.detailLevel != 0 || m.fieldCursor != 0 {
+		t.Fatalf("stale detail-focus state leaked across tab re-entry: secCursor=%d accOpen=%d detailLevel=%d fieldCursor=%d, want 0/1/0/0",
+			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor)
 	}
 }

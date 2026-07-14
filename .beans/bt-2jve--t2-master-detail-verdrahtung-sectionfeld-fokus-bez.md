@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-14T21:57:17Z
-updated_at: 2026-07-14T22:37:17Z
+updated_at: 2026-07-14T22:49:50Z
 parent: bt-aq5s
 blocked_by:
     - bt-ms0k
@@ -101,3 +101,18 @@ Browse-View (`view_browse_repo.go`, `visibleNodes()`) auf; die hier eingeführte
 Fokus-Machine-Felder (`secCursor`/`accOpen`/`detailLevel`/`fieldCursor`) sind orthogonal
 dazu und werden von T3/T4 nicht angefasst. `focusedBean()`s `default`-Case ist bewusst
 offen für einen künftigen `case viewBacklog` (Task 5) gelassen.
+
+
+## Review-Fixes (Runde 2)
+
+B01 (Critical, REPRODUZIERT): expandAncestorsOf (update.go) hatte keinen Visited-Set — Parent-Zyklus (A.Parent=B, B.Parent=A) lief in Endlosschleife, TUI-Freeze. RED bewiesen: TestExpandAncestorsOfHandlesParentCycle hing bis go-test-timeout (8s), Stacktrace stuck bei update.go:207. Fix: visited-Map nach appendBeanNode-Ancestors-Muster (view_browse_repo.go). GREEN danach sofort (0.00s).
+
+B02 (Critical, REPRODUZIERT): secs[m.secCursor].fields[m.fieldCursor] (update.go:187) indexierte out-of-range, wenn ein Watch-Reload die Beziehungen des fokussierten Beans schrumpft, während der User auf Feld-Ebene steht. RED bewiesen: TestFieldCursorClampsAfterReloadShrinksRelations paniced exakt an update.go:187 ("index out of range [1] with length 1"). Fix: einmaliger Clamp von secCursor/fieldCursor direkt nach secs-Berechnung am Kopf von keyDetailFocus (defensiv, einzige Stelle statt pro Branch).
+
+I01 (Important): TestTabReentryResetsStaleDetailFocusState ergänzt — tab-Wiedereintritt nach Section-3/Feld-Ebene-Drill setzt secCursor/accOpen/detailLevel/fieldCursor zuverlässig zurück (bereits korrektes Verhalten, jetzt end-to-end abgesichert).
+
+I02: TestDetailFocusDigitJumpOpensMatchingSection auf table-driven (1/2/3/4) umgestellt statt nur '3'.
+
+Plan-Erratum: docs/plans/v1-port/epic-E2-plan.md — Erratum-Hinweis über dem expandAncestorsOf-Snippet ergänzt (Snippet zeigt bewusst die B01-Variante ohne visited-set als Plan-Artefakt, Implementierung in update.go hat den Fix).
+
+Verifikation: go test ./... -count=1 grün (alle Pakete), gofmt clean, go vet clean, TestTreeGolden/TestTreeGoldenDeterministic 2x stabil grün.

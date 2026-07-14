@@ -143,6 +143,29 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	secs := beanSections(m.idx, b, 40) // width is render-time only; section COUNT is fixed (4)
 
+	// B02 (Review-Runde 2, bean bt-2jve, Critical): clamp secCursor/
+	// fieldCursor against the just-computed secs BEFORE any branch below
+	// indexes into them. m.secCursor/m.fieldCursor are model state that
+	// survives a beansLoadedMsg reload untouched -- a watch-reload between
+	// keystrokes can shrink the focused bean's Beziehungen fields while the
+	// user is still parked at field level, and secs[m.secCursor].
+	// fields[m.fieldCursor] further down would then index out of range.
+	// Single defensive clamp point, not sprinkled per-branch.
+	if m.secCursor >= len(secs) {
+		m.secCursor = len(secs) - 1
+	}
+	if m.secCursor < 0 {
+		m.secCursor = 0
+	}
+	if fc := len(secs[m.secCursor].fields); m.fieldCursor >= fc {
+		if fc == 0 {
+			m.fieldCursor = 0
+			m.detailLevel = 0 // no fields left in this section -- back to section level
+		} else {
+			m.fieldCursor = fc - 1
+		}
+	}
+
 	if s := msg.String(); len(s) == 1 && s[0] >= '1' && s[0] <= '4' {
 		m.secCursor = int(s[0]-'0') - 1
 		m.accOpen = int(s[0] - '0')
@@ -199,10 +222,16 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // expandAncestorsOf returns a NEW expanded map (I01 copy-on-write) with every
 // ancestor of id (walking Parent up to a root) marked expanded, so a
 // relation-jump target is guaranteed visible in the next visibleNodes() call.
+// B01 (Review-Runde 2, bean bt-2jve, Critical): visited guards the walk --
+// beans' frontmatter is hand-editable, so a Parent cycle (A -> B -> A) is a
+// data error but must never hang/freeze the TUI; same defensive pattern as
+// appendBeanNode's per-path ancestors map (view_browse_repo.go).
 func expandAncestorsOf(idx *data.Index, expanded map[string]bool, id string) map[string]bool {
 	out := cloneBoolMap(expanded)
+	visited := map[string]bool{id: true}
 	b, ok := idx.ByID[id]
-	for ok && b.Parent != "" {
+	for ok && b.Parent != "" && !visited[b.Parent] {
+		visited[b.Parent] = true
 		out[b.Parent] = true
 		b, ok = idx.ByID[b.Parent]
 	}
