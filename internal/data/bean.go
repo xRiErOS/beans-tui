@@ -4,7 +4,10 @@
 // (design decision D02: the beans binary stays the single authority).
 package data
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Bean mirrors a single issue as reported by the beans CLI. Field names and
 // JSON tags are verified against real `beans list --json --full` and
@@ -28,4 +31,17 @@ type Bean struct {
 	UpdatedAt *time.Time `json:"updated_at"`
 	Body      string     `json:"body"` // only populated with --full
 	ETag      string     `json:"etag"`
+}
+
+// IsArchived reports whether b currently lives under .beans/archive/ (E5
+// Task 7, bean bt-ggt2, design decision e, epic-E5-plan.md »Task 7«):
+// Core.isArchivedPath (beans-src/pkg/beancore/core.go:826) stamps every
+// archived bean's Path with a leading "archive/" segment -- a cheap,
+// already-loaded-field derivation, no extra CLI round-trip needed. Verified
+// empirically against a real `beans archive` run (archive_test.go,
+// TestListIncludesArchivedBeans): Path goes from e.g.
+// "tt-nhra--task-a.md" to "archive/tt-nhra--task-a.md", nothing else
+// changes (Status/Tags/relationships are all preserved by `beans archive`).
+func (b Bean) IsArchived() bool {
+	return strings.HasPrefix(b.Path, "archive/")
 }

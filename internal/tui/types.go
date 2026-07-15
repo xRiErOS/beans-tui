@@ -497,6 +497,26 @@ type model struct {
 	repoList   listState
 	watchStop  func()
 
+	// Archiv-Sicht (E5 Task 7, bean bt-ggt2, design decision e): showArchived
+	// is a PROGRAM DEFAULT (false = completed/scrapped hidden), toggled via
+	// the f-menu's own "Archivierte einblenden" row (box_filter_facets.go,
+	// facet "archive", the SAME space/x toggle path every other facet uses,
+	// no new key). Deliberately NOT one of the four filterStatus/filterType/
+	// filterPriority/filterTag maps: filterActive() must stay unaffected by
+	// it (this is not a PO-set facet, doc-stamp there) -- it lives as its
+	// own bool field instead, consulted by beanMatchesArchive
+	// (box_filter_facets.go) AND, separately, by visibleNodes()'s own
+	// routing condition (view_browse_repo.go) -- the latter is what makes
+	// the default actually apply with NO search/facet active (the fully-
+	// unfiltered flattenTree path is only reached when m.showArchived is
+	// true AND nothing else is narrowing; see visibleNodes()'s own doc
+	// comment for why this is NOT folded into treeActive() itself). Reset to
+	// false on every repo switch (applyRepoSwitched, update.go) -- same
+	// leak-prevention class as every other search/filter field reset there
+	// (T6-Note bug class: a toggle from repo A must not silently apply to
+	// repo B).
+	showArchived bool
+
 	// repoMetrics is the Lobby's own "Offen/Gesamt" column per configured
 	// repo (design note, bean bt-zhwl: "Kosten/Latenz-Abwägung dokumentieren"
 	// -- resolved as N independent async tea.Cmd dispatches, batched via

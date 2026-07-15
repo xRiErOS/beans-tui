@@ -36,6 +36,7 @@ var facetHead = map[string]string{
 	"type":     "Type",
 	"priority": "Priority",
 	"tag":      "Tags",
+	"archive":  "Archiv",
 }
 
 // buildFilterItems assembles the menu row list: fixed Status/Type/Priority
@@ -67,6 +68,15 @@ func (m model) buildFilterItems() []ffItem {
 	for _, tag := range m.tagFilterOptions() {
 		items = append(items, ffItem{"tag", tag, tag})
 	}
+	// E5 Task 7 (bean bt-ggt2, design decision e): ONE standalone row, NOT
+	// part of the Status-enum loop above (data.StatusValues() has no
+	// "archive" pseudo-status) -- toggles m.showArchived (a program DEFAULT,
+	// not a PO-set facet, filterActive()'s own doc-stamp) via the SAME
+	// space/x toggle path every other row uses (facetOn/toggleFacet below),
+	// no new key. value "show" is a placeholder, never map-looked-up:
+	// facetOn/toggleFacet special-case facet=="archive" against
+	// m.showArchived directly.
+	items = append(items, ffItem{"archive", "show", "Archivierte einblenden"})
 	return items
 }
 
@@ -149,11 +159,35 @@ func (m model) beanMatchesFacets(b *data.Bean) bool {
 	return true
 }
 
+// beanMatchesArchive is the archive-visibility half of the combined filter
+// predicate (E5 Task 7, bean bt-ggt2, design decision e): completed/scrapped
+// beans -- archived (Bean.IsArchived(), data/bean.go) or merely
+// completed-but-still-in-.beans/, the distinction is irrelevant to
+// visibility policy, epic-E5-plan.md »Task 7« -- are hidden unless
+// m.showArchived is toggled on. A PROGRAM DEFAULT, not a PO-set facet:
+// filterActive() deliberately does NOT consult m.showArchived (doc-stamp
+// there), so this predicate lives entirely outside the four
+// filterStatus/filterType/filterPriority/filterTag maps beanMatchesFacets
+// checks.
+func (m model) beanMatchesArchive(b *data.Bean) bool {
+	if m.showArchived {
+		return true
+	}
+	return b.Status != "completed" && b.Status != "scrapped"
+}
+
 // beanMatches is the ONE combined predicate every filtered view (Tree here,
-// Backlog in E2 Task 5) calls -- AND of search (Task 3's beanMatchesSearch)
-// and facets (beanMatchesFacets above).
+// Backlog in E2 Task 5) calls -- AND of search (Task 3's beanMatchesSearch),
+// facets (beanMatchesFacets), and archive-visibility (beanMatchesArchive,
+// E5 Task 7). Search is NOT special-cased against the archive default: an
+// async Bleve hit for an archived bean is excluded here exactly like any
+// facet-excluded hit -- the same AND-combination status/type/priority
+// already impose on a Bleve result set (beanMatchesSearch's own doc
+// comment applies unchanged), no separate wiring needed in
+// applyBleveResult (documented Task-7 decision, "Suche respektiert den
+// Archiv-Default").
 func (m model) beanMatches(b *data.Bean) bool {
-	return m.beanMatchesSearch(b) && m.beanMatchesFacets(b)
+	return m.beanMatchesSearch(b) && m.beanMatchesFacets(b) && m.beanMatchesArchive(b)
 }
 
 // treeActive generalizes Task 3's treeSearchActive() to "search OR facets are
@@ -176,6 +210,8 @@ func (m model) facetOn(it ffItem) bool {
 		return m.filterPriority[it.value]
 	case "tag":
 		return m.filterTag[it.value]
+	case "archive":
+		return m.showArchived
 	}
 	return false
 }
@@ -203,6 +239,11 @@ func (m model) toggleFacet(it ffItem) model {
 		m.filterPriority = toggle(m.filterPriority)
 	case "tag":
 		m.filterTag = toggle(m.filterTag)
+	case "archive":
+		// E5 Task 7: a plain bool, not a facet map -- no cloneBoolMap
+		// aliasing hazard (model is a value receiver, the bool is copied by
+		// value like every other scalar field).
+		m.showArchived = !m.showArchived
 	}
 	return m
 }

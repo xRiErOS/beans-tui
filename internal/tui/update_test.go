@@ -353,12 +353,22 @@ func TestOrphanBucketUsesCanonicalStatusPriorityTypeTitleOrder(t *testing.T) {
 // DISAGREE ("Alpha" alphabetically first but "scrapped" sorts last) -- this
 // fails under the old sortByTitleThenID (title-only) and passes only under
 // data.SortBeans.
+//
+// showArchived is set true here (E5 Task 7, bean bt-ggt2): one of the two
+// fixture beans is deliberately "scrapped" to create the sort-order
+// discriminator above -- since T7, that status is hidden by DEFAULT
+// (beanMatchesArchive, box_filter_facets.go), which would collapse this
+// test's own two-orphan setup down to one and defeat its actual point (pure
+// canonical-order proof, unrelated to archive visibility). Toggling
+// showArchived on keeps both orphans visible so the ordering assertion below
+// still exercises what it was written to exercise.
 func TestOrphanBucketUsesCanonicalOrderOverTitle(t *testing.T) {
 	beans := []data.Bean{
 		{ID: "orph-alpha", Title: "Alpha orphan", Status: "scrapped", Type: "task", Priority: "normal", Parent: "missing"},
 		{ID: "orph-zulu", Title: "Zulu orphan", Status: "in-progress", Type: "task", Priority: "normal", Parent: "missing"},
 	}
 	m := fixtureModel(t, beans)
+	m.showArchived = true
 	m.expanded[orphanRootID] = true
 	nodes := m.visibleNodes()
 	var order []string

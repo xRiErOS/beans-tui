@@ -223,6 +223,7 @@ func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
 	m.searchBleveLoading = false
 	m.filterOpen = false
 	m = m.clearFacets()
+	m.showArchived = false // E5 Task 7 (bean bt-ggt2, T6-Note bug class, bt-zhwl "Notes for T7"): the archive-default toggle must not leak across a repo switch, same reset breadth as every other search/filter field here.
 	m.backlogList = listState{}
 	m.reviewCursor = 0
 	m.reviewAccOpen = 0

@@ -174,13 +174,30 @@ func collectCycleOrphans(idx *data.Index, orphans []*data.Bean) []*data.Bean {
 
 // visibleNodes flattens the model's current idx+expanded state -- switches
 // to the filtered flattening (flattenTreeFiltered) whenever search OR facets
-// are narrowing the tree (m.treeActive(), box_filter_facets.go, E2 Task 4).
-// m.beanMatches AND-combines Task 3's beanMatchesSearch with Task 4's
-// beanMatchesFacets; both stay in place as the individual halves that
+// are narrowing the tree (m.treeActive(), box_filter_facets.go, E2 Task 4)
+// OR the archive default is hiding completed/scrapped beans (E5 Task 7,
+// bean bt-ggt2, design decision e: !m.showArchived, the DEFAULT steady
+// state, not just an opt-in narrowing). m.beanMatches AND-combines Task 3's
+// beanMatchesSearch, Task 4's beanMatchesFacets, and Task 7's
+// beanMatchesArchive; all three stay in place as the individual halves that
 // combined predicate calls into (Backlog, E2 Task 5, reuses beanMatches
 // unchanged).
+//
+// The `|| !m.showArchived` term is deliberately NOT folded into
+// treeActive() itself: treeActive() also drives treeSearchLine's "Filter
+// aktiv" red-line rendering (view_browse_repo.go), and a program default
+// hiding archived beans must NOT flip that line red -- filterActive()/
+// treeActive() stay byte-for-byte unchanged, exactly the "kein PO-Facet"
+// acceptance requirement (box_filter_facets.go doc-stamps). This routing
+// condition is the ONLY place the archive default plugs in; without it, the
+// default-hide would silently never apply whenever the tree has no active
+// search/facet (the common case) -- flattenTree ignores beanMatches
+// entirely, so a bean's completed/scrapped status would keep rendering
+// unfiltered even with m.showArchived false (the exact bug class T6's own
+// Notes-für-T7 warned about, generalized from "Settings-Reload" to "any
+// silently-bypassed predicate").
 func (m model) visibleNodes() []treeNode {
-	if m.treeActive() {
+	if m.treeActive() || !m.showArchived {
 		return flattenTreeFiltered(m.idx, m.expanded, m.beanMatches)
 	}
 	return flattenTree(m.idx, m.expanded)
