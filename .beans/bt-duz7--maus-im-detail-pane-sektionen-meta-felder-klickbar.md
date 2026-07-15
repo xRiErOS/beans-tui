@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-15T21:09:20Z
-updated_at: 2026-07-15T23:25:07Z
+updated_at: 2026-07-15T23:47:02Z
 parent: bt-ntoz
 blocked_by:
     - bt-e6q9
@@ -271,3 +271,69 @@ vorgesehen):
 - Kein neuer Key/keine neue Keybinding wurde ergaenzt (nur Maus-Dispatch)
   -- `helpGroups()`/Drift-Guard unveraendert, keine Beruehrung mit bt-yqdy's
   `keys.NewTag`-Ergaenzung.
+
+
+
+## Fix-Runde 1 (2026-07-16)
+
+Review-Ergebnis CHANGES_REQUIRED, zwei blocking Findings (beide vom
+Reviewer empirisch reproduziert), behoben in Commit `6e1152e`
+(`fix(tui): B07 clickKey-Aliasing + zeitfensterloser Zweitklick (Review
+R1)`):
+
+**B01 (blocking) -- Cross-Pane-clickKey-Kollision.** `mouseDetailClick`s
+`clickKey := secIdx*10+fieldIdx+1` teilte den Zahlenraum mit den Tree-/
+Backlog-Row-Indizes im gemeinsamen `m.lastClickIdx`: Tree-Klick auf
+Row-Index 1 gefolgt <500ms von einem ERST-Klick auf das `title:`-Feld
+(alter Key 0*10+0+1 == 1) aliaste zu einem falschen Doppelklick und
+oeffnete das Title-Edit-Form OHNE vorherige Selektion. `lastClickIdx`
+wird bei Pane-Wechsel nicht zurueckgesetzt. Fix (inkl. I01, non-blocking):
+benannter, direkt testbarer Helfer `detailClickKey(secIdx, fieldIdx)`
+(mouse.go) mit `detailClickKeyBase = 1000`-Offset -- Sektions-Header auf
+base+0/10/20/30, Meta-Felder auf base+1..base+7, garantiert disjunkt von
+jedem realistischen Tree-/Backlog-Row-Index; weiterhin DASSELBE geteilte
+`lastClickIdx`-Feld (Architektur-Vorgabe #3 gewahrt). Die urspruengliche
+Deviations-Notiz #3 ("akzeptiertes Restrisiko") ist damit obsolet -- das
+Risiko war real reproduzierbar, nicht theoretisch, und ist jetzt
+strukturell ausgeschlossen.
+
+**B02 (blocking) -- Zweitklick faelschlich zeitfenstergebunden.** Der
+PO-Wortlaut nennt ZWEI Fall-c-Ausloeser: "Doppelklick (oder Zweitklick
+auf ein bereits selektiertes Feld)". Die Implementierung behandelte beide
+als EIN `isDouble`-Ereignis (500ms-Fenster) -- Feld selektieren, 800ms
+warten, erneut klicken oeffnete NICHTS, obwohl die gespiegelte
+Enter-Kaskade zeitfensterlos ist. Die urspruengliche Deviations-Notiz #4
+(Lesart "ein Ereignis") war eine Fehldeutung des PO-Wortlauts -- vom
+Reviewer korrigiert. Fix: `wasSelected`-Check VOR dem State-Update
+(`fieldIdx >= 0 && m.detailFocus && m.detailLevel == 1 && m.secCursor ==
+secIdx && m.fieldCursor == fieldIdx`); feuert unabhaengig vom Fenster
+(`isDouble || wasSelected`). `m.detailFocus` ist bewusst Teil der
+Bedingung (konservativer als der woertliche Review-Vorschlag): "bereits
+selektiert" ist genau der Zustand, aus dem der ▶-Marker rendert
+(metaSectionBody: focused && detailLevel==1 && Cursor-Paar) -- ein staler
+fieldCursor OHNE detailFocus zaehlt nicht, sonst oeffnete ein ERST-Klick
+das Overlay. BODY-Sonderfall (fieldIdx==-1-Zweig) bleibt bewusst
+zeitfenstergebunden -- das Review-Finding und der PO-Wortlaut scopen den
+zeitfensterlosen Zweitklick auf FELDER.
+
+Neue Tests (TDD, echte RED-Zitate gegen den alten Code):
+
+- `TestMouseDetailClickTreeClickIndexDoesNotAliasFieldClickKey` (B01):
+  RED `mouse_test.go:611: a Tree-row click must never alias a
+  Detail-field clickKey: first click on title: opened the
+  Title-Edit-Form (B01)` -> GREEN nach Fix.
+- `TestMouseDetailClickSecondClickOnSelectedFieldOpensOverlayOutsideWindow`
+  (B02, kontrollierte Zeitquelle via mutierbarer `m.clock`-Closure +800ms,
+  KEIN echtes Sleep): RED `mouse_test.go:652: overlay = 0, want
+  overlayTagPicker -- a second click on an ALREADY-SELECTED field must
+  open its overlay regardless of the double-click window (B02, PO
+  wording)` -> GREEN nach Fix.
+- `TestDetailClickKeyDisjointNumberSpaces` (I01): pinnt den extrahierten
+  Helfer direkt -- alle 4 Header- + 7 Feld-Keys >= detailClickKeyBase und
+  paarweise verschieden.
+
+Gates (nach Fix): voller Lauf `command go test ./...` gruen
+(`ok beans-tui/internal/tui 136.616s`), `-race` gruen (139.052s, keine
+DATA RACE), `gofmt -l .` leer, `command go vet ./...` leer, Goldens
+unberuehrt (Gegenbeleg-Lauf PASS, `git status internal/tui/testdata/`
+leer), Build clean. Alle 12 B07-Tests (9 urspruengliche + 3 neue) PASS.
