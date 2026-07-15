@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T20:22:56Z
+updated_at: 2026-07-15T20:30:04Z
 parent: bt-apmy
 ---
 
@@ -37,3 +37,11 @@ Tags werden als Zeile in der Meta-Feldliste DIREKT NACH priority angezeigt (7. F
 
 **B07:** Maus im Detail-Pane unvollständig: (a) Accordion-Sektionen nicht per Klick aktivierbar, (b) Meta-Feldzeilen nicht per Klick selektier-/editierbar. Fix: Klick auf Sektions-Header = Sektion aktivieren/expandieren; Klick auf Feldzeile = Feld selektieren; Doppelklick (oder Zweit-Klick auf selektiertes Feld) = Edit-Overlay (analog enter-Kaskade). Toast-Dismiss-Vorrang + Overlay-Guard-Mechanik aus E5-T4 wiederverwenden; detailClickRow analog treeClickRow (clickPaneGeometry, Kopfblock-Offset 5 Zeilen beachten!).
 **B08:** Quit-Flow: (A1) Confirm-Text 'Really quit bt.' → 'Really quit bt?' (Frage). (A2) Quit-Kaskade zweistufig: q→enter führt zur LOBBY (statt Exit); aus der Lobby q→enter beendet die TUI. Randfall (Planner konservativ entscheiden + dokumentieren): Direktstart ohne konfigurierte Repos (Lobby wäre leer/sinnlos) → q→enter beendet direkt wie bisher.
+
+
+**D06 ENTSCHIEDEN (Footer-Neuspezifikation, ersetzt T7-Stand):**
+1. Navigations-Keys (i/k/j/l, Pfeile) komplett RAUS aus dem Footer (intuitiv genug).
+2. Reihenfolge: 'tab focus in · shift+tab focus out' zuerst, dann Aktionen: / search · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · (r|B) Blocking.
+3. Footer darf 2 Zeilen einnehmen.
+4. Optik: Taste in TEAL, Aktions-Wort grau (subtext), KEIN ':' mehr — Farbtrennung ersetzt den Doppelpunkt. (Gilt konsistent auch für Header-Globals? Planner: einheitlich anwenden.)
+Offene Präzisierung Q06: 'r Blocking' — Umbelegung B→r oder Tippfehler? / und f/X fehlen in der PO-Liste bewusst? (f war Supervisor-Empfehlung wegen D01-Filter-Workflow.)
