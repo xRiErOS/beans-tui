@@ -298,6 +298,31 @@ func (m model) openReviewCockpit() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// clampReviewCursor (B01, E4-T4-Review PFLICHT, closed in T5, bean bt-v7ti)
+// clamps m.reviewCursor into [0, len(reviewFlat(m.idx))) against the CURRENT
+// m.idx -- called from applyLoaded (update.go) right after every reload, the
+// one place the flat this cursor indexes into can shrink out from under it
+// (a Pass/Reject verdict removes exactly the bean the cursor was parked on).
+// Deliberately unconditional (safe to call even when m.view != viewReview
+// Cockpit or reviewCursor is already valid -- a no-op then, cheaper than a
+// view-gated branch) so it can sit in the shared reload path without a
+// special case. Distinct from viewReviewCockpit's own render-local clamp
+// (that one only ever fixed a LOCAL variable for a single render, never this
+// field -- see that function's "Defensive clamp" comment): this is the fix
+// for the model FIELD itself, so reviewFocused/focusedBean resolve correctly
+// immediately after a reload, not just the next render's highlight.
+func (m model) clampReviewCursor() model {
+	switch flat := reviewFlat(m.idx); {
+	case len(flat) == 0:
+		m.reviewCursor = 0
+	case m.reviewCursor >= len(flat):
+		m.reviewCursor = len(flat) - 1
+	case m.reviewCursor < 0:
+		m.reviewCursor = 0
+	}
+	return m
+}
+
 // reviewFocused bounds-checks cursor against flat (the Cockpit's own
 // to-review+rework cursor index space, reviewFlat's own doc comment) and
 // returns the bean there, or nil when out of range -- the ONE guard

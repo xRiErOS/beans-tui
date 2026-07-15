@@ -483,18 +483,39 @@ func (m model) applyLoaded(msg beansLoadedMsg) model {
 
 	if len(nodes) == 0 {
 		m.cursorID = ""
-		return m
-	}
-	for _, n := range nodes {
-		if n.id == m.cursorID {
-			return m // exact bean still present -> cursor unchanged
+	} else {
+		cursorFound := false
+		for _, n := range nodes {
+			if n.id == m.cursorID {
+				cursorFound = true
+				break
+			}
+		}
+		if !cursorFound {
+			if oldPos >= len(nodes) {
+				oldPos = len(nodes) - 1
+			}
+			m.cursorID = nodes[oldPos].id
 		}
 	}
-	if oldPos >= len(nodes) {
-		oldPos = len(nodes) - 1
-	}
-	m.cursorID = nodes[oldPos].id
-	return m
+
+	// B01 (E4-T4-Review PFLICHT, closed in T5, bean bt-v7ti): the Review-
+	// Cockpit's OWN cursor index space (m.reviewCursor, reviewFlat) is
+	// entirely independent of the Tree's cursorID reconciliation just above
+	// -- a reload never touched it, so a boundary-shrinking Pass/Reject (the
+	// flat this cursor indexes into shrinks by exactly the verdicted bean)
+	// left it pointing one past the new end. viewReviewCockpit's own
+	// render-local defensive clamp only ever fixed a LOCAL variable for that
+	// one render, never this field, so reviewFocused(flat, m.reviewCursor)
+	// -- keyReviewCockpit's own a/x/o guards AND focusedBean's Cockpit case
+	// -- kept resolving nil against the stale index, and "down"/"n"
+	// (guarded by `cursor < len(flat)-1`, permanently false against a
+	// too-large stale cursor) never self-healed on their own. Clamped HERE,
+	// mirroring the cursorID reconciliation's own "clamp to len-1 rather
+	// than snap to 0" precedent, at the SAME reload boundary rather than
+	// deferred to the next keypress -- see clampReviewCursor
+	// (view_review_cockpit.go) for the Cockpit-scoped clamp itself.
+	return m.clampReviewCursor()
 }
 
 // handleKey is the top-level key dispatch (devd keys.go port pattern):
@@ -616,6 +637,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // through to the default branch's Tree-cursorID lookup, so ctrl+k's
 // Palette-Node-Actions inside the Cockpit acted on whatever bean was last
 // focused in the Tree, not the bean actually cursored in the Review-Queue.
+//
+// Q01 (E4-T4-Review PFLICHT, closed in T5, bean bt-v7ti): a direct
+// consequence of the viewReviewCockpit case above -- paletteActions
+// (overlay_palette.go) includes "bean: löschen" whenever focusedBean() !=
+// nil, so ctrl+k's Palette-Delete now also reaches the bean CURRENTLY UNDER
+// REVIEW when invoked from inside the Cockpit. Checked deliberately:
+// openDeleteConfirm (box_confirm_delete.go) already builds its
+// children/linked-bean warning purely off m.focusedBean()/m.idx, with no
+// Tree/Backlog-specific assumption baked in -- so the existing generic
+// Delete-Confirm overlay is correct and sufficient here as-is, no
+// Cockpit-specific guard or warning needed.
 func (m model) focusedBean() *data.Bean {
 	switch m.view {
 	case viewBacklog: // E2 Task 5: the Backlog list's own selection, NOT the (possibly stale/irrelevant) tree cursor

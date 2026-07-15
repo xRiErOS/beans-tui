@@ -650,6 +650,58 @@ func TestRejectReviewSwapsTagAndAppendsSection(t *testing.T) {
 	}
 }
 
+// TestRejectReviewCommentSpecialCharactersSurviveArgv (I01, E4-T4-Review
+// PFLICHT, closed in T5, bean bt-v7ti) pins the "argv-Garantie" client.go's
+// run already provides structurally (exec.Command("beans", args...) --
+// Go never invokes a shell for this, so there is no shell-metacharacter
+// interpretation to guard against by construction) as an EMPIRICAL,
+// end-to-end regression instead of leaving it an unverified assumption:
+// double quotes, a backtick, an apostrophe, an embedded (non-trailing)
+// newline, and umlauts all survive comment -> CLI invocation -> on-disk
+// bean file -> List() round-trip byte-for-byte. Same fixture/assertion shape
+// as TestRejectReviewSwapsTagAndAppendsSection just above, just with a
+// deliberately hostile comment string instead of a plain one.
+func TestRejectReviewCommentSpecialCharactersSurviveArgv(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	if err := client.AddTag(task.ID, "to-review", task.ETag); err != nil {
+		t.Fatalf("seed AddTag() error = %v", err)
+	}
+
+	beans, err = client.List()
+	if err != nil {
+		t.Fatalf("List() after seed error = %v", err)
+	}
+	task = findBean(t, beans, "tt-task")
+
+	const comment = "Bitte \"Grenzfälle\" prüfen: `foo` != 'bar'\nZeile zwei: Änderung nötig, äöüß"
+	if err := client.RejectReview(task.ID, comment, "2026-07-15", task.ETag); err != nil {
+		t.Fatalf("RejectReview() error = %v", err)
+	}
+
+	after, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after RejectReview error = %v", err)
+	}
+	updated := findBean(t, after, "tt-task")
+
+	// Same trailing-newline-trim caveat as TestRejectReviewSwapsTagAndAppendsSection
+	// above -- asserted via Contains against a "\n"-suffix-free string.
+	wantSection := "## Review 2026-07-15\n\n" + comment
+	if !strings.Contains(updated.Body, wantSection) {
+		t.Errorf("Body = %q, want it to contain %q (argv-Garantie: quotes/backtick/apostrophe/umlaut/embedded newline byte-for-byte)", updated.Body, wantSection)
+	}
+}
+
 // TestPassReviewConflictOnStaleEtag mirrors TestConflictOnStaleETag: a
 // PassReview call against an etag already rotated out from under it by an
 // earlier successful update must fail errors.Is(err, ErrConflict).

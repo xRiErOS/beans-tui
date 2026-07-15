@@ -534,6 +534,124 @@ func TestReviewCockpitViewClampsCursorWhenQueueShrinksExternally(t *testing.T) {
 	}
 }
 
+// TestReviewCursorClampedThroughRealMutationReloadPipeline (B01, E4-T4-Review
+// PFLICHT, bean bt-v7ti) is TestReviewCockpitViewClampsCursorWhenQueueShrinksExternally's
+// pipeline counterpart: that test only proves View()'s own RENDER-LOCAL
+// defensive clamp (a local `cursor` variable, viewReviewCockpit's own doc
+// comment) never panics -- it never touches m.reviewCursor itself, so the
+// model FIELD stayed stale/out-of-range across a real Pass. This test drives
+// the actual pipeline a PO triggers by pressing "a" on the LAST queue item:
+// keyReviewCockpit's own mutateCmd -> the resolved mutationDoneMsg run
+// through m.Update (applyMutationResult's unconditional reload) -> the
+// reload's own beansLoadedMsg (simulating the server-side Pass having
+// removed that bean) run through m.Update (applyLoaded). Before the B01 fix,
+// m.reviewCursor came out the other end still pointing at the pre-shrink
+// last index -- reviewFocused(flat, m.reviewCursor) resolved nil despite a
+// visually "valid-looking" render, and "down"/"n" (guarded by `cursor <
+// len(flat)-1`, permanently false against a too-large stale cursor) never
+// self-healed, only "up"/"p" would (by decrementing regardless of validity)
+// -- exactly the asymmetric freeze T4-Review's B01 finding describes.
+func TestReviewCursorClampedThroughRealMutationReloadPipeline(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "ms-1", Title: "Milestone", Status: "todo", Type: "milestone", Priority: "normal"},
+		{ID: "tk-1", Title: "Queue Item One", Status: "in-progress", Type: "task", Priority: "normal", Tags: []string{"to-review"}},
+		{ID: "tk-2", Title: "Queue Item Two", Status: "in-progress", Type: "task", Priority: "normal", Tags: []string{"to-review"}},
+		{ID: "tk-3", Title: "Queue Item Three (last)", Status: "in-progress", Type: "task", Priority: "normal", Tags: []string{"to-review"}},
+	}
+	m := fixtureModel(t, beans)
+	m.client = &data.Client{RepoDir: "/nonexistent-bt-v7ti-t5-scratch-dir"} // dispatch-proof pattern (T4's own test convention)
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+
+	flat := reviewFlat(m.idx)
+	if len(flat) != 3 {
+		t.Fatalf("setup: len(reviewFlat) = %d, want 3", len(flat))
+	}
+	lastID := flat[len(flat)-1].ID
+	m.reviewCursor = len(flat) - 1 // parked on the LAST queue item (B01's exact trigger)
+
+	// Step 1: "a" (Pass) on the last item -- mirrors
+	// TestKeyReviewCockpitPassFiresPassReview's own dispatch-proof: fires
+	// mutateCmd(PassReview); the broken client makes it fail, but
+	// applyMutationResult's tail (design decision d) reloads
+	// UNCONDITIONALLY regardless of success/failure -- irrelevant to this
+	// test, which only cares about the cursor-clamp side effect once a
+	// reload's beansLoadedMsg lands.
+	nm2, cmd := m.keyReviewCockpit(runeMsg('a'))
+	m = nm2.(model)
+	if cmd == nil {
+		t.Fatal("'a' on the last to-review item must fire a Cmd (PassReview)")
+	}
+	msg := cmd()
+	if _, ok := msg.(mutationDoneMsg); !ok {
+		t.Fatalf("cmd() = %T, want mutationDoneMsg", msg)
+	}
+
+	// Step 2: run the mutationDoneMsg through the REAL Update dispatcher --
+	// applyMutationResult's own unconditional-reload tail.
+	tm, reloadCmd := m.Update(msg)
+	m = tm.(model)
+	if reloadCmd == nil {
+		t.Fatal("mutationDoneMsg must always trigger a reload Cmd (design decision d)")
+	}
+
+	// Step 3: simulate the reload's own result -- server-side the Pass
+	// succeeded, tk-3 (the bean the stale cursor still points at) is GONE,
+	// the boundary-shrinking case B01 names explicitly. Driven through the
+	// real Update dispatcher (applyLoaded), not by hand-poking m.idx (that's
+	// what the render-only sibling test above already covers).
+	var shrunk []data.Bean
+	for _, b := range beans {
+		if b.ID == lastID {
+			continue // simulates the server-side Pass having removed exactly this bean
+		}
+		shrunk = append(shrunk, b)
+	}
+	m = step(t, m, beansLoadedMsg{beans: shrunk})
+
+	newFlat := reviewFlat(m.idx)
+	if len(newFlat) != 2 {
+		t.Fatalf("setup: len(reviewFlat) after shrink = %d, want 2", len(newFlat))
+	}
+	for _, b := range newFlat {
+		if b.ID == lastID {
+			t.Fatalf("newFlat still contains %s, want it removed (simulates the Pass having succeeded server-side)", lastID)
+		}
+	}
+	if m.reviewCursor >= len(newFlat) || m.reviewCursor < 0 {
+		t.Fatalf("reviewCursor = %d after boundary-shrinking Pass, want clamped into [0, %d)", m.reviewCursor, len(newFlat))
+	}
+
+	// The core B01 regression: reviewFocused (== focusedBean's Cockpit case)
+	// must resolve a REAL bean, not nil, immediately after the reload -- no
+	// keypress required to "walk" the cursor back into range.
+	if got := reviewFocused(newFlat, m.reviewCursor); got == nil {
+		t.Fatal("reviewFocused(flat, reviewCursor) = nil immediately after the reload, want the clamped bean (B01)")
+	}
+	if got := m.focusedBean(); got == nil {
+		t.Fatal("focusedBean() = nil immediately after the reload, want the clamped bean (B01)")
+	}
+
+	// Step 4: "next keypress works" (the task spec's own regression wording)
+	// -- "down"/"n" must no longer be frozen. Before the fix, down's guard
+	// (`m.reviewCursor < len(flat)-1`) stayed permanently false against a
+	// stale too-large cursor; post-clamp it now sits at the valid last
+	// index, so "down"/"n" is a correct, harmless no-op (already at the
+	// end), and "up"/"p" actually moves -- both checked, so a fix that only
+	// clamps without restoring real up/down symmetry would still fail here.
+	before := m.reviewCursor
+	nm3, _ := m.keyReviewCockpit(runeMsg('n'))
+	m = nm3.(model)
+	if m.reviewCursor != before {
+		t.Fatalf("'n' at the (now-clamped) last index moved reviewCursor from %d to %d, want unchanged (already at the end)", before, m.reviewCursor)
+	}
+	nm4, _ := m.keyReviewCockpit(runeMsg('p'))
+	m = nm4.(model)
+	if m.reviewCursor != before-1 {
+		t.Fatalf("'p' after the clamp = %d, want %d (must actually move, not stay frozen)", m.reviewCursor, before-1)
+	}
+}
+
 // TestReviewCockpitReworkOnlyQueueNoToReviewGroups closes gap (c): zero
 // to-review beans, one Rework bean -- reviewQueue must be empty (no epic
 // groups at all), reviewFlat must be rework-only, the summary line must
