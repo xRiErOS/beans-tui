@@ -423,15 +423,13 @@ func (m model) keyReviewCockpit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch navKey(msg.String()) {
 	case "up":
-		if m.reviewCursor > 0 {
-			m.reviewCursor--
-		}
-		return m, nil
+		// E5 Task 4 (bean bt-mne6): factored into reviewCursorMove (below)
+		// so the keyboard AND the wheel dispatch (mouse.go handleMouse)
+		// share the exact same clamp logic instead of two independent
+		// copies.
+		return m.reviewCursorMove(flat, -1), nil
 	case "down":
-		if m.reviewCursor < len(flat)-1 {
-			m.reviewCursor++
-		}
-		return m, nil
+		return m.reviewCursorMove(flat, 1), nil
 	}
 
 	// E5 Task 3 (bean bt-e4a6, design decision b): the Cockpit's own `y`
@@ -486,6 +484,36 @@ func (m model) keyReviewCockpit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// reviewCursorMove shifts m.reviewCursor by delta (±1), clamped to flat's
+// bounds -- factored out of keyReviewCockpit's own up/down case (E5 Task 4,
+// bean bt-mne6; I01: flat is derived ONCE per keypress there and threaded
+// through, this takes it as a parameter instead of re-deriving
+// reviewFlat(m.idx) itself) so the keyboard AND the wheel dispatch
+// (mouse.go handleMouse) share one clamp.
+func (m model) reviewCursorMove(flat []*data.Bean, delta int) model {
+	switch {
+	case delta < 0 && m.reviewCursor > 0:
+		m.reviewCursor--
+	case delta > 0 && m.reviewCursor < len(flat)-1:
+		m.reviewCursor++
+	}
+	return m
+}
+
+// reviewCockpitChrome builds viewReviewCockpit's own head/localKeys strings
+// -- factored out (E5 Task 4, bean bt-mne6) so reviewClickRow (mouse.go) can
+// reconstruct this view's IDENTICAL geometry via clickPaneGeometry without a
+// second, independently maintained copy of this breadcrumb/footer
+// construction (Golden-Rule-Drift-Schutz, mirrors browseRepoChrome's own
+// rationale, view_browse_repo.go).
+func (m model) reviewCockpitChrome(innerW int) (head, localKeys string) {
+	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
+	head = breadcrumb(m.repoLabel(), "Review-Cockpit", globalHint, innerW)
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Back, keys.Section}) + "  n/p:next/prev"
+	localKeys = footer(localHint, innerW)
+	return
+}
+
 // viewReviewCockpit renders the two-pane master-detail Review-Cockpit --
 // mirrors viewBrowseRepo's/viewBacklog's algebra exactly (Golden Rule #1: no
 // Height() on a bordered style) so the frame always fills width x height,
@@ -501,13 +529,8 @@ func (m model) viewReviewCockpit() string {
 		h = 24
 	}
 	innerW := w - 2
-	innerH := h - 2
 
-	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
-	head := breadcrumb(m.repoLabel(), "Review-Cockpit", globalHint, innerW)
-
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Back, keys.Section}) + "  n/p:next/prev"
-	localKeys := footer(localHint, innerW)
+	head, localKeys := m.reviewCockpitChrome(innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	indicator := ""
@@ -516,17 +539,10 @@ func (m model) viewReviewCockpit() string {
 	}
 	status := statusBar(indicator, m.err, innerW)
 
-	footH := lipgloss.Height(localKeys) + 2
-	avail := innerH - lipgloss.Height(head) - footH - 1
-	if avail < 4 {
-		avail = 18 // height unknown (init/tests) -> generous fallback, mirrors Chrome()/viewBrowseRepo
-	}
-	bodyH := avail - 2 // both panes add their own border (+2, Golden Rule #1)
-	if bodyH < 1 {
-		bodyH = 1
-	}
-
-	lw, rw := masterDetailWidths(innerW, 24)
+	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
+	// clickPaneGeometry helper reviewClickRow (below) uses -- single source
+	// for the numeric pane geometry (Golden-Rule-Drift-Schutz).
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys)
 	// ONE derivation for this whole render (I01) -- flat/summaryLine/
 	// reviewQueueRows below all read off this SAME rs instead of each
 	// independently re-walking idx.WithTag/EpicAncestor.
@@ -565,4 +581,114 @@ func (m model) viewReviewCockpit() string {
 	out := outerBorder(content, innerW, true)
 
 	return m.composeOverlays(out, w, h)
+}
+
+// reviewRowRef is one row of reviewQueueRows' own row space (above) --
+// either a bean row (isBean=true, flatIdx indexes rs.flat()) or a header/
+// separator row (epic title, "(kein Epic)", "── Rework ──") that is never a
+// click target. reviewClickRow's own private counting type -- deliberately
+// NOT threaded back into reviewQueueRows itself (that function stays
+// untouched, zero golden-render risk; see reviewClickRow's own doc comment).
+type reviewRowRef struct {
+	flatIdx int
+	isBean  bool
+}
+
+// reviewClickRow maps a mouse click to a flatIdx into rs.flat() (E5 Task 4,
+// bean bt-mne6, design decision f; caller: mouse.go's mouseReviewClick) --
+// mirrors treeClickRow's own reconstruction (view_browse_repo.go) against
+// viewReviewCockpit's OWN render formula (above, via reviewCockpitChrome +
+// clickPaneGeometry). The Cockpit's row space (reviewQueueRows, above)
+// interleaves epic-header/"(kein Epic)"/"── Rework ──" rows (RENDER-ONLY,
+// never a click target) among the actual bean rows -- this function
+// re-walks rs.groups/rs.rework in EXACTLY the same order reviewQueueRows
+// does (Golden-Rule-Drift-Schutz: if that walk order ever changes, this MUST
+// change with it) to recover which windowed row a click landed on, and
+// whether it is a bean row at all. Row 0 is the summary line
+// (rs.summaryLine) -- never a row target, same "search/summary head line"
+// budget trade as Tree/Backlog. ok=false for a click outside the Queue
+// pane's column span, on/above the summary line, past the last rendered
+// row, on a header/separator row, or when the queue is empty (the
+// "(keine offenen Reviews)" placeholder has no row target).
+func reviewClickRow(m model, rs reviewState, msg tea.MouseMsg) (flatIdx int, ok bool) {
+	flat := rs.flat()
+	if len(flat) == 0 {
+		return 0, false
+	}
+	cursor := m.reviewCursor
+	if cursor >= len(flat) {
+		cursor = len(flat) - 1
+	}
+	if cursor < 0 {
+		cursor = 0
+	}
+
+	// Re-walk rs's row structure WITHOUT rendering text -- just enough to
+	// know, per row, whether it's a bean row (and which flatIdx) or a
+	// header/separator, plus the SAME cursorRow reviewQueueRows computes for
+	// its own windowAround call (view_review_cockpit.go's own doc comment
+	// above: "cursorRow = len(rows)" right before appending the cursored
+	// row).
+	var rows []reviewRowRef
+	cursorRow := 0
+	fi := 0
+	for _, g := range rs.groups {
+		rows = append(rows, reviewRowRef{isBean: false}) // epic / "(kein Epic)" header
+		for range g.beans {
+			if fi == cursor {
+				cursorRow = len(rows)
+			}
+			rows = append(rows, reviewRowRef{flatIdx: fi, isBean: true})
+			fi++
+		}
+	}
+	if len(rs.rework) > 0 {
+		rows = append(rows, reviewRowRef{isBean: false}) // "── Rework ──" separator
+		for range rs.rework {
+			if fi == cursor {
+				cursorRow = len(rows)
+			}
+			rows = append(rows, reviewRowRef{flatIdx: fi, isBean: true})
+			fi++
+		}
+	}
+
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+	head, localKeys := m.reviewCockpitChrome(innerW)
+
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys)
+
+	if msg.X < originX || msg.X >= originX+lw {
+		return 0, false
+	}
+	clickRow := msg.Y - originY
+	if clickRow <= 0 {
+		return 0, false
+	}
+
+	windowRows := bodyH - 3
+	if windowRows < 0 {
+		windowRows = 0
+	}
+	start := windowStart(len(rows), windowRows, cursorRow)
+	visible := windowRows
+	if len(rows)-start < visible {
+		visible = len(rows) - start
+	}
+	rowIdx := clickRow - 1
+	if rowIdx < 0 || rowIdx >= visible {
+		return 0, false
+	}
+	r := rows[start+rowIdx]
+	if !r.isBean {
+		return 0, false
+	}
+	return r.flatIdx, true
 }

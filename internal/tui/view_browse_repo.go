@@ -16,6 +16,7 @@ import (
 	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -359,6 +360,26 @@ func (m model) cursorPos(nodes []treeNode) int {
 	return 0
 }
 
+// treeCursorMove shifts the Tree cursor by delta (±1), clamped at both ends
+// -- factored out of keyTree's own up/down case (update.go, E5 Task 4, bean
+// bt-mne6) so the keyboard AND the wheel dispatch (mouse.go handleMouse,
+// design decision f: Wheel moves the View-eigene CURSOR) share the exact
+// same clamp logic instead of two independent copies.
+func (m model) treeCursorMove(nodes []treeNode, delta int) model {
+	if len(nodes) == 0 {
+		return m
+	}
+	pos := m.cursorPos(nodes) + delta
+	if pos < 0 {
+		pos = 0
+	}
+	if pos > len(nodes)-1 {
+		pos = len(nodes) - 1
+	}
+	m.cursorID = nodes[pos].id
+	return m
+}
+
 // treeNodeMarker returns the expand marker (▾ open / ▸ closed / blank leaf).
 func treeNodeMarker(n treeNode) string {
 	if !n.hasKids {
@@ -645,6 +666,20 @@ func (m model) View() string {
 	return m.renderToast(out)
 }
 
+// browseRepoChrome builds viewBrowseRepo's own head/localKeys strings --
+// factored out (E5 Task 4, bean bt-mne6) so treeClickRow (mouse.go) can
+// reconstruct this view's IDENTICAL geometry via clickPaneGeometry without a
+// second, independently maintained copy of this breadcrumb/footer
+// construction (Golden-Rule-Drift-Schutz: one source instead of two that
+// could drift apart, mirrors windowStart's own shared-geometry rationale).
+func (m model) browseRepoChrome(innerW int) (head, localKeys string) {
+	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
+	head = breadcrumb(m.repoLabel(), "Browse", globalHint, innerW)
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
+	localKeys = footer(localHint, innerW)
+	return
+}
+
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors
 // Chrome()'s own algebra exactly (view.go) so the frame always fills
 // width x height, just with a two-pane body instead of Chrome's single
@@ -659,13 +694,8 @@ func (m model) viewBrowseRepo() string {
 		h = 24
 	}
 	innerW := w - 2
-	innerH := h - 2
 
-	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
-	head := breadcrumb(m.repoLabel(), "Browse", globalHint, innerW)
-
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
-	localKeys := footer(localHint, innerW)
+	head, localKeys := m.browseRepoChrome(innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	// I04 (T8 Opus quality review): a failed data.Watch start (no live
@@ -678,17 +708,11 @@ func (m model) viewBrowseRepo() string {
 	}
 	status := statusBar(indicator, m.err, innerW)
 
-	footH := lipgloss.Height(localKeys) + 2             // + status line + divider above footer
-	avail := innerH - lipgloss.Height(head) - footH - 1 // - divider under the top bar
-	if avail < 4 {
-		avail = 18 // height unknown (init/tests) -> generous fallback, mirrors Chrome()
-	}
-	bodyH := avail - 2 // both panes add their own border (+2, Golden Rule #1)
-	if bodyH < 1 {
-		bodyH = 1
-	}
-
-	lw, rw := masterDetailWidths(innerW, 24)
+	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
+	// clickPaneGeometry helper treeClickRow (below) uses to map a click back
+	// to a row -- single source for the numeric pane geometry, not just the
+	// head/localKeys strings above (Golden-Rule-Drift-Schutz).
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys)
 	nodes := m.visibleNodes()
 	// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
 	// pane's rows, costing 1 line of its bodyH-2 content budget -- the actual
@@ -705,4 +729,56 @@ func (m model) viewBrowseRepo() string {
 	out := outerBorder(content, innerW, true)
 
 	return m.composeOverlays(out, w, h)
+}
+
+// treeClickRow maps a mouse click to a Tree node index (E5 Task 4, bean
+// bt-mne6, design decision f; caller: mouse.go's mouseTreeClick) --
+// bodyH/lw/originX/originY are RECONSTRUCTED identically to viewBrowseRepo's
+// own render formula (above) via the shared browseRepoChrome +
+// clickPaneGeometry helpers (Golden-Rule-Drift-Schutz, Kommentar-Pflicht
+// analog windowStart's own doc comment): if viewBrowseRepo's algebra ever
+// changes, it changes HERE too automatically (single source), so a click can
+// never silently land on the wrong row through independent drift. Row 0
+// (clickRow==0, right below the pane's title+separator) is the search head
+// line (treeSearchLine) -- never a node target. Row 1+ maps via
+// windowStart(len(nodes), bodyH-3, cursorPos) + (clickRow-1), the SAME
+// bodyH-3 window height treeRows itself windows to (treeRowsWithHead's own
+// budget trade, above). ok=false for a click outside the Tree pane's column
+// span, on/above the search line, or past the last actually-rendered row.
+func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool) {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+	head, localKeys := m.browseRepoChrome(innerW)
+
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys)
+
+	if msg.X < originX || msg.X >= originX+lw {
+		return 0, false // right Detail pane, or off-screen -- no Tree target
+	}
+	clickRow := msg.Y - originY
+	if clickRow <= 0 {
+		return 0, false // above the pane, or row 0 == the search head line
+	}
+
+	windowRows := bodyH - 3
+	if windowRows < 0 {
+		windowRows = 0
+	}
+	pos := m.cursorPos(nodes)
+	start := windowStart(len(nodes), windowRows, pos)
+	visible := windowRows
+	if len(nodes)-start < visible {
+		visible = len(nodes) - start
+	}
+	nodeWindowIdx := clickRow - 1
+	if nodeWindowIdx < 0 || nodeWindowIdx >= visible {
+		return 0, false
+	}
+	return start + nodeWindowIdx, true
 }

@@ -1,0 +1,299 @@
+package tui
+
+// mouse_test.go — TDD coverage for E5 Task 4 (bean bt-mne6, epic bt-5h4d,
+// design decision f): Maus (Wheel/Klick/Doppelklick). Mirrors devd
+// mouse_test.go's render-grounded click pattern (~/Obsidian/tools/Developer
+// Dashboard/apps/cli-go/internal/tui/mouse_test.go): a click coordinate is
+// found by rendering the REAL View() and locating a known substring on
+// screen, never hand-computed against the click formula itself (that would
+// be circular -- a formula bug would pass its own test). Doppelklick tests
+// inject a fixed m.clock (mirrors devd's own TestMouseDoubleClickCollapses
+// OpenNode/TestMouseSingleClickOnOpenNodeStaysOpen pattern) for a
+// deterministic <500ms window instead of a real sleep.
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+)
+
+// wheelMsg builds a wheel tea.MouseMsg (X/Y are irrelevant to wheel dispatch,
+// handleMouse's wheel branch only reads Button).
+func wheelMsg(b tea.MouseButton) tea.MouseMsg {
+	return tea.MouseMsg{Button: b, Action: tea.MouseActionPress}
+}
+
+// screenLines renders m's FULL View() and splits it into ANSI-stripped
+// lines -- real screen geometry (outer border, panes, everything), the same
+// ground truth clickAt/leftPaneClickAt below search over.
+func screenLines(m model) []string {
+	return strings.Split(ansi.Strip(m.View()), "\n")
+}
+
+// leftPaneClickAt finds substr's first occurrence WITHIN the left (list)
+// pane's column span (boundary = originX+lw, from clickPaneGeometry,
+// mouse.go) of m's rendered View() and returns a real left-click
+// tea.MouseMsg at that screen coordinate. Restricting to the left pane
+// matters: the right Detail pane can render the SAME text (e.g. a bean
+// title also shown in its own Meta section, or listed under a parent's
+// Beziehungen section) -- a plain "first match anywhere" search could
+// silently click the wrong pane. head/localKeys must be the SAME strings
+// the caller's own view renders with (browseRepoChrome/backlogChrome/
+// reviewCockpitChrome), so the boundary matches the real render exactly.
+func leftPaneClickAt(t *testing.T, m model, head, localKeys, substr string) tea.MouseMsg {
+	t.Helper()
+	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys)
+	boundary := originX + lw
+	for y, l := range screenLines(m) {
+		i := strings.Index(l, substr)
+		if i < 0 {
+			continue
+		}
+		col := ansi.StringWidth(l[:i])
+		if col >= boundary {
+			continue // leftmost match is already in the right Detail pane
+		}
+		return tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: col, Y: y}
+	}
+	t.Fatalf("substr %q not found in the left pane of the rendered View()", substr)
+	return tea.MouseMsg{}
+}
+
+// treeClickAt is leftPaneClickAt scoped to the Browse/Tree view's own
+// chrome (browseRepoChrome, view_browse_repo.go).
+func treeClickAt(t *testing.T, m model, substr string) tea.MouseMsg {
+	t.Helper()
+	head, localKeys := m.browseRepoChrome(m.width - 2)
+	return leftPaneClickAt(t, m, head, localKeys, substr)
+}
+
+// --- Wheel: moves the active view's cursor (design decision f) ---
+
+func TestWheelUpDownMovesTreeCursor(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true // nodes: ms-1(0) ep-1(1) tk-1(2) tk-2(3)
+	m.cursorID = "ms-1"
+
+	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(wheel down) did not return a model, got %T", tm)
+	}
+	if m2.cursorID != "ep-1" {
+		t.Fatalf("wheel down: cursorID = %q, want ep-1", m2.cursorID)
+	}
+
+	tm2, _ := m2.handleMouse(wheelMsg(tea.MouseButtonWheelUp))
+	m3 := tm2.(model)
+	if m3.cursorID != "ms-1" {
+		t.Fatalf("wheel up: cursorID = %q, want ms-1", m3.cursorID)
+	}
+}
+
+func TestWheelMovesBacklogCursor(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.view = viewBacklog
+	vis := m.backlogVisible()
+	if len(vis) < 2 {
+		t.Fatalf("setup: need >=2 backlog-visible beans, got %d", len(vis))
+	}
+	m.backlogList.setLen(len(vis))
+	m.backlogList.cursor = 0
+
+	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(wheel down) did not return a model, got %T", tm)
+	}
+	if m2.backlogList.cursor != 1 {
+		t.Fatalf("wheel down: backlogList.cursor = %d, want 1", m2.backlogList.cursor)
+	}
+
+	tm2, _ := m2.handleMouse(wheelMsg(tea.MouseButtonWheelUp))
+	m3 := tm2.(model)
+	if m3.backlogList.cursor != 0 {
+		t.Fatalf("wheel up: backlogList.cursor = %d, want 0", m3.backlogList.cursor)
+	}
+}
+
+func TestWheelMovesReviewCursor(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	nm, _ := m.openReviewCockpit()
+	m, ok := nm.(model)
+	if !ok || m.reviewCursor != 0 {
+		t.Fatalf("setup: openReviewCockpit did not reset reviewCursor to 0")
+	}
+
+	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(wheel down) did not return a model, got %T", tm)
+	}
+	if m2.reviewCursor != 1 {
+		t.Fatalf("wheel down: reviewCursor = %d, want 1", m2.reviewCursor)
+	}
+
+	tm2, _ := m2.handleMouse(wheelMsg(tea.MouseButtonWheelUp))
+	m3 := tm2.(model)
+	if m3.reviewCursor != 0 {
+		t.Fatalf("wheel up: reviewCursor = %d, want 0", m3.reviewCursor)
+	}
+}
+
+// --- Click: sets the Tree cursor, render-grounded ---
+
+func TestClickSetsTreeCursor(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "ms-1"
+
+	msg := treeClickAt(t, m, "Task Two")
+	tm, _ := m.handleMouse(msg)
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(click) did not return a model, got %T", tm)
+	}
+	if m2.cursorID != "tk-2" {
+		t.Fatalf("click on \"Task Two\" row: cursorID = %q, want tk-2", m2.cursorID)
+	}
+}
+
+// --- Doppelklick: devd D03 semantics (design decision f) ---
+
+// TestDoubleClickTogglesExpand: a SECOND click on the SAME node within
+// doubleClickInterval collapses an already-open, expandable node.
+func TestDoubleClickTogglesExpand(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true // Epic One open, expandable (2 children)
+	m.cursorID = "ms-1"
+	fixed := time.Unix(1000, 0)
+	m.clock = func() time.Time { return fixed }
+
+	msg := treeClickAt(t, m, "Epic One")
+	tm, _ := m.handleMouse(msg) // 1st click: registers, does not collapse
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(click) did not return a model, got %T", tm)
+	}
+	if !m2.expanded["ep-1"] {
+		t.Fatalf("setup: first click on an open node must not collapse it")
+	}
+
+	tm2, _ := m2.handleMouse(msg) // 2nd click, same fixed time/node -> double
+	m3 := tm2.(model)
+	if m3.expanded["ep-1"] {
+		t.Fatalf("double click on an open, expandable node must collapse it (devd D03)")
+	}
+}
+
+// TestSingleClickOnOpenNodeDoesNotCollapse: an ISOLATED single click on an
+// already-open node only moves the cursor -- it must NOT toggle (devd D03,
+// distinct from the double-click case above: no second click ever arrives).
+func TestSingleClickOnOpenNodeDoesNotCollapse(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "ms-1"
+	fixed := time.Unix(2000, 0)
+	m.clock = func() time.Time { return fixed }
+
+	msg := treeClickAt(t, m, "Epic One")
+	tm, _ := m.handleMouse(msg)
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(click) did not return a model, got %T", tm)
+	}
+	if !m2.expanded["ep-1"] {
+		t.Fatal("a single click on an already-open node must NOT collapse it (devd D03)")
+	}
+	if m2.cursorID != "ep-1" {
+		t.Fatalf("cursorID = %q, want ep-1 (click still moves the cursor)", m2.cursorID)
+	}
+}
+
+// --- Overlay guard: mouse ignored while a form/overlay/palette/search/
+// filter/help/quit-confirm fully captures input (devd precedent) ---
+
+func TestMouseIgnoredWhileFormOpen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.cursorID = "ms-1"
+
+	nm, _ := m.openCreateForm()
+	m, ok := nm.(model)
+	if !ok || m.form == nil {
+		t.Fatal("setup: openCreateForm did not set m.form")
+	}
+
+	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(wheel) did not return a model, got %T", tm)
+	}
+	if m2.cursorID != "ms-1" {
+		t.Fatalf("wheel while a form is open moved the cursor: cursorID = %q, want unchanged (ms-1)", m2.cursorID)
+	}
+}
+
+func TestMouseIgnoredWhileOverlayOpen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.cursorID = "ms-1"
+	m.overlay = overlayValueMenu
+
+	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(wheel) did not return a model, got %T", tm)
+	}
+	if m2.cursorID != "ms-1" {
+		t.Fatalf("wheel while an overlay is open moved the cursor: cursorID = %q, want unchanged (ms-1)", m2.cursorID)
+	}
+}
+
+// TestToastClickDismissesEvenWithFormOpen is the Cross-Feature-Fix
+// regression guard (design decision a, Port devd DD2-272/273): a Toast
+// click-dismiss must reach the PO even while a form is open. Goes through
+// the FULL m.Update() dispatcher (not handleMouse directly) -- this is the
+// test update.go's own placement comment calls out as the actual
+// verification that the tea.MouseMsg case runs ahead of the `if m.form !=
+// nil` fallback, not just documentation of the assumption.
+func TestToastClickDismissesEvenWithFormOpen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	nm, _ := m.openCreateForm()
+	m, ok := nm.(model)
+	if !ok || m.form == nil {
+		t.Fatal("setup: openCreateForm did not set m.form")
+	}
+
+	m, _ = m.showToast(toastInfo, "x", "", nil, false)
+	x, y, _, _ := m.toastGeometry()
+
+	tm, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: x, Y: y})
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(mouse) did not return a model, got %T", tm)
+	}
+	if m2.toast != nil {
+		t.Fatal("a click on the toast must dismiss it even while a form is open (Cross-Feature-Fix)")
+	}
+	if m2.form == nil {
+		t.Error("the form must stay open -- only the toast is dismissed by this click")
+	}
+}

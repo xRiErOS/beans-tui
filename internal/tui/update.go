@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"time"
 
 	"beans-tui/internal/clip"
 	"beans-tui/internal/data"
@@ -17,6 +18,24 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// doubleClickInterval is the window within which two clicks on the SAME
+// Tree node count as a Doppelklick (E5 Task 4, bean bt-mne6, design decision
+// f -- Port devd doubleClickInterval verbatim, update.go). bubbletea
+// delivers no click-count, so mouse.go's mouseTreeClick detects it itself
+// via now()/m.lastClickAt/m.lastClickIdx.
+const doubleClickInterval = 500 * time.Millisecond
+
+// now returns the current time via the (test-injectable) clock -- nil falls
+// back to time.Now() (Port devd's own now() verbatim). Testable via
+// m.clock's injection (mouse_test.go) for a deterministic double-click
+// window.
+func (m model) now() time.Time {
+	if m.clock != nil {
+		return m.clock()
+	}
+	return time.Now()
+}
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -76,14 +95,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// newer showToast call may have already replaced it).
 		return m.handleToastExpired(msg)
 
-	// E5 Task 4 (Maus, bean bt-mne6) will add `case tea.MouseMsg: return
-	// m.handleMouse(msg)` HERE, ahead of tea.KeyMsg below -- handleMouse's
-	// very first check is the Toast hit-test (Port devd update.go:466,
-	// design decision a "Klick-Dismiss vs. Maus"), independent of any
-	// overlay/form guard, so a Toast click must dismiss it even while a
-	// form/overlay is open (Cross-Feature-Fix parity, devd DD2-272/273).
-	// This case has no code of its own yet (Task 1 scope is Toast only) --
-	// placement documented here so Task 4 does not need to re-derive it.
+	case tea.MouseMsg:
+		// E5 Task 4 (Maus, bean bt-mne6): HERE, ahead of tea.KeyMsg below --
+		// handleMouse's (mouse.go) very first check is the Toast hit-test
+		// (Port devd update.go:466, design decision a "Klick-Dismiss vs.
+		// Maus"), independent of any overlay/form guard, so a Toast click
+		// must dismiss it even while a form/overlay is open (Cross-Feature-
+		// Fix parity, devd DD2-272/273). This switch-case placement (inside
+		// Update()'s own top-level switch, BEFORE the post-switch `if
+		// m.form != nil { return m.updateForm(msg) }` fallback below) is
+		// itself the whole fix -- unlike devd, which needs an explicit `if
+		// m.form != nil` guard AHEAD of its own switch (its Update()
+		// otherwise routes everything to updateForm first), beans-tui's
+		// switch already runs unconditionally on every Msg BEFORE that
+		// fallback ever triggers, so a matched case here is automatically
+		// safe -- verified as its own regression test,
+		// TestToastClickDismissesEvenWithFormOpen (mouse_test.go), not just
+		// documented.
+		return m.handleMouse(msg)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -967,17 +996,13 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch navKey(msg.String()) {
 	case "up":
-		if pos > 0 {
-			pos--
-		}
-		m.cursorID = nodes[pos].id
-		return m, nil
+		// E5 Task 4 (bean bt-mne6): factored into treeCursorMove
+		// (view_browse_repo.go) so the keyboard AND the wheel dispatch
+		// (mouse.go handleMouse) share the exact same clamp logic instead
+		// of two independent copies.
+		return m.treeCursorMove(nodes, -1), nil
 	case "down":
-		if pos < len(nodes)-1 {
-			pos++
-		}
-		m.cursorID = nodes[pos].id
-		return m, nil
+		return m.treeCursorMove(nodes, 1), nil
 	case "right":
 		return m.setExpanded(nodes[pos], true), nil
 	case "left":

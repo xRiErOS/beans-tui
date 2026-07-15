@@ -196,6 +196,20 @@ func (m model) renderBacklogDetailPane(vis []*data.Bean, w, h int, focused bool)
 	return m.renderBeanAccordionPane(b, w, h, focused)
 }
 
+// backlogChrome builds viewBacklog's own head/localKeys strings -- factored
+// out (E5 Task 4, bean bt-mne6) so backlogClickRow (mouse.go) can
+// reconstruct this view's IDENTICAL geometry via clickPaneGeometry without a
+// second, independently maintained copy of this breadcrumb/footer
+// construction (Golden-Rule-Drift-Schutz, mirrors browseRepoChrome's own
+// rationale, view_browse_repo.go).
+func (m model) backlogChrome(innerW int) (head, localKeys string) {
+	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
+	head = breadcrumb(m.repoLabel(), "Backlog", globalHint, innerW)
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
+	localKeys = footer(localHint, innerW)
+	return
+}
+
 // viewBacklog renders the two-pane master-detail Backlog view -- mirrors
 // viewBrowseRepo's algebra exactly (view_browse_repo.go) so the frame always
 // fills width x height (Golden Rule #1: no Height() on a bordered style),
@@ -210,13 +224,8 @@ func (m model) viewBacklog() string {
 		h = 24
 	}
 	innerW := w - 2
-	innerH := h - 2
 
-	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
-	head := breadcrumb(m.repoLabel(), "Backlog", globalHint, innerW)
-
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
-	localKeys := footer(localHint, innerW)
+	head, localKeys := m.backlogChrome(innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	indicator := ""
@@ -225,17 +234,10 @@ func (m model) viewBacklog() string {
 	}
 	status := statusBar(indicator, m.err, innerW)
 
-	footH := lipgloss.Height(localKeys) + 2
-	avail := innerH - lipgloss.Height(head) - footH - 1
-	if avail < 4 {
-		avail = 18 // height unknown (init/tests) -> generous fallback, mirrors Chrome()/viewBrowseRepo
-	}
-	bodyH := avail - 2 // both panes add their own border (+2, Golden Rule #1)
-	if bodyH < 1 {
-		bodyH = 1
-	}
-
-	lw, rw := masterDetailWidths(innerW, 24)
+	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
+	// clickPaneGeometry helper backlogClickRow (below) uses -- single source
+	// for the numeric pane geometry (Golden-Rule-Drift-Schutz).
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys)
 	vis := m.backlogVisible()
 	// Same 1-header-row budget trade as the Tree's search head (Task 3):
 	// the search/filter summary line costs 1 line of the list pane's
@@ -305,9 +307,74 @@ func (m model) keyBacklog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch navKey(msg.String()) {
 	case "up":
-		m.backlogList.move(-1)
+		// E5 Task 4 (bean bt-mne6): factored into backlogCursorMove (below)
+		// so the keyboard AND the wheel dispatch (mouse.go handleMouse)
+		// share the exact same clamp logic instead of two independent
+		// copies.
+		m = m.backlogCursorMove(vis, -1)
 	case "down":
-		m.backlogList.move(1)
+		m = m.backlogCursorMove(vis, 1)
 	}
 	return m, nil
+}
+
+// backlogCursorMove resyncs backlogList's length against vis (this file's
+// own staleness guard, doc comment above) then shifts the cursor by delta
+// (listState.move, list.go, already clamped) -- factored out of keyBacklog's
+// own up/down case (E5 Task 4, bean bt-mne6) so the keyboard AND the wheel
+// dispatch (mouse.go handleMouse) share one clamp. The setLen call is
+// idempotent when the caller already resynced (keyBacklog does, at its own
+// top) -- it is NOT redundant for the wheel dispatch, which has no prior
+// resync point of its own.
+func (m model) backlogCursorMove(vis []*data.Bean, delta int) model {
+	m.backlogList.setLen(len(vis))
+	m.backlogList.move(delta)
+	return m
+}
+
+// backlogClickRow maps a mouse click to a row index into vis (E5 Task 4,
+// bean bt-mne6, design decision f; caller: mouse.go's mouseBacklogClick) --
+// mirrors treeClickRow's own reconstruction (view_browse_repo.go) against
+// viewBacklog's OWN render formula (above, via backlogChrome +
+// clickPaneGeometry): same bodyH/lw algebra, just this view's own head/
+// localKeys. Row 0 is the search/facet head line (m.treeSearchLine, shared
+// with the Tree) -- never a row target; row 1+ maps via
+// windowStart(len(vis), bodyH-3, m.backlogList.cursor) + (clickRow-1) --
+// flat list, no Doppelklick concept (plan epic-E5-plan.md »Task 4« Step 6).
+func backlogClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok bool) {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+	head, localKeys := m.backlogChrome(innerW)
+
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys)
+
+	if msg.X < originX || msg.X >= originX+lw {
+		return 0, false
+	}
+	clickRow := msg.Y - originY
+	if clickRow <= 0 {
+		return 0, false
+	}
+
+	windowRows := bodyH - 3
+	if windowRows < 0 {
+		windowRows = 0
+	}
+	pos := m.backlogList.cursor
+	start := windowStart(len(vis), windowRows, pos)
+	visible := windowRows
+	if len(vis)-start < visible {
+		visible = len(vis) - start
+	}
+	rowIdx := clickRow - 1
+	if rowIdx < 0 || rowIdx >= visible {
+		return 0, false
+	}
+	return start + rowIdx, true
 }

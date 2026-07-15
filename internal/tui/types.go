@@ -7,6 +7,8 @@ package tui
 // beans-native from the start, design-spec.md §3.1/§13).
 
 import (
+	"time"
+
 	"beans-tui/internal/data"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -417,6 +419,18 @@ type model struct {
 	// Help has existed since E1 Task 7 and is already covered by the
 	// Drift-Guard test TestHelpGroupsCoverEveryBindingExactlyOnce.
 	helpOpen bool
+
+	// Maus (E5 Task 4, bean bt-mne6, design decision f): lastClickIdx/
+	// lastClickAt back the Tree's Doppelklick detection (Port devd
+	// doubleClickInterval verbatim, update.go's now()) -- lastClickIdx is
+	// the LAST clicked node's index into visibleNodes() (an index, not a
+	// bean ID: devd's own port compares index equality, kept verbatim
+	// here). clock is the (test-injectable) time source now() reads
+	// (update.go) -- nil in production (falls back to time.Now()), fixed
+	// in tests for a deterministic double-click window (mouse_test.go).
+	lastClickIdx int
+	lastClickAt  time.Time
+	clock        func() time.Time
 }
 
 // newModel builds the initial (pre-load) App-Shell state.
