@@ -9,6 +9,7 @@ package tui
 // (same package).
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,74 @@ func TestBacklogAppliesSharedSearchAndFacetFilters(t *testing.T) {
 	vis = m.backlogVisible()
 	if len(vis) != 1 || vis[0].ID != "bk-tsk2" {
 		t.Fatalf("backlogVisible() with filterStatus=draft = %v, want [bk-tsk2]", vis)
+	}
+}
+
+// --- backlogList staleness (E2-T6 fast-follow, T5-review) ---
+
+// staleBacklogBeans returns 10 Backlog-eligible beans (8 "task", 2 "bug",
+// all todo/parentless) so a facet filter can shrink backlogVisible() from
+// 10 down to 2 while a cursor parked at index 9 goes stale.
+func staleBacklogBeans() []data.Bean {
+	var beans []data.Bean
+	for i := 0; i < 8; i++ {
+		beans = append(beans, data.Bean{
+			ID: fmt.Sprintf("stale-tsk%d", i), Title: fmt.Sprintf("Task %d", i),
+			Status: "todo", Type: "task", Priority: "normal",
+		})
+	}
+	beans = append(beans,
+		data.Bean{ID: "stale-bug0", Title: "Bug Zero", Status: "todo", Type: "bug", Priority: "high"},
+		data.Bean{ID: "stale-bug1", Title: "Bug One", Status: "todo", Type: "bug", Priority: "high"},
+	)
+	return beans
+}
+
+// TestKeyBacklogResyncsStaleCursorBeforeMove is the MANDATORY T5-review
+// fast-follow regression test (bean bt-enrd): park the cursor deep in the
+// Backlog (index 9 of 10), shrink backlogVisible() via the SHARED facet
+// filter (Task 4) while m.view == viewBacklog -- direct field assignment
+// mirrors exactly what `f`+space would produce via keyFilterMenu, and (like
+// `/`'s keySearchInput) never touches backlogList, so m.backlogList is now
+// stale relative to the shrunk backlogVisible() (file doc comment above).
+// The next backlog key press must have keyBacklog's setLen resync recover
+// the cursor into the new bounds BEFORE any move -- no out-of-range cursor,
+// no vanished selection-highlight render artifact.
+func TestKeyBacklogResyncsStaleCursorBeforeMove(t *testing.T) {
+	m := fixtureModel(t, staleBacklogBeans())
+	m.view = viewBacklog
+	m.backlogList.setLen(len(m.backlogVisible())) // 10 items, fresh
+	m.backlogList.cursor = 9                      // park deep -- last row
+
+	m.filterType = map[string]bool{"bug": true} // shared facet, shrinks to 2
+
+	vis := m.backlogVisible()
+	if len(vis) != 2 {
+		t.Fatalf("fixture setup: backlogVisible() after filterType=bug = %d, want 2", len(vis))
+	}
+	if m.backlogList.cursor < len(vis) {
+		t.Fatal("fixture setup: cursor must still be OUT of the new bounds before the backlog key -- test proves nothing otherwise")
+	}
+
+	m2 := step(t, m, keyMsg(tea.KeyDown)) // any backlog key resyncs first
+
+	if m2.backlogList.cursor < 0 || m2.backlogList.cursor >= len(vis) {
+		t.Fatalf("cursor not recovered: cursor=%d, len(vis)=%d (want in [0,%d))", m2.backlogList.cursor, len(vis), len(vis))
+	}
+	sel := m2.backlogSelected()
+	if sel == nil {
+		t.Fatal("backlogSelected() == nil after recovery -- cursor should point at a valid bean")
+	}
+	if sel.Type != "bug" {
+		t.Fatalf("recovered selection = %s (%s), want one of the filterType=bug beans", sel.ID, sel.Type)
+	}
+
+	// No render artifact: the recovered selection must actually be
+	// highlighted in the rendered frame (backlogRows' i==pos check), not
+	// silently dropped the way a still-stale cursor would render.
+	out := m2.viewBacklog()
+	if !strings.Contains(out, sel.ID) {
+		t.Fatalf("recovered selection %s not present in rendered Backlog view:\n%s", sel.ID, out)
 	}
 }
 

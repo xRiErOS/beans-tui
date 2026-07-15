@@ -13,12 +13,28 @@ package tui
 // backlogList staleness note: `/` and `f` route through the SHARED
 // keySearchInput/keyFilterMenu handlers (update.go/box_filter_facets.go),
 // which only know about the Tree's cursorID -- they never touch backlogList.
-// So backlogList.length can go stale relative to backlogVisible()'s current
-// length while the user is typing/toggling facets. keyBacklog resyncs it
-// (setLen) at the top of every key it handles, before any up/down move, so
-// staleness never survives past the next backlog keypress -- rendering
-// itself never depends on backlogList.length (only .cursor), so this is
-// purely a "keep future move() bounds correct" concern, not a render bug.
+// So backlogList.length/.cursor can go stale relative to backlogVisible()'s
+// current (shrunk) length while the user is typing/toggling facets.
+// keyBacklog resyncs it (setLen) at the top of every key it handles, before
+// any up/down move, so staleness never survives past the next backlog
+// keypress -- see TestKeyBacklogResyncsStaleCursorBeforeMove
+// (view_browse_backlog_test.go) for the regression guard.
+//
+// CORRECTION (E2-T6 fast-follow, T5-review): the previous version of this
+// comment claimed staleness was "purely a keep future move() bounds correct
+// concern, not a render bug" -- understated. EVERY render between the shrink
+// and the next backlog keypress (i.e. live-typing a search character or
+// toggling a facet while m.view == viewBacklog) calls backlogRows/
+// renderBacklogDetailPane with the STALE m.backlogList.cursor against the
+// ALREADY-shrunk backlogVisible(). backlogRows only highlights row i==pos,
+// so a cursor left pointing past the new (shorter) vis highlights NOTHING
+// (the `▌` selection bar vanishes); renderBeanAccordionPane's own
+// `pos < len(vis)` guard (view_browse_repo.go) then falls through to its
+// "(no selection)" placeholder even though a real selection exists the
+// instant the next keypress resyncs it. Both are cosmetic flicker, never a
+// panic or an out-of-bounds index (windowStart/windowAround still clamp the
+// window itself) -- but they ARE visible render artifacts a user can
+// observe while typing, not merely a latent move()-bound hazard.
 
 import (
 	"sort"
@@ -161,32 +177,23 @@ func (m model) backlogRows(vis []*data.Bean, focused bool, bodyH int) []string {
 }
 
 // renderBacklogDetailPane renders the Detail-Accordion (Meta/Body/
-// Beziehungen/Historie, Task 1) for the Backlog's selected bean -- mirrors
-// renderDetailPane (view_browse_repo.go) but keys off backlogList's index
-// cursor into vis instead of a treeNode slice; not consolidated into a
-// shared helper (plan Files list scopes Task 5 to a new file, no
-// view_browse_repo.go edit -- the small duplication here is the accepted
-// cost of that scope boundary).
+// Beziehungen/Historie, Task 1) for the Backlog's selected bean -- keys off
+// backlogList's index cursor into vis instead of a treeNode slice, then
+// hands off to the shared renderBeanAccordionPane (view_browse_repo.go).
+//
+// CORRECTION (E2-T6 fast-follow, T5-review): T5 originally accepted a
+// ~20-line hand-duplication of renderDetailPane here, reasoned as "the
+// accepted cost" of Task 5's file-scope boundary. That reasoning didn't
+// survive contact with a second call site: renderBeanAccordionPane now
+// carries the shared bodyW/accW/beanSections/renderAccordion/renderPane body
+// once, so Tree and Backlog can never drift out of sync on it again.
 func (m model) renderBacklogDetailPane(vis []*data.Bean, w, h int, focused bool) string {
-	var rows []string
 	pos := m.backlogList.cursor
+	var b *data.Bean
 	if pos >= 0 && pos < len(vis) {
-		b := vis[pos]
-		bodyW := w - 4
-		if bodyW < 1 {
-			bodyW = 1
-		}
-		accW := w - 2
-		if accW < 1 {
-			accW = 1
-		}
-		secs := beanSections(m.idx, b, bodyW)
-		acc := renderAccordion(secs, m.accOpen, accW, focused, m.secCursor, m.fieldCursor)
-		rows = strings.Split(acc, "\n")
-	} else {
-		rows = append(rows, theme.Dim.Render("(no selection)"))
+		b = vis[pos]
 	}
-	return renderPane(pane{title: "Detail", rows: rows}, w, h, focused)
+	return m.renderBeanAccordionPane(b, w, h, focused)
 }
 
 // viewBacklog renders the two-pane master-detail Backlog view -- mirrors

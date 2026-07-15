@@ -448,8 +448,30 @@ func windowAround(rows []string, height, cursor int) []string {
 
 // renderDetailPane renders the Detail-Accordion (Meta/Body/Beziehungen/
 // Historie, design-spec.md §6 V4) for the cursored bean -- E2 Task 2 wiring,
-// replacing T8's title+meta-line placeholder. w/w-2/w-4 mirror renderPane's
-// own truncate(rows[i], w-2) content budget (render_shared.go) and
+// replacing T8's title+meta-line placeholder. Resolves the tree cursor's
+// bean (or nil for "no selection") and hands off to the shared
+// renderBeanAccordionPane (below) -- E2-T6 fast-follow (T5-review): this and
+// renderBacklogDetailPane (view_browse_backlog.go) used to hand-duplicate
+// the ~20-line bodyW/accW/beanSections/renderAccordion/renderPane body;
+// extracted once both call sites existed so a future accordion-pane change
+// (e.g. scrolling) can't drift between Tree and Backlog.
+func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string {
+	pos := m.cursorPos(nodes)
+	var b *data.Bean
+	if pos >= 0 && pos < len(nodes) && !nodes[pos].orphan {
+		b = nodes[pos].bean
+	}
+	return m.renderBeanAccordionPane(b, w, h, focused)
+}
+
+// renderBeanAccordionPane renders the Detail-Accordion pane (Meta/Body/
+// Beziehungen/Historie, Task 1) for a single already-resolved bean, or the
+// "(no selection)" placeholder for nil -- the shared body of
+// renderDetailPane (Tree, above) and renderBacklogDetailPane (Backlog,
+// view_browse_backlog.go), which differ only in HOW they resolve a bean from
+// their own cursor shape (treeNode slice + orphan-guard vs. backlogList
+// index into a []*data.Bean). w/w-2/w-4 mirror renderPane's own
+// truncate(rows[i], w-2) content budget (render_shared.go) and
 // renderAccordion's own PaddingLeft(2)-eats-into-Width(w) contract
 // (accordion.go doc comment) -- bodyW = w-4 is NOT an arbitrary number.
 //
@@ -461,11 +483,9 @@ func windowAround(rows []string, height, cursor int) []string {
 // relies on. A true scroll-with-indicator (mirroring Chrome()'s scrollView)
 // is not needed yet: exclusive-open sections keep the open section's content
 // near the top, and digit-jump/1-4 always re-opens from row 0.
-func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string {
-	pos := m.cursorPos(nodes)
+func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) string {
 	var rows []string
-	if pos >= 0 && pos < len(nodes) && !nodes[pos].orphan && nodes[pos].bean != nil {
-		b := nodes[pos].bean
+	if b != nil {
 		bodyW := w - 4
 		if bodyW < 1 {
 			bodyW = 1
