@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T20:31:30Z
+updated_at: 2026-07-15T20:39:21Z
 parent: bt-apmy
 ---
 
@@ -50,3 +50,12 @@ Offene Präzisierung Q06: 'r Blocking' — Umbelegung B→r oder Tippfehler? / u
 **Q06 GELÖST (2026-07-15):** (1) Blocking-Key UMBELEGEN B→r (r seit PF-14 frei; Keymap+helpGroups+Drift-Guard+Doku nachziehen, B wird frei). (2) f Filter kommt MIT in den Footer. Finale Footer-Liste: tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking.
 
 **B09:** Detail-View: inaktive ▹-Feldmarker sind WEISS statt grau — auf subtext/grau stellen (nur der aktive ▶ trägt Farbe/mauve, konsistent mit B04-Feedback-Logik).
+
+
+**D02 ENTSCHIEDEN:** Backlog-Sort-Modus als dezenter Suffix in der Backlog-Suchzeile (subtext, z.B. '⌕ / search · sort prio'). Schließt das E2-Erbe.
+
+**B10:** Detail-Fokus auf [2] BODY + 'e' öffnet fälschlich das Titel-Edit; 'enter' ist no-op (inkonsistent zu [1] META, wo enter das Overlay bringt). Fix: e/enter auf BODY → $EDITOR mit der Markdown-Datei (Body-Edit); e im Sektions-Kontext generell kontextsensitiv zur gewählten Sektion.
+**B11:** Feld selektiert (z.B. status) + e/enter → Overlay zeigt ALLE editierbaren Meta-Felder statt NUR status. Fix: Feld-enter öffnet das Overlay ausschließlich für das gewählte Feld.
+**B12:** 's' (Status menu) zeigt den gesamten Meta-Block; 't' dagegen korrekt nur Tags. Fix: Auftrennen — status, type, priority, tags bekommen je ein EIGENES Select-Overlay (das Sammel-Value-Menü zerlegen); Keys + Palette-Commands entsprechend (set status/set type/set priority/set tags je direkt ins Einzel-Overlay).
+**B13:** ctrl+k (Command-Center) durchsucht auch alle Beans — störend. Fix: Palette zeigt NUR Commands (Bean-Treffer raus; Bean-Suche gehört zu '/'). design-spec-US-04-Anpassung nötig (bewusste Revision der E4-Entscheidung).
+**B14:** Kein Weg, neue Tags zu definieren — weder Palette-Command noch (auffindbar) im t-Picker. Prüfen: box_picker_tag hat lt. Code einen 'Neuer Tag'-Modal (T3-Sweep-Fund, box_picker_tag.go:334) — kaputt oder nur nicht entdeckbar? Fix: (a) Neuanlage im t-Picker sichtbar machen (Footer-Hint!), (b) Palette-Command 'create tag'. Berührt D08/bt-6oyy (Tag-Page) — B14 ist die v1-Minimal-Lösung, Tag-Page bleibt v1.1.
