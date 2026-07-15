@@ -41,8 +41,8 @@ func screenLines(m model) []string {
 // title also shown in its own Meta section, or listed under a parent's
 // Beziehungen section) -- a plain "first match anywhere" search could
 // silently click the wrong pane. head/localKeys must be the SAME strings
-// the caller's own view renders with (browseRepoChrome/backlogChrome/
-// reviewCockpitChrome), so the boundary matches the real render exactly.
+// the caller's own view renders with (browseRepoChrome/backlogChrome), so
+// the boundary matches the real render exactly.
 func leftPaneClickAt(t *testing.T, m model, head, localKeys, substr string) tea.MouseMsg {
 	t.Helper()
 	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
@@ -119,81 +119,6 @@ func TestWheelMovesBacklogCursor(t *testing.T) {
 	m3 := tm2.(model)
 	if m3.backlogList.cursor != 0 {
 		t.Fatalf("wheel up: backlogList.cursor = %d, want 0", m3.backlogList.cursor)
-	}
-}
-
-func TestWheelMovesReviewCursor(t *testing.T) {
-	m := fixtureModel(t, reviewFixtureBeans())
-	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
-	nm, _ := m.openReviewCockpit()
-	m, ok := nm.(model)
-	if !ok || m.reviewCursor != 0 {
-		t.Fatalf("setup: openReviewCockpit did not reset reviewCursor to 0")
-	}
-
-	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
-	m2, ok := tm.(model)
-	if !ok {
-		t.Fatalf("handleMouse(wheel down) did not return a model, got %T", tm)
-	}
-	if m2.reviewCursor != 1 {
-		t.Fatalf("wheel down: reviewCursor = %d, want 1", m2.reviewCursor)
-	}
-
-	tm2, _ := m2.handleMouse(wheelMsg(tea.MouseButtonWheelUp))
-	m3 := tm2.(model)
-	if m3.reviewCursor != 0 {
-		t.Fatalf("wheel up: reviewCursor = %d, want 0", m3.reviewCursor)
-	}
-}
-
-// TestReviewClickRowMatchesQueueRowsRenderOrder is the T4-I01 Review-
-// Finding closure (bt-7dfj, E5 T8 acceptance): reviewClickRow's own private
-// counting walk (view_review_cockpit.go, reviewRowRef) duplicates
-// reviewQueueRows' render walk structurally, coupled only by a doc comment,
-// not compile-time -- this test locks the two together empirically instead
-// of trusting the comment. Same render-grounded pattern as
-// TestClickSetsTreeCursor/treeClickAt above (never hand-compute the click
-// coordinate against the formula under test, that would be circular): for
-// EVERY bean in reviewFixtureBeans() (2 epic groups with 2/1 beans, a
-// "(kein Epic)" bean, and a rework bean -- covering a group boundary, the
-// header-row skip, AND the groups-then-rework section boundary), the
-// bean's real screen row is located via its own rendered title text, and
-// reviewClickRow is asserted to resolve that exact coordinate back to the
-// bean's own index in rs.flat() -- the SAME index space reviewQueueRows'
-// cursorFlat parameter and rs.flat() (this function's ground truth) share.
-// If either walk's row order ever drifts from the other, some bean's
-// expected flatIdx stops matching its rendered row and this test fails.
-func TestReviewClickRowMatchesQueueRowsRenderOrder(t *testing.T) {
-	m := fixtureModel(t, reviewFixtureBeans())
-	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
-	nm, _ := m.openReviewCockpit()
-	m, ok := nm.(model)
-	if !ok {
-		t.Fatalf("openReviewCockpit did not return a model, got %T", nm)
-	}
-
-	rs := newReviewState(m.idx)
-	flat := rs.flat()
-	if len(flat) != 5 {
-		t.Fatalf("setup: reviewFixtureBeans() flat() = %d beans, want 5 (2 epic groups + kein-Epic + rework)", len(flat))
-	}
-
-	head, localKeys := m.reviewCockpitChrome(m.width - 2)
-	for wantIdx, b := range flat {
-		// relationRow (view_detail_bean.go) renders "<statusIcon> <typeIcon>
-		// <ID> <Title>" -- the ID is searched (not Title) because a long
-		// title can be truncated with an ellipsis by the pane width before
-		// it reaches screen, while the short fixture IDs (tk-a1/tk-none/...)
-		// never are.
-		msg := leftPaneClickAt(t, m, head, localKeys, b.ID)
-		gotIdx, ok := reviewClickRow(m, rs, msg)
-		if !ok {
-			t.Fatalf("reviewClickRow: click on rendered row for %s (want flatIdx %d) returned ok=false", b.ID, wantIdx)
-		}
-		if gotIdx != wantIdx {
-			t.Fatalf("reviewClickRow: click on rendered row for %s -> flatIdx %d, want %d (reviewQueueRows' render order drifted from reviewClickRow's walk)", b.ID, gotIdx, wantIdx)
-		}
 	}
 }
 

@@ -7,17 +7,17 @@ package tui
 // vs. devd's own handleMouse, both consequences of design decision f
 // (view_browse_repo.go's own doc comment, "kein m.scroll-Feld existiert"):
 //
-//  1. Wheel moves the active view's CURSOR (m.cursorID/m.backlogList.cursor/
-//     m.reviewCursor via the three *CursorMove helpers, view_browse_repo.go/
-//     view_browse_backlog.go/view_review_cockpit.go) instead of devd's
-//     `m.scroll -= 3`/`+= 3` non-Tree branch -- beans-tui has no scroll-
-//     offset field to move; windowAround/windowStart already follow the
-//     cursor automatically on render.
-//  2. Left-click dispatch is a SINGLE `switch m.view` over three sibling
-//     views (viewBrowseRepo/viewBacklog/viewReviewCockpit), not devd's
-//     Tree-vs-everything-else split (devd's non-Tree views are all Chrome()-
-//     scrolled detail screens; beans-tui's three views are all master-detail
-//     panes with their own *ClickRow row-mapping, view_*.go).
+//  1. Wheel moves the active view's CURSOR (m.cursorID/m.backlogList.cursor
+//     via the two *CursorMove helpers, view_browse_repo.go/
+//     view_browse_backlog.go) instead of devd's `m.scroll -= 3`/`+= 3`
+//     non-Tree branch -- beans-tui has no scroll-offset field to move;
+//     windowAround/windowStart already follow the cursor automatically on
+//     render.
+//  2. Left-click dispatch is a SINGLE `switch m.view` over two sibling
+//     views (viewBrowseRepo/viewBacklog), not devd's Tree-vs-everything-else
+//     split (devd's non-Tree views are all Chrome()-scrolled detail screens;
+//     beans-tui's two views are both master-detail panes with their own
+//     *ClickRow row-mapping, view_*.go).
 //
 // Toast-Klick-Vorrang (design decision a, overlay_show_toast.go's own doc
 // comment): handleMouse's FIRST check is m.toastHit/dismissToast,
@@ -50,8 +50,8 @@ const (
 // m.settings is the config.Settings{} zero value until app.go's Run() (or a
 // Settings-Form submit) populates it (types.go's own "settings" field
 // doc-stamp) -- falls back to 24, the SAME value this file hardcoded before
-// T6b, so the seven Golden snapshot tests (tree/chrome/backlog/
-// review_cockpit) stay byte-identical. A configured value is additionally
+// T6b, so the Golden snapshot tests (tree/chrome/backlog) stay
+// byte-identical. A configured value is additionally
 // clamped into [minTreeWidthFloor,maxTreeWidthFloor] -- consistent with
 // config.validateSettings' own [24,60] clamp range: belt-and-braces here,
 // since a LIVE model's m.settings already arrives pre-clamped via
@@ -71,27 +71,26 @@ func treeWidthFloor(configured int) int {
 }
 
 // clickPaneGeometry recomputes the numeric frame geometry every one of the
-// three View functions (viewBrowseRepo/viewBacklog/viewReviewCockpit,
-// view_browse_repo.go/view_browse_backlog.go/view_review_cockpit.go) build
-// ahead of their own two-pane body -- bodyH/lw/rw plus the screen origin
-// (originX/originY) of the pane's FIRST windowed content row (title +
-// separator + the search-or-summary head row already consumed). Single
-// source for BOTH halves: the three View functions themselves (each now
-// calls this instead of an independently maintained avail/bodyH/lw/rw copy)
-// AND treeClickRow/backlogClickRow/reviewClickRow (Golden-Rule-Drift-Schutz,
-// mirrors windowStart's own shared-geometry rationale, view_browse_repo.go).
-// head/localKeys are the caller's own EXACT breadcrumb()/footer() strings
-// (browseRepoChrome/backlogChrome/reviewCockpitChrome), so headH always
-// matches that view's real head height (narrow-terminal 2-line breadcrumb
-// wrap included). treeWidth is the caller's OWN m.settings.Layout.TreeWidth
-// (T6b, bean bt-pd22, T5-Review I01 -- BEFORE this task, every caller
-// passed a hardcoded "24" straight into masterDetailWidths below, a silent
-// no-op for the Settings-Form's own tree_width field) -- resolved via
-// treeWidthFloor just above before reaching masterDetailWidths, so every
-// one of this function's three View-function callers AND its three
-// *ClickRow callers picks up a configured Baumbreite consistently, the same
-// Single-Source guarantee this doc comment's opening paragraph already
-// establishes for bodyH/lw/rw/originX/originY themselves.
+// two View functions (viewBrowseRepo/viewBacklog, view_browse_repo.go/
+// view_browse_backlog.go) build ahead of their own two-pane body -- bodyH/
+// lw/rw plus the screen origin (originX/originY) of the pane's FIRST
+// windowed content row (title + separator + the search-or-summary head row
+// already consumed). Single source for BOTH halves: the two View functions
+// themselves (each now calls this instead of an independently maintained
+// avail/bodyH/lw/rw copy) AND treeClickRow/backlogClickRow (Golden-Rule-
+// Drift-Schutz, mirrors windowStart's own shared-geometry rationale,
+// view_browse_repo.go). head/localKeys are the caller's own EXACT
+// breadcrumb()/footer() strings (browseRepoChrome/backlogChrome), so headH
+// always matches that view's real head height (narrow-terminal 2-line
+// breadcrumb wrap included). treeWidth is the caller's OWN
+// m.settings.Layout.TreeWidth (T6b, bean bt-pd22, T5-Review I01 -- BEFORE
+// this task, every caller passed a hardcoded "24" straight into
+// masterDetailWidths below, a silent no-op for the Settings-Form's own
+// tree_width field) -- resolved via treeWidthFloor just above before
+// reaching masterDetailWidths, so every one of this function's View-function
+// callers AND its *ClickRow callers picks up a configured Baumbreite
+// consistently, the same Single-Source guarantee this doc comment's opening
+// paragraph already establishes for bodyH/lw/rw/originX/originY themselves.
 func clickPaneGeometry(w, h int, head, localKeys string, treeWidth int) (bodyH, lw, rw, originX, originY int) {
 	if w <= 0 {
 		w = 80
@@ -157,8 +156,6 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			return m.mouseTreeClick(msg)
 		case viewBacklog:
 			return m.mouseBacklogClick(msg)
-		case viewReviewCockpit:
-			return m.mouseReviewClick(msg)
 		}
 	}
 	return m, nil
@@ -176,8 +173,6 @@ func (m model) wheelMove(delta int) model {
 		return m.treeCursorMove(m.visibleNodes(), delta)
 	case viewBacklog:
 		return m.backlogCursorMove(m.backlogVisible(), delta)
-	case viewReviewCockpit:
-		return m.reviewCursorMove(reviewFlat(m.idx), delta)
 	}
 	return m
 }
@@ -230,19 +225,5 @@ func (m model) mouseBacklogClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	m.backlogList.setLen(len(vis))
 	m.backlogList.cursor = idx
-	return m, nil
-}
-
-// mouseReviewClick dispatches a Review-Cockpit left-click: resolves the
-// clicked row via reviewClickRow (view_review_cockpit.go) and sets
-// m.reviewCursor -- a header/separator row miss (ok=false) is a no-op, same
-// as clicking outside a pane entirely.
-func (m model) mouseReviewClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	rs := newReviewState(m.idx)
-	idx, ok := reviewClickRow(m, rs, msg)
-	if !ok {
-		return m, nil
-	}
-	m.reviewCursor = idx
 	return m, nil
 }

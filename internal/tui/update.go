@@ -225,8 +225,6 @@ func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
 	m = m.clearFacets()
 	m.showArchived = false // E5 Task 7 (bean bt-ggt2, T6-Note bug class, bt-zhwl "Notes for T7"): the archive-default toggle must not leak across a repo switch, same reset breadth as every other search/filter field here.
 	m.backlogList = listState{}
-	m.reviewCursor = 0
-	m.reviewAccOpen = 0
 
 	_ = config.SetLastRepo(msg.repoDir) // best-effort persistence (Port devd DD2-273 RMW pattern, state.go) -- a failed write must not block the switch itself
 	return m, nil
@@ -578,11 +576,7 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.Yank):
 		// E5 Task 3 (bean bt-e4a6, design decision b): `y` always acts on
 		// m.focusedBean() -- Tree/Backlog identical (focusedBean is already
-		// the view-agnostic dispatcher E2 Task 2 built). The Review-Cockpit
-		// is the ONE view-local exception: it fully captures ahead of
-		// keyNodeAction (handleKey, view==viewReviewCockpit case) with its
-		// own y-override (reviewStandMarkdown, view_review_cockpit.go), so
-		// this branch is unreachable from inside the Cockpit.
+		// the view-agnostic dispatcher E2 Task 2 built).
 		b := m.focusedBean()
 		if b == nil {
 			return true, m, nil // orphan-root cursor: handled, silent no-op (Plan Step 6)
@@ -716,23 +710,7 @@ func (m model) applyLoaded(msg beansLoadedMsg) (model, tea.Cmd) {
 		}
 	}
 
-	// B01 (E4-T4-Review PFLICHT, closed in T5, bean bt-v7ti): the Review-
-	// Cockpit's OWN cursor index space (m.reviewCursor, reviewFlat) is
-	// entirely independent of the Tree's cursorID reconciliation just above
-	// -- a reload never touched it, so a boundary-shrinking Pass/Reject (the
-	// flat this cursor indexes into shrinks by exactly the verdicted bean)
-	// left it pointing one past the new end. viewReviewCockpit's own
-	// render-local defensive clamp only ever fixed a LOCAL variable for that
-	// one render, never this field, so reviewFocused(flat, m.reviewCursor)
-	// -- keyReviewCockpit's own a/x/o guards AND focusedBean's Cockpit case
-	// -- kept resolving nil against the stale index, and "down"/"n"
-	// (guarded by `cursor < len(flat)-1`, permanently false against a
-	// too-large stale cursor) never self-healed on their own. Clamped HERE,
-	// mirroring the cursorID reconciliation's own "clamp to len-1 rather
-	// than snap to 0" precedent, at the SAME reload boundary rather than
-	// deferred to the next keypress -- see clampReviewCursor
-	// (view_review_cockpit.go) for the Cockpit-scoped clamp itself.
-	return m.clampReviewCursor(), nil
+	return m, nil
 }
 
 // handleKey is the top-level key dispatch (devd keys.go port pattern):
@@ -831,46 +809,19 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyHelp(msg)
 	}
 	// E4 Task 1 (design decision h): ctrl+k/K opens the palette from ANY
-	// view -- checked here, ABOVE the (E4 Task 3) Review-Cockpit capture
-	// block that will land below this, so it also works from inside the
-	// Cockpit (design-spec §7: "von überall").
+	// view (design-spec §7: "von überall").
 	if keybind.Matches(msg, keys.Palette) {
 		return m.openPalette()
 	}
 	// E5 Task 2 (bean bt-wpn9, design decision h): `?` opens Help from ANY
-	// view, same precedent as ctrl+k/keys.Palette just above -- checked
-	// ahead of the (E4 Task 3) Review-Cockpit capture block below, so it
-	// also works from inside the Cockpit.
+	// view, same precedent as ctrl+k/keys.Palette just above.
 	if keybind.Matches(msg, keys.Help) {
 		m.helpOpen = true
 		return m, nil
 	}
 
-	// E4 Task 3 (bean bt-hxyo, design decision h): full capture for the
-	// Cockpit -- overrides a/t/B/c/d/e (keyNodeAction, below) with the
-	// view-local meaning design-spec §7 assigns them here (a/x land in Task
-	// 4). s/t/B/c/d/e are simply unreachable in v1 (bean field edits mid-
-	// review route through Tree/Backlog instead, a documented scope cut).
-	if m.view == viewReviewCockpit {
-		return m.keyReviewCockpit(msg)
-	}
-
 	// E5 Task 6 (bean bt-zhwl, design decision h): `p` opens the Lobby from
-	// any OTHER (non-Lobby, non-Cockpit) view -- checked AFTER the Review-
-	// Cockpit capture block above, NOT alongside ctrl+k/`?` before it. This
-	// is a DELIBERATE second deviation from bt-0l8c's own forward-looking
-	// "wie ctrl+k/?" sketch: unlike ctrl+k/`?`, keyReviewCockpit
-	// (view_review_cockpit.go) ALREADY binds the bare "p" key to its own,
-	// pre-existing, design-spec §7 "explicit prev, alias of up" meaning --
-	// a real, direct collision ctrl+k/`?` simply don't have (the Cockpit has
-	// no competing binding for either of THOSE keys). Letting the global
-	// Picker win here would silently break that documented Cockpit
-	// shortcut (TestKeyReviewCockpitNavigationMovesCursor is the existing
-	// regression guard). The Lobby remains fully reachable FROM the Cockpit
-	// regardless -- via ctrl+k -> "repo: wechseln" (overlay_palette.go),
-	// the Command-Center is a genuine second entry point to the exact same
-	// openLobby handler -- so no capability is actually lost, only the bare
-	// single-key shortcut's reach into this one view.
+	// any OTHER (non-Lobby) view.
 	if keybind.Matches(msg, keys.Picker) {
 		return m.openLobby()
 	}
@@ -918,28 +869,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // independent of which view is active (devd port focusedIssue,
 // view_detail_issue.go:20-35) -- view-agnostic so Task 5's Backlog view
 // (viewBacklog case below, bean bt-gzu6) reuses keyDetailFocus verbatim.
-// viewReviewCockpit case added E4 Task 4 (bean bt-yy6w, T3-Review "I (kein
-// Bug)" note carried forward, bt-hxyo): before this, the Cockpit fell
-// through to the default branch's Tree-cursorID lookup, so ctrl+k's
-// Palette-Node-Actions inside the Cockpit acted on whatever bean was last
-// focused in the Tree, not the bean actually cursored in the Review-Queue.
-//
-// Q01 (E4-T4-Review PFLICHT, closed in T5, bean bt-v7ti): a direct
-// consequence of the viewReviewCockpit case above -- paletteActions
-// (overlay_palette.go) includes "bean: löschen" whenever focusedBean() !=
-// nil, so ctrl+k's Palette-Delete now also reaches the bean CURRENTLY UNDER
-// REVIEW when invoked from inside the Cockpit. Checked deliberately:
-// openDeleteConfirm (box_confirm_delete.go) already builds its
-// children/linked-bean warning purely off m.focusedBean()/m.idx, with no
-// Tree/Backlog-specific assumption baked in -- so the existing generic
-// Delete-Confirm overlay is correct and sufficient here as-is, no
-// Cockpit-specific guard or warning needed.
 func (m model) focusedBean() *data.Bean {
 	switch m.view {
 	case viewBacklog: // E2 Task 5: the Backlog list's own selection, NOT the (possibly stale/irrelevant) tree cursor
 		return m.backlogSelected()
-	case viewReviewCockpit: // E4 Task 4: the Cockpit's own reviewFlat/reviewCursor, not the Tree cursor
-		return reviewFocused(reviewFlat(m.idx), m.reviewCursor)
 	default: // viewBrowseRepo (T8)
 		nodes := m.visibleNodes()
 		pos := m.cursorPos(nodes)
@@ -1111,10 +1044,6 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = viewBacklog
 		m.backlogList.setLen(len(m.backlogVisible()))
 		return m, nil
-	case keybind.Matches(msg, keys.Reviews):
-		// E4 Task 3 (bean bt-hxyo): `R` opens the Review-Cockpit from
-		// anywhere in the Tree (design-spec.md §7).
-		return m.openReviewCockpit()
 	case keybind.Matches(msg, keys.FilterClear):
 		// X as a direct top-level reset even with the menu closed (design-
 		// spec.md, mirrors devd's esc-cascade also clearing filters below) --

@@ -144,24 +144,6 @@ func TestPickerKeyOpensLobbyFromAnyView(t *testing.T) {
 			t.Fatalf("view after 'p' from Browse = %v, want viewLobby", out.view)
 		}
 	})
-
-	// Deliberate exception (update.go handleKey's own doc-stamp on the
-	// keys.Picker match check): the Review-Cockpit already binds the bare
-	// "p" key to its own pre-existing design-spec §7 "explicit prev"
-	// meaning -- the global Picker must NOT shadow it, unlike ctrl+k/`?`
-	// which have no such collision.
-	t.Run("NOT from Review-Cockpit (p is already bound to prev there)", func(t *testing.T) {
-		m := fixtureModel(t, beans)
-		nm, _ := m.openReviewCockpit()
-		m = nm.(model)
-		if m.view != viewReviewCockpit {
-			t.Fatal("test setup invalid: openReviewCockpit() did not switch view")
-		}
-		out := step(t, m, runeMsg('p'))
-		if out.view == viewLobby {
-			t.Fatal("'p' opened the Lobby from inside the Review-Cockpit -- it must stay bound to the Cockpit's own 'prev' action")
-		}
-	})
 }
 
 // TestViewLobbyFrameMatchesWidthHeight is the regression guard for the

@@ -22,12 +22,12 @@ package tui
 // (modal.go) stays the box-chrome source.
 //
 // toastGeometry/renderToast compose directly against m.width/m.height,
-// UNCHANGED vs. devd's own (already B01-fixed) source: beans-tui's three
-// View functions (viewBrowseRepo/viewBacklog/viewReviewCockpit) each build
-// their own full frame (w, h := m.width, m.height, outerBorder(..., true))
-// exactly like devd's fully-composited View()/viewComposite() split does --
-// no separate termWidth()-style inner-width helper exists here to
-// mis-target against (design decision a, point 1).
+// UNCHANGED vs. devd's own (already B01-fixed) source: beans-tui's View
+// functions (viewBrowseRepo/viewBacklog/viewLobby) each build their own full
+// frame (w, h := m.width, m.height, outerBorder(..., true)) exactly like
+// devd's fully-composited View()/viewComposite() split does -- no separate
+// termWidth()-style inner-width helper exists here to mis-target against
+// (design decision a, point 1).
 //
 // Input: NOT modal -- never blocks the keyboard. Only a left-click on the
 // Toast hit area is intercepted ahead of the regular mouse dispatch (Task 4,
@@ -54,9 +54,9 @@ const (
 
 // toastTarget addresses, minimally, where a click on the toast jumps to
 // (devd DD2-272 AC4 parity). Only view -- beans-tui has ONE focus resolver
-// (focusedBean(), view-agnostic across Tree/Backlog/Review-Cockpit), so a
-// view switch alone is enough to land the click near the right context; no
-// producer needs a deeper bean/section jump yet.
+// (focusedBean(), view-agnostic across Tree/Backlog), so a view switch alone
+// is enough to land the click near the right context; no producer needs a
+// deeper bean/section jump yet.
 type toastTarget struct {
 	view viewID
 }

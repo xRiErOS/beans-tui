@@ -3,14 +3,13 @@ package tui
 // context_test.go — TDD coverage for Yank `y` (E5 Task 3, bean bt-e4a6,
 // epic-E5-plan.md »Task 3«): beanContext (design decision b, ONE
 // view-agnostic Markdown generator covering both a leaf Issue and an
-// Epic/Milestone via an optional Children table) + reviewStandMarkdown (the
-// Review-Cockpit's own override) + the y-dispatch itself (keyNodeAction /
-// keyReviewCockpit). Mirrors devd's own precedent (dd2_217_test.go: "der
+// Epic/Milestone via an optional Children table) + the y-dispatch itself
+// (keyNodeAction). Mirrors devd's own precedent (dd2_217_test.go: "der
 // clip.Copy-Pfad selbst wird nicht getestet, Seiteneffekt OSC52/pbcopy") --
 // the toast-dispatch tests below exercise the REAL clip.Copy call (same as
 // devd's TestBacklogYankKeyWired) and assert on the resulting toast, not on
 // actual clipboard content; a pure content assertion is only made against
-// beanContext/reviewStandMarkdown directly, which take no clipboard action.
+// beanContext directly, which takes no clipboard action.
 
 import (
 	"strings"
@@ -89,28 +88,6 @@ func TestBeanContextResolvesParentTitleAndRelations(t *testing.T) {
 	}
 }
 
-// TestReviewStandMarkdownGroupsByEpic guards reviewStandMarkdown (design
-// decision b's Review-Cockpit override): reviewFixtureBeans
-// (view_review_cockpit_test.go) has 2 to-review beans under 2 distinct
-// Epics plus 1 rework bean -- both Epic headings and a Rework section must
-// appear.
-func TestReviewStandMarkdownGroupsByEpic(t *testing.T) {
-	idx := data.NewIndex(reviewFixtureBeans())
-	md := reviewStandMarkdown(idx)
-	if !strings.Contains(md, "Epic Alpha") {
-		t.Fatalf("missing Epic Alpha group heading:\n%s", md)
-	}
-	if !strings.Contains(md, "Epic Beta") {
-		t.Fatalf("missing Epic Beta group heading:\n%s", md)
-	}
-	if !strings.Contains(md, "## Rework") {
-		t.Fatalf("missing Rework section heading:\n%s", md)
-	}
-	if !strings.Contains(md, "Rework Task") {
-		t.Fatalf("Rework section missing the rework bean:\n%s", md)
-	}
-}
-
 // TestYankShowsConfirmationToast (US-11 Kern): `y` on a focused bean fires
 // clip.Copy and confirms via a toastInfo "Kopiert: <id>" toast.
 func TestYankShowsConfirmationToast(t *testing.T) {
@@ -159,27 +136,5 @@ func TestYankOnOrphanRootNoop(t *testing.T) {
 	}
 	if mm.toast != nil {
 		t.Fatalf("y on the orphan root must not show a toast, got %+v", mm.toast)
-	}
-}
-
-// TestReviewCockpitYankUsesReviewStandNotSingleBean (Plan Step 8): inside
-// the Review-Cockpit, `y` must fire the Review-Stand override, not the
-// generic per-bean beanContext -- pinned via the toast title, which differs
-// between the two paths ("Kopiert: <id>" vs. a Review-Stand-specific title).
-func TestReviewCockpitYankUsesReviewStandNotSingleBean(t *testing.T) {
-	m := fixtureModel(t, reviewFixtureBeans())
-	nm, _ := m.openReviewCockpit()
-	m = nm.(model)
-
-	nm2, _ := m.keyReviewCockpit(runeMsg('y'))
-	mm, ok := nm2.(model)
-	if !ok {
-		t.Fatalf("keyReviewCockpit did not return a model, got %T", nm2)
-	}
-	if mm.toast == nil {
-		t.Fatal("y in the Review-Cockpit did not show a toast")
-	}
-	if strings.HasPrefix(mm.toast.title, "Kopiert: ") {
-		t.Fatalf("toast.title = %q looks like the generic beanContext toast, want the Review-Stand override", mm.toast.title)
 	}
 }

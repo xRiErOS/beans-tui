@@ -225,10 +225,9 @@ func (m model) viewLobby() string {
 	// directly against the real m.width/m.height, this file's own
 	// overlay_show_toast.go doc-stamp) appearing pushed almost entirely
 	// off the top of the screen, just its bottom border edge visible.
-	// Every OTHER view (viewBrowseRepo/viewBacklog/viewReviewCockpit)
-	// already gets this right via the identical innerW := w - 2 pattern --
-	// this now matches that established convention exactly, no new
-	// arithmetic invented.
+	// Every OTHER view (viewBrowseRepo/viewBacklog) already gets this right
+	// via the identical innerW := w - 2 pattern -- this now matches that
+	// established convention exactly, no new arithmetic invented.
 	innerW := w - 2
 	innerH := h - 2
 	if innerW < 1 {

@@ -8,9 +8,9 @@ package tui
 // single generator covers both a leaf Issue (no "## Children" section) and
 // an Epic/Milestone (idx.Children[b.ID] non-empty -> "## Children" table)
 // via the same code path. `y` always acts on m.focusedBean() (Tree/Backlog
-// identical, update.go's keyNodeAction) -- the ONE view-local exception is
-// the Review-Cockpit, which gets its own reviewStandMarkdown
-// (view_review_cockpit.go) instead of going through beanContext.
+// identical, update.go's keyNodeAction) -- the Review-Cockpit used to be a
+// view-local exception here (its own reviewStandMarkdown override instead of
+// beanContext), removed by E7 T1 (PF-14, bean bt-wmtb, 2026-07-15).
 //
 // Relation resolution (Parent/Blocking/Blocked By) mirrors view_detail_bean.
 // go's resolveSorted: resolved via idx.ByID to "ID Title", canonically
@@ -119,8 +119,9 @@ func contextRelLabels(idx *data.Index, ids []string) string {
 // contextBeanTable renders an already-resolved, already-sorted bean slice
 // (idx.Children -- NewIndex sorts via sortBeans at build time, no re-sort
 // needed here) as a Markdown table: ID | Type | Status | Prio | Title.
-// Shared by beanContext's Children table and reviewStandMarkdown's
-// (view_review_cockpit.go) per-group/Rework tables.
+// Used by beanContext's Children table (the former Review-Cockpit's
+// reviewStandMarkdown per-group/Rework tables shared this too, removed by
+// E7 T1, PF-14, bean bt-wmtb, 2026-07-15).
 func contextBeanTable(beans []*data.Bean) string {
 	var out strings.Builder
 	out.WriteString("| ID | Type | Status | Prio | Title |\n|---|---|---|---|---|\n")

@@ -35,7 +35,6 @@ type keyMap struct {
 	Help    keybind.Binding // ? — help overlay
 	Palette keybind.Binding // ctrl+k / K — Command-Center
 	Picker  keybind.Binding // p — repo-picker
-	Reviews keybind.Binding // R — Review-Cockpit
 	Backlog keybind.Binding // b — Backlog
 	Search  keybind.Binding // / — search
 	Filter  keybind.Binding // f — facet filter
@@ -76,7 +75,6 @@ func newKeyMap() keyMap {
 		Help:    keybind.NewBinding(keybind.WithKeys("?"), keybind.WithHelp("?", "help")),
 		Palette: keybind.NewBinding(keybind.WithKeys("ctrl+k", "K"), keybind.WithHelp("ctrl+k", "Command-Center")),
 		Picker:  keybind.NewBinding(keybind.WithKeys("p"), keybind.WithHelp("p", "Repo-Picker")),
-		Reviews: keybind.NewBinding(keybind.WithKeys("R"), keybind.WithHelp("R", "Review-Cockpit")),
 		Backlog: keybind.NewBinding(keybind.WithKeys("b"), keybind.WithHelp("b", "Backlog")),
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "Search")),
 		Filter:  keybind.NewBinding(keybind.WithKeys("f"), keybind.WithHelp("f", "Filter")),
@@ -114,7 +112,7 @@ type helpGroup struct {
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section}},
-		{"Views & Global", []keybind.Binding{k.Backlog, k.Reviews, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
+		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
 		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort}},
 	}
 }

@@ -6,8 +6,8 @@ PO-Cockpit-TUI für beans-Repos — Port der DevDash-TUI (`dd`) auf das
 
 ## Status
 
-E1 (Foundation), E2 (Browse & Detail), E3 (Mutationen) und E4 (Command-Center &
-Review-Cockpit) sind fertig: read-only Tree über den beans-Datenlayer
+E1 (Foundation), E2 (Browse & Detail), E3 (Mutationen) und E4 (Command-Center)
+sind fertig: read-only Tree über den beans-Datenlayer
 (Milestones → Epics → Tasks) mit Live-Reload via fsnotify-Watcher, Quit-Confirm
 (E1); Master-Detail-Fokus mit Detail-Accordion (Meta/Body/Beziehungen/Historie,
 Beziehungs-Sprung), lokale Live-Suche + Bleve ab 3 Zeichen, Facetten-Filter
@@ -17,14 +17,20 @@ Status/Type/Priority-Menü, Tag-/Parent-/Blocking-Picker, Create-Form (huh,
 Confirm-Gate), Titel-/Body-Edit (`$EDITOR`) und Delete-Confirm mit
 Kinder-/Verknüpfungs-Warnung, durchgehend mit ETag-Konflikt-Handling (E3);
 Command-Center (`ctrl+k`, fuzzy Aktionen + Bean-Suche gemischt,
-kontextabhängig zuerst) und das Review-Cockpit (`R`, PO-Merge-Gate: Queue
-gruppiert nach Epic + Rework-Sichtbarkeits-Sektion, Verdikt-Aktionen
-Pass/Reject/Reopen) (E4). E5 (Polish) ist fertig: Toast-System (inkl.
-Konflikt-sticky), Help-Overlay `?`, Yank `y` (OSC52+nativ, Bean-/Epic-Kontext
-+ Review-Stand), Maus (Wheel/Klick/Doppelklick), Settings
+kontextabhängig zuerst) (E4). E5 (Polish) ist fertig: Toast-System (inkl.
+Konflikt-sticky), Help-Overlay `?`, Yank `y` (OSC52+nativ, Bean-/Epic-Kontext),
+Maus (Wheel/Klick/Doppelklick), Settings
 (`~/.config/beans-tui/`), Lobby V1 + Repo-Picker `p` (Watcher-Lifecycle-
 Switch) und die Archiv-Sicht (completed/scrapped default-aus, togglebar).
 E6 (Validierung & Release) ist offen — offener Stand: `beans list --ready`.
+
+**Review läuft im Chat, nicht in der TUI.** Ein früheres Review-Cockpit-View
+(`R`) wurde per PO-Entscheid entfernt (PF-14, E7 T1, 2026-07-15 — „widerspricht
+dem lean-stack-Wesen und schafft wieder Zeremonie"). Die TUI zeigt Review-Stand
+nur noch als gewöhnliche Tag-Sichtbarkeit: Tag-Trio `to-review` (Agent meldet
+fertig) → `accepted`/`rejected` (PO entscheidet im Chat bzw. via
+`beans update --tag`), auffindbar wie jeder andere Tag über Tree/Detail/Filter/
+Suche — keine eigene TUI-Interaktion dafür.
 
 ## Voraussetzungen
 
@@ -69,15 +75,14 @@ bt <pfad>   # explizites Repo
 | `e` | Titel bearbeiten (Formular, direkt ohne Confirm) |
 | `ctrl+e` | Body im `$EDITOR` bearbeiten (`$VISUAL` → `$EDITOR` → `vi`, Settings-`editor` hat Vorrang vor beiden — siehe Settings unten) |
 | `d` | Löschen (Confirm, Kinder-/Verknüpfungs-Warnung — kaskadiert nicht) |
-| `y` | Yank — Bean-/Epic-Kontext (Markdown, inkl. Children-Tabelle bei Epic/Milestone) in die Zwischenablage (OSC52 + nativ), Toast bestätigt. Im Review-Cockpit stattdessen der ganze Review-Stand (siehe unten) |
+| `y` | Yank — Bean-/Epic-Kontext (Markdown, inkl. Children-Tabelle bei Epic/Milestone) in die Zwischenablage (OSC52 + nativ), Toast bestätigt |
 | `p` | Repo-Picker/Lobby öffnen (von überall), letztes Repo persistiert (`~/.config/beans-tui/state.json`) |
 | `?` | Help-Overlay (aus der Keymap generiert), `esc`/`?`/`q` schließt |
 | `ctrl+r` | Daten neu laden |
 | `ctrl+k`/`K` | Command-Center öffnen (fuzzy Aktionen + Bean-Suche, von überall außer aus einem offenen Overlay/Formular/Filter/Suchfeld heraus) |
-| `R` | Review-Cockpit öffnen (PO-Merge-Gate, siehe unten) |
 | `q` | Quit (mit Confirm) |
 | `ctrl+c` | Sofort-Quit |
-| Maus: Wheel | Cursor der aktiven View bewegen (Tree/Backlog/Review-Cockpit — kein Scroll-Offset, der Cursor folgt dem Render automatisch) |
+| Maus: Wheel | Cursor der aktiven View bewegen (Tree/Backlog — kein Scroll-Offset, der Cursor folgt dem Render automatisch) |
 | Maus: Klick | Cursor auf die geklickte Zeile setzen; bei einem expandierbaren, noch geschlossenen Tree-Knoten expandiert der Klick direkt |
 | Maus: Doppelklick | Auf einem bereits offenen, expandierbaren Tree-Knoten (<500ms zweiter Klick) klappt ihn ein — ein Einzelklick auf einem offenen Knoten kollabiert NICHT, nur Cursor (devd-D03-Semantik) |
 | Maus: Klick auf Toast | Dismisst den Toast sofort, hat Vorrang vor jedem offenen Formular/Overlay |
@@ -87,21 +92,18 @@ Archiv-Toggle liegt bewusst als Facetten-Zeile ("Archivierte einblenden") im
 Facette. Default aus: `completed`/`scrapped` Beans sind ausgeblendet (auch
 archivierte), togglebar sichtbar.
 
-### Review-Cockpit (`R`)
+### Review (Tag-Trio, im Chat)
 
-Eigener Tasten-Scope, überschreibt s/t/a/B/c/d/e (Feldbearbeitung läuft über
-Tree/Backlog, bewusster Scope-Cut) — nur die folgenden Tasten sind aktiv:
+Kein eigenes TUI-View mehr (PF-14, s.o.). Review läuft komplett außerhalb der
+TUI:
 
-| Taste | Aktion |
-|---|---|
-| `↑`/`i`/`p`, `↓`/`k`/`n` | Queue-Cursor (to-review-Gruppen nach Epic, dann Rework-Sektion) |
-| `1`–`4` | Detail-Accordion des cursorierten Beans: Section-Sprung |
-| `a` | Pass — Status → `completed`, Tag `to-review` entfernt (nur auf to-review-Items) |
-| `x` | Reject — öffnet Kommentar-Formular, danach Tag `to-review`→`rework` + `## Review <datum>`-Body-Abschnitt (nur auf to-review-Items) |
-| `o` | Reopen — Tag `rework`→`to-review` (nur auf Rework-Items) |
-| `y` | Yank — der GANZE Review-Stand (alle to-review-Gruppen + Rework-Sektion als Markdown-Tabellen), nicht nur der cursorierte Bean |
-| `esc`/`q` | Zurück zur Browse-Ansicht |
-| `ctrl+k`/`K` | Command-Center öffnet trotzdem (Capture-Order-Ausnahme) |
+| Schritt | Wer | beans-Operation |
+|---|---|---|
+| Arbeit fertig, Abnahme angefragt | Agent | Tag `to-review` setzen, Status bleibt `in-progress` |
+| Review-Sichtbarkeit | PO (TUI, passiv) | beans mit Tag `to-review` erscheinen wie jeder andere Tag im Tree/Detail, auffindbar via Filter/Suche |
+| Pass | PO (Chat/CLI) | Tag `to-review` → `accepted` (`beans update --tag`) |
+| Reject | PO (Chat/CLI) | Tag `to-review` → `rejected`; Feedback landet im Chat |
+| Rework fertig | Agent | Tag `rejected` → `to-review` |
 
 ## Settings
 

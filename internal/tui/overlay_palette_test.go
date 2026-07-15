@@ -76,7 +76,7 @@ func TestPaletteActionsNoFocusedBeanOmitsNodeActions(t *testing.T) {
 			t.Fatalf("paletteActions leaked node action %q with no focused bean", it.actionID)
 		}
 	}
-	wantGlobal := []string{"create", "go_backlog", "go_browse", "go_review", "filter", "search", "reload", "repo_picker", "settings"}
+	wantGlobal := []string{"create", "go_backlog", "go_browse", "filter", "search", "reload", "repo_picker", "settings"}
 	if len(items) != len(wantGlobal) {
 		t.Fatalf("len(items) = %d, want %d (%v)", len(items), len(wantGlobal), wantGlobal)
 	}
@@ -526,58 +526,6 @@ func TestPaletteSearchCmdTagsResultWithQuery(t *testing.T) {
 	}
 	if res.query != "abc" {
 		t.Errorf("paletteBleveResultMsg.query = %q, want \"abc\"", res.query)
-	}
-}
-
-// --- go_review (E4 Task 4, bean bt-yy6w) ---
-
-// TestPaletteActionsGoReviewAfterGoBrowse guards the plan's exact insertion
-// point ("NACH go_browse angehängt", epic-E4-plan.md »Task 4«): "go to:
-// review cockpit" sits directly after "go to: browse" in the global action
-// list, regardless of whether a bean is focused.
-func TestPaletteActionsGoReviewAfterGoBrowse(t *testing.T) {
-	m := fixtureModel(t, fixtureBeans())
-	items := paletteActions(m)
-
-	goBrowse, goReview := -1, -1
-	for i, it := range items {
-		if it.actionID == "go_browse" {
-			goBrowse = i
-		}
-		if it.actionID == "go_review" {
-			goReview = i
-		}
-	}
-	if goBrowse == -1 || goReview == -1 {
-		t.Fatalf("missing go_browse/go_review in paletteActions: %+v", items)
-	}
-	if goReview != goBrowse+1 {
-		t.Fatalf("go_review at index %d, want directly after go_browse (index %d)", goReview, goBrowse)
-	}
-}
-
-// TestDispatchPaletteGoReviewOpensCockpit guards dispatchPalette's "go_review"
-// case: reuses openReviewCockpit verbatim, so the view switches AND
-// reviewCursor/reviewAccOpen reset exactly like the direct `R` keybinding
-// (TestOpenReviewCockpitResetsCursorAndAccOpen, view_review_cockpit_test.go).
-func TestDispatchPaletteGoReviewOpensCockpit(t *testing.T) {
-	m := fixtureModel(t, reviewFixtureBeans())
-	m.reviewCursor = 3
-	m.reviewAccOpen = 2
-
-	nm, _ := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: "go_review", label: "go to: review cockpit"})
-	mm, ok := nm.(model)
-	if !ok {
-		t.Fatalf("dispatchPalette did not return a model, got %T", nm)
-	}
-	if mm.paletteOpen {
-		t.Fatal("dispatchPalette must close the palette")
-	}
-	if mm.view != viewReviewCockpit {
-		t.Fatalf("view = %v, want viewReviewCockpit", mm.view)
-	}
-	if mm.reviewCursor != 0 || mm.reviewAccOpen != 0 {
-		t.Errorf("reviewCursor/reviewAccOpen = %d/%d, want 0/0 (openReviewCockpit's own reset)", mm.reviewCursor, mm.reviewAccOpen)
 	}
 }
 

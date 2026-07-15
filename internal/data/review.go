@@ -3,10 +3,12 @@ package data
 // review.go — Review-Queue-Ableitung, Datenlayer-Hälfte (E4 Task 3, bean
 // bt-hxyo, design decision c): EpicAncestor is the sole new primitive here --
 // a pure, read-only Parent-chain walk. The TUI-side grouping (reviewQueue/
-// reviewRework/reviewFlat) lives in internal/tui/view_review_cockpit.go,
-// consuming this + the existing idx.WithTag("to-review"/"rework") (E1 Task
-// 3) -- no second Index method needed here, EpicAncestor is genuinely the
-// only NEW read this task requires.
+// reviewRework/reviewFlat) used to live in internal/tui/view_review_cockpit.go,
+// consuming this + idx.WithTag("to-review"/"rework") (E1 Task 3) -- that view
+// was removed by E7 T1 (PF-14, bean bt-wmtb, 2026-07-15: Review-Cockpit
+// replaced by a Chat-driven Tag-Trio, design-spec.md §5). EpicAncestor itself
+// stays (YAGNI, same rationale as data.Client.PassReview/RejectReview,
+// mutations.go): harmless, pure, no TUI coupling to carry, no caller left.
 
 // EpicAncestor walks b.Parent upward (visited-guarded against a Parent
 // cycle, same defensive shape as CollectDescendants/expandAncestorsOf --

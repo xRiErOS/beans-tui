@@ -321,11 +321,13 @@ func (c *Client) PassReview(id, etag string) error {
 // <date>" body section, in ONE beans-update call (E4 Task 4, bean bt-yy6w,
 // design decision d, design-spec.md §5's Reject row) -- combining
 // --remove-tag/--tag/--body-append avoids the same etag-cascade risk
-// PassReview above documents. date is caller-supplied
-// (internal/tui/view_review_cockpit.go's Reject-Form submit path passes
-// time.Now().Format("2006-01-02")) rather than computed here, purely for
-// deterministic tests (client_mut_test.go pins the exact section text
-// without touching the clock).
+// PassReview above documents. date is caller-supplied (its former caller,
+// internal/tui/view_review_cockpit.go's Reject-Form submit path, passed
+// time.Now().Format("2006-01-02"); that view was removed by E7 T1, PF-14,
+// bean bt-wmtb, 2026-07-15 -- PassReview/RejectReview themselves stay,
+// YAGNI, no caller left) rather than computed here, purely for deterministic
+// tests (client_mut_test.go pins the exact section text without touching
+// the clock).
 func (c *Client) RejectReview(id, comment, date, etag string) error {
 	section := "\n## Review " + date + "\n\n" + comment + "\n"
 	return c.update(id, etag, "--remove-tag", "to-review", "--tag", "rework", "--body-append", section)

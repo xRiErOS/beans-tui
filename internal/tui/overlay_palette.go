@@ -7,10 +7,10 @@ package tui
 // BELOW the actions (palFilteredBeans, design decision b), palette-scoped
 // Bleve staleness guard (palBleveIDs/palBleveFor/palBleveLoading, types.go;
 // paletteBleveResultMsg/paletteSearchCmd, messages.go). Task 4 (bean
-// bt-yy6w) appends the "go to: review cockpit" jump action now that the
-// Review-Cockpit view exists (devd overlay_palette.go's own "Reviews
-// (T17)/Memory (T18) werden hier ergänzt" precedent, port reference at the
-// top of epic-E4-plan.md).
+// bt-yy6w) had appended a "go to: review cockpit" jump action (devd
+// overlay_palette.go's own "Reviews (T17)/Memory (T18) werden hier ergänzt"
+// precedent) -- removed again by E7 T1 (PF-14, bean bt-wmtb): the
+// Review-Cockpit view no longer exists.
 //
 // Port references: fuzzyMatch is a verbatim port (fuzzy.go, design decision
 // a). paletteActions' "verb: label" wording convention and dispatchPalette's
@@ -54,8 +54,7 @@ type paletteItem struct {
 
 // paletteActions returns the context-aware action list (design decision b):
 // focused-bean node actions FIRST (only when m.focusedBean() != nil), global
-// actions after. T4 appends "go to: review cockpit" once that view exists
-// (devd overlay_palette.go's own "T17/T18 ergänzen hier" precedent).
+// actions after.
 func paletteActions(m model) []paletteItem {
 	var items []paletteItem
 	if b := m.focusedBean(); b != nil {
@@ -72,7 +71,6 @@ func paletteActions(m model) []paletteItem {
 		paletteItem{kind: paletteKindAction, actionID: "create", label: "create: bean"},
 		paletteItem{kind: paletteKindAction, actionID: "go_backlog", label: "go to: backlog"},
 		paletteItem{kind: paletteKindAction, actionID: "go_browse", label: "go to: browse"},
-		paletteItem{kind: paletteKindAction, actionID: "go_review", label: "go to: review cockpit"},
 		paletteItem{kind: paletteKindAction, actionID: "filter", label: "filter: facetten"},
 		paletteItem{kind: paletteKindAction, actionID: "search", label: "search: beans"},
 		paletteItem{kind: paletteKindAction, actionID: "reload", label: "reload: daten"},
@@ -151,9 +149,7 @@ func (m model) palFilteredBeans() []paletteItem {
 }
 
 // openPalette opens the Command-Center with an empty filter (design decision
-// h: reachable from ANY view via keys.Palette, checked in handleKey ahead of
-// the E4 Task 3 Review-Cockpit capture block so it also works from inside
-// the Cockpit).
+// h: reachable from ANY view via keys.Palette).
 func (m model) openPalette() (tea.Model, tea.Cmd) {
 	m.paletteOpen = true
 	m.palQuery = ""
@@ -281,12 +277,6 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 		case "go_browse":
 			m.view = viewBrowseRepo
 			return m, nil
-		case "go_review":
-			// E4 Task 4 (bean bt-yy6w): reuses openReviewCockpit verbatim
-			// (view_review_cockpit.go) -- same reviewCursor/reviewAccOpen
-			// reset `R` already performs, so a Palette-driven jump into the
-			// Cockpit behaves identically to the direct keybinding.
-			return m.openReviewCockpit()
 		case "filter":
 			return m.openFilterMenu()
 		case "search":
