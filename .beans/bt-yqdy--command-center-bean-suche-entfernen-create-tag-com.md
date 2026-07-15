@@ -1,11 +1,11 @@
 ---
 # bt-yqdy
 title: 'Command-Center: Bean-Suche entfernen + create-tag-Command'
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T21:10:08Z
-updated_at: 2026-07-15T21:10:08Z
+updated_at: 2026-07-15T23:53:56Z
 parent: bt-ntoz
 blocked_by:
     - bt-y2iw

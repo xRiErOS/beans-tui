@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-15T21:10:37Z
-updated_at: 2026-07-15T22:58:49Z
+updated_at: 2026-07-15T23:53:56Z
 parent: bt-ntoz
 blocked_by:
     - bt-czpf
@@ -70,3 +70,9 @@ um diese 5 Sites ergänzen — reine Nachvollziehbarkeit.
 ## Prelude aus E8-T6-Review (2026-07-16, non-blocking, Quelle: bt-y2iw-Review)
 
 - I02: bt-y2iw-TDD-Schritt forderte dokumentierte Prüfung 'stat'-Fuzzy vs. 'set type'/'set priority' — Prüfung fehlte im bean-Body. Reviewer-Analyse: kein 'a' in beiden → Subsequence matcht nie, Ergebnis korrekt. Bei Doku-Finalisierung als Satz in bt-y2iw nachtragen.
+
+
+## Prelude aus E8-T4-Re-Review (2026-07-16, non-blocking, Quelle: bt-duz7-Review R2 APPROVED)
+
+- I01 (low): TestDetailClickKeyDisjointNumberSpaces (mouse_test.go) ist selbst-referenziell — prüft gegen die Konstante detailClickKeyBase statt gegen hartes Literal 1000; gegen Base-Mutation wertlos (Verhaltenstest TestMouseDetailClickTreeClickIndexDoesNotAliasFieldClickKey deckt ab). Bei nächster Berührung von mouse_test.go Literal einsetzen — Abschluss-Task: NICHT eigens fixen, nur in LESSONS-LEARNED als Muster 'selbst-referenzieller Pin-Test' aufnehmen.
+- I02 (dokumentarisch): bewusste Asymmetrie BODY-Doppelklick (zeitfenstergebunden) vs. enter-auf-BODY (zeitfensterlos) — PO-Wortlaut scopet zeitfensterlosen Zweitklick auf Felder. Steht im Doc-Kommentar mouseDetailClick.
