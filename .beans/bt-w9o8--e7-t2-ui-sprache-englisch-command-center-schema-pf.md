@@ -1,11 +1,11 @@
 ---
 # bt-w9o8
 title: E7 T3 — UI-Sprache Englisch + Command-Center-Schema (PF-7, PF-8)
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T14:26:51Z
-updated_at: 2026-07-15T14:39:59Z
+updated_at: 2026-07-15T15:36:48Z
 parent: bt-heg9
 blocked_by:
     - bt-2af1
