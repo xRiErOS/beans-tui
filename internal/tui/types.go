@@ -57,6 +57,22 @@ const (
 	overlayDeleteConfirm
 )
 
+// Picker-Stil-Divergenz (E3-T3-Review PFLICHT, carried into bean bt-ppzb/E3
+// Task 6, closes the review's "Doc-Note" finding): the overlays above render
+// their cursored row in TWO different styles, both deliberate, neither a
+// drift bug. box_menu_value.go (valueMenuBox) and box_picker_tag.go
+// (tagPickerBox) use theme.Header.Render plus a leading "▸ " glyph on an
+// otherwise PLAIN value/tag string. box_picker_parent.go (parentPickerBox)
+// and box_picker_blocking.go (blockingPickerBox) instead use the D08 cursor
+// treatment shared with the Tree/Backlog panes (ansi.Strip + a whole-line
+// theme.Accent.Render("▌"+plain) wrap) -- because THEIR rows are
+// relationRow-rendered (already carrying their own status-icon/type-icon
+// colors), so a second Header-wrap would clash with the existing per-cell
+// theming instead of highlighting it. Full rationale lives on
+// parentPickerBox's own doc comment (box_picker_parent.go); this note exists
+// so a reader scanning the overlay set here doesn't mistake the split for an
+// unnoticed inconsistency.
+
 // I01 (bean bt-7jr8, T8-review): every map[string]bool field on model
 // (expanded, and E2's new filter facet sets) is COPY-ON-WRITE, never mutated
 // in place. Rationale: model is a value-receiver Elm architecture (design-
@@ -294,6 +310,28 @@ type model struct {
 	// semantics over the WHOLE session, not just the Submit<->Disk instant.
 	editorTarget string
 	editorETag   string
+
+	// Delete-Confirm `d` (E3 Task 6, bean bt-ppzb, box_confirm_delete.go):
+	// delTitle/delChildren are captured at OPEN time (openDeleteConfirm) for
+	// the modal's own render -- mutTarget (shared with every other overlay,
+	// above) already carries the bean ID enter acts on, so no separate delID
+	// field is needed. delChildren is idx.Children[id]'s DIRECT count only
+	// (idx.Children is already in memory -- Port devd box_confirm_delete.go
+	// MINUS its loadDeletePreview, no async count-load) -- deliberately NOT
+	// data.CollectDescendants's full recursive descendant walk
+	// (hierarchy.go/box_picker_parent.go's cycle-exclusion machinery):
+	// `beans delete` does not cascade (mutations.go Delete's own doc-stamp),
+	// so only the bean's IMMEDIATE children are ever affected -- a
+	// grandchild's own parent (the direct child) stays intact either way.
+	// ERRATUM (empirically verified, box_confirm_delete.go's own doc-stamp
+	// has the full story): the affected direct children do NOT become
+	// "(verwaist)"-bucket orphans as originally assumed (epic-E3-plan.md) --
+	// beans 0.4.2's `delete` clears their `parent:` field outright, so they
+	// become ordinary parentless ROOTS instead. deleteBox's copy reflects
+	// the CORRECTED outcome, never devd's own "will also be deleted" cascade
+	// wording either way.
+	delTitle    string
+	delChildren int
 
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works

@@ -15,6 +15,25 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// skipSlowHuhDriveInShortMode guards the handful of tests in this file that
+// drive the 7-field Create-Form through openFilledCreateConfirm/typeIntoModel
+// -- a real model-level tea.Update round-trip per keystroke/field-advance,
+// which repeatedly re-arms huh's own self-perpetuating textinput-blink Cmd
+// chain (driveModelBudget iterations each). Measured cost (E3 Task 6, bean
+// bt-ppzb, "Kosten-Finding"): ~16-19s PER TEST, seven of them, ~119s of the
+// internal/tui package's ~121s total -- by far the most expensive tests in
+// the whole suite, an order of magnitude above anything else. `go test
+// ./... -short` skips exactly these seven (and no others -- every other test
+// in this file, and everywhere else, is already sub-second) for a fast local
+// loop; the full (non -short) run still exercises them, and CI/pre-commit
+// must keep running without -short. See CLAUDE.md's "schneller Lauf" note.
+func skipSlowHuhDriveInShortMode(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping slow huh-drive Create-Form test in -short mode (~16-19s, see skipSlowHuhDriveInShortMode doc comment)")
+	}
+}
+
 // driveModel is the model-level analogue of driveForm
 // (form_create_bean_test.go): step() (update_test.go) discards every
 // returned tea.Cmd, so it can never drive an open huh Form to
@@ -111,6 +130,7 @@ func openFilledCreateConfirm(t *testing.T, m model, parentID, title string) mode
 // opens overlayCreateConfirm, parks a non-nil createCmd, and captures the
 // draft (DD2-190) BEFORE the confirm.
 func TestSubmitFormParksCmdAndOpensConfirm(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
 	m := fixtureModel(t, fixtureBeans())
 	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
 
@@ -145,6 +165,7 @@ func TestSubmitFormParksCmdAndOpensConfirm(t *testing.T) {
 // (TestKeyNodeActionCIgnoredWhileCreateInFlight below). Only applyCreateDone
 // (update.go) clears it, once createDoneMsg actually resolves.
 func TestCreateConfirmEnterFiresPendingCmd(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t4-scratch-dir"}
 	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
@@ -197,6 +218,7 @@ func TestCreateConfirmEnterFiresPendingCmd(t *testing.T) {
 // applyMutationResult tail (status line + reload, which would just discard
 // the work).
 func TestCreateConfirmEnterErrorPreservesDraftAndReopensForm(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t5-scratch-dir"}
 	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
@@ -254,6 +276,7 @@ func TestCreateConfirmEnterErrorPreservesDraftAndReopensForm(t *testing.T) {
 // agnostic applyMutationResult tail instead (status line + reload), leaving
 // the currently open overlay exactly as the PO left it.
 func TestCreateDoneErrorWhileBusyRoutesToStatusLineFormUntouched(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t5-scratch-dir"}
 	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
@@ -312,6 +335,7 @@ func TestCreateDoneErrorWhileBusyRoutesToStatusLineFormUntouched(t *testing.T) {
 // pendingCreate slots with a second create's state is exactly the
 // clobbering F1 closes.
 func TestKeyNodeActionCIgnoredWhileCreateInFlight(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t5-scratch-dir"}
 	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
@@ -350,6 +374,7 @@ func TestKeyNodeActionCIgnoredWhileCreateInFlight(t *testing.T) {
 // exercise submitForm's own check rather than relying on it staying
 // unreachable.
 func TestSubmitFormCreateIgnoredWhilePendingCreateInFlight(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
 	m := fixtureModel(t, fixtureBeans())
 	m = step(t, m, runeMsg('c'))
 	if m.form == nil || m.formKind != "create" {
@@ -393,6 +418,7 @@ func TestCreateDoneSuccessConsumesDraft(t *testing.T) {
 // advancing straight through the reopened form (no retyping) and checking
 // the resulting createLabel still names the original title.
 func TestCreateConfirmEscReturnsToFilledForm(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
 	m := fixtureModel(t, fixtureBeans())
 	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
 

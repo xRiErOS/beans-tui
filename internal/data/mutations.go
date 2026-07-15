@@ -312,6 +312,18 @@ func (c *Client) SetBody(id, body, etag string) error {
 // 0.4.2's `beans delete --help`), and passing it also gets Delete the same
 // JSON-envelope error reporting as every other mutation (I02), even though
 // the parsed body isn't currently surfaced to callers.
+//
+// Side effect on direct children (empirically verified, E3 Task 6/bean
+// bt-ppzb): Delete does NOT cascade -- it only removes the one bean's own
+// file -- but it DOES rewrite every OTHER bean whose `parent:` pointed at
+// the deleted ID, clearing that field entirely rather than leaving a
+// dangling reference. A deleted bean's direct children therefore surface
+// afterward as ordinary, parentless ROOT beans (data.Index.Roots()), NOT as
+// dangling-parent orphans (internal/tui's "(verwaist)" synthetic root,
+// view_browse_repo.go) -- see TestDeleteClearsFormerChildrensParentField
+// (client_mut_test.go) for the pinned regression. Grandchildren are
+// unaffected: their own parent (the direct child, untouched by this
+// rewrite) stays intact.
 func (c *Client) Delete(id string) error {
 	_, err := c.run("delete", id, "--json")
 	return err

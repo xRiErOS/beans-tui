@@ -52,7 +52,7 @@ type keyMap struct {
 	Assign    keybind.Binding // a — parent assignment
 	Blocking  keybind.Binding // B — blocking picker
 	Create    keybind.Binding // c — create
-	Delete    keybind.Binding // d — delete (cascade-confirm)
+	Delete    keybind.Binding // d — delete (confirm, no cascade -- E3 Task 6, bean bt-ppzb)
 	TagAssign keybind.Binding // t — tag picker
 	Editor    keybind.Binding // e / ctrl+e — edit body in $EDITOR
 }
@@ -92,7 +92,7 @@ func newKeyMap() keyMap {
 		Assign:    keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Assign parent")),
 		Blocking:  keybind.NewBinding(keybind.WithKeys("B"), keybind.WithHelp("B", "Blocking picker")),
 		Create:    keybind.NewBinding(keybind.WithKeys("c"), keybind.WithHelp("c", "Create")),
-		Delete:    keybind.NewBinding(keybind.WithKeys("d"), keybind.WithHelp("d", "Delete (cascade)")),
+		Delete:    keybind.NewBinding(keybind.WithKeys("d"), keybind.WithHelp("d", "Delete")),
 		TagAssign: keybind.NewBinding(keybind.WithKeys("t"), keybind.WithHelp("t", "Assign tags")),
 		Editor:    keybind.NewBinding(keybind.WithKeys("e", "ctrl+e"), keybind.WithHelp("e", "Edit in $EDITOR")),
 	}

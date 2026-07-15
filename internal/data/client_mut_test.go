@@ -393,6 +393,76 @@ func TestSetBlockingAddsAndRemovesInOneCall(t *testing.T) {
 	}
 }
 
+// TestAddBlockingCyclePinsValidationErrorShape closes the E3-T3-Review
+// PFLICHT finding carried into bean bt-ppzb/E3 Task 6 ("Blocking-Zyklus via
+// CLI -> VALIDATION_ERROR-Shape-Test gepinnt, bisher nur Kommentar"):
+// TestSetBlockingAddsAndRemovesInOneCall's own doc comment above already
+// CLAIMS the beans 0.4.2 CLI rejects a two-bean blocking cycle server-side
+// with a VALIDATION_ERROR "(empirically verified)" -- but until now nothing
+// actually PINNED that shape with an assertion, only a comment. newTestRepo's
+// fixture already has tt-mlst blocking tt-task (testrepo_test.go);
+// AddBlocking(tt-task, tt-mlst, ...) closes the cycle the OTHER direction and
+// must fail -- specifically with code VALIDATION_ERROR (classifyError's
+// non-CONFLICT envelope branch, mutations.go), NOT errors.Is(_, ErrConflict):
+// a cycle rejection is a data-integrity rule, not an optimistic-lock race.
+// Verified empirically against beans 0.4.2's actual JSON envelope:
+// {"success":false,"error":"adding blocking relationship would create
+// cycle: [...]","code":"VALIDATION_ERROR"}.
+func TestAddBlockingCyclePinsValidationErrorShape(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	err = client.AddBlocking(task.ID, "tt-mlst", task.ETag)
+	if err == nil {
+		t.Fatal("AddBlocking() closing a 2-bean cycle: error = nil, want a VALIDATION_ERROR rejection")
+	}
+	if errors.Is(err, ErrConflict) {
+		t.Fatalf("AddBlocking() cycle rejection classified as ErrConflict: %v, want a NON-conflict error (a cycle is a data-integrity rule, not a stale-etag race)", err)
+	}
+	if !strings.Contains(err.Error(), "VALIDATION_ERROR") {
+		t.Fatalf("AddBlocking() cycle rejection error = %v, want it to carry the VALIDATION_ERROR code (classifyError's non-CONFLICT envelope branch)", err)
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("AddBlocking() cycle rejection error = %v, want it to mention the cycle (beans CLI's own diagnostic text)", err)
+	}
+}
+
+// TestDeleteClearsFormerChildrensParentField pins an ERRATUM discovered
+// during E3 Task 6's tmux smoke test (bean bt-ppzb, corrects
+// epic-E3-plan.md's original assumption -- see Delete's own doc-stamp above
+// and box_confirm_delete.go's matching doc-stamp for the full story):
+// deleting tt-mlst (newTestRepo's fixture milestone, parent of tt-epic) must
+// NOT leave tt-epic with a dangling `parent: tt-mlst` reference -- the real
+// beans 0.4.2 CLI clears the field outright, turning tt-epic into an
+// ordinary parentless bean, not a "(verwaist)"-bucket orphan.
+func TestDeleteClearsFormerChildrensParentField(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	if err := client.Delete("tt-mlst"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	child := findBean(t, beans, "tt-epic")
+	if child.Parent != "" {
+		t.Fatalf("tt-epic.Parent = %q after deleting tt-mlst, want \"\" (beans clears the dangling reference, does not leave it orphaned)", child.Parent)
+	}
+}
+
 func TestDeleteRemovesBean(t *testing.T) {
 	requireBeansBinary(t)
 

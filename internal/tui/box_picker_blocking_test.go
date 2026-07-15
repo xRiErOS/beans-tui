@@ -198,3 +198,53 @@ func TestBlockingPickerEscDiscards(t *testing.T) {
 		t.Fatal("esc must not fire a mutation Cmd")
 	}
 }
+
+// --- vanished-target guard on enter (E3-T3-Review PFLICHT, carried into
+// bean bt-ppzb/E3 Task 6: "Vanished-mutTarget-Regressionstests für Parent-
+// UND Blocking-Picker (Muster TestValueMenuTargetVanished...)") ---
+
+// TestBlockingPickerEnterTargetVanishedClosesGracefully mirrors
+// TestValueMenuTargetVanishedClosesGracefully/
+// TestTagPickerEnterTargetVanishedClosesGracefully/
+// TestParentPickerEnterTargetVanishedClosesGracefully (design decision d):
+// the focused bean disappears (external delete + reload) between open and
+// enter -- enter must close the overlay and set a status-line note, WITHOUT
+// firing a doomed SetBlocking.
+func TestBlockingPickerEnterTargetVanishedClosesGracefully(t *testing.T) {
+	beans := fixtureBeansWithBlocking()
+	m := fixtureModel(t, beans)
+	m = focusBeanFull(m, "bean-a") // Blocking: [bean-b]
+	m = step(t, m, runeMsg('B'))
+	if m.overlay != overlayBlockingPicker {
+		t.Fatal("setup: B did not open the blocking picker")
+	}
+	for i, it := range m.blockItems {
+		if it.id == "ep-1" {
+			m.menu.cursor = i
+		}
+	}
+	m = step(t, m, runeMsg(' ')) // ensure a pending change exists
+
+	// bean-a vanishes externally; a reload lands while the picker is still
+	// open (m.overlay survives a reload untouched, applyLoaded never touches
+	// it).
+	var remaining []data.Bean
+	for _, b := range beans {
+		if b.ID != "bean-a" {
+			remaining = append(remaining, b)
+		}
+	}
+	m = step(t, m, beansLoadedMsg{beans: remaining})
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm := tm.(model)
+	if nm.overlay != overlayNone {
+		t.Fatal("enter on a vanished target must close the overlay")
+	}
+	if nm.err == "" {
+		t.Fatal("enter on a vanished target must set a status-line note (m.err)")
+	}
+	if cmd != nil {
+		t.Fatal("enter on a vanished target must not fire a Cmd (no doomed mutation)")
+	}
+}

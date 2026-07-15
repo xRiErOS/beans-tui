@@ -578,6 +578,8 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.blockingPickerBox(), w, h)
 	case overlayCreateConfirm:
 		out = placeOverlay(out, m.createConfirmBox(), w, h)
+	case overlayDeleteConfirm:
+		out = placeOverlay(out, m.deleteBox(), w, h)
 	}
 	if m.form != nil {
 		out = placeOverlay(out, m.formChrome(), w, h)
@@ -619,7 +621,7 @@ func (m model) viewBrowseRepo() string {
 	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
 	head := breadcrumb(m.repoLabel(), "Browse", globalHint, innerW)
 
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh, keys.Status}) + "  tab:focus"
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
 	localKeys := footer(localHint, innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))

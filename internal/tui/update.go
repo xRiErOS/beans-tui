@@ -368,7 +368,13 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			nm, cmd := m.openEditTitleForm(b)
 			return true, nm, cmd
 		}
-		return true, m, nil // stub: T6 (Delete)
+		if keybind.Matches(msg, keys.Delete) {
+			// E3 Task 6 (bean bt-ppzb): opens the Delete-Confirm overlay
+			// (box_confirm_delete.go) -- Kinder-Count-Warnung, no mutation
+			// fires until keyDeleteConfirm's own enter.
+			return true, m.openDeleteConfirm(), nil
+		}
+		return true, m, nil // unreachable: msg matched one of the six keys in this case's condition above
 	}
 	return false, m, nil
 }
@@ -392,6 +398,8 @@ func (m model) keyOverlay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyBlockingPicker(msg)
 	case overlayCreateConfirm:
 		return m.keyCreateConfirm(msg)
+	case overlayDeleteConfirm:
+		return m.keyDeleteConfirm(msg)
 	}
 	return m, nil
 }

@@ -229,3 +229,84 @@ func TestParentPickerEscNoMutation(t *testing.T) {
 		t.Fatal("esc must not fire a mutation Cmd")
 	}
 }
+
+// --- vanished-target guard on enter (E3-T3-Review PFLICHT, carried into
+// bean bt-ppzb/E3 Task 6: "Vanished-mutTarget-Regressionstests für Parent-
+// UND Blocking-Picker (Muster TestValueMenuTargetVanished...)") ---
+
+// TestParentPickerEnterTargetVanishedClosesGracefully mirrors
+// TestValueMenuTargetVanishedClosesGracefully/
+// TestTagPickerEnterTargetVanishedClosesGracefully (design decision d): the
+// focused bean disappears (external delete + reload) between open and enter
+// -- enter must close the overlay and set a status-line note, WITHOUT firing
+// a doomed SetParent/RemoveParent.
+func TestParentPickerEnterTargetVanishedClosesGracefully(t *testing.T) {
+	beans := fixtureBeansForParentPicker()
+	m := fixtureModel(t, beans)
+	m = focusBeanFull(m, "ep-1")
+	m = step(t, m, runeMsg('a'))
+	if m.overlay != overlayParentPicker {
+		t.Fatal("setup: a did not open the parent picker")
+	}
+
+	// ep-1 vanishes externally; a reload lands while the picker is still open
+	// (m.overlay survives a reload untouched, applyLoaded never touches it).
+	var remaining []data.Bean
+	for _, b := range beans {
+		if b.ID != "ep-1" {
+			remaining = append(remaining, b)
+		}
+	}
+	m = step(t, m, beansLoadedMsg{beans: remaining})
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm := tm.(model)
+	if nm.overlay != overlayNone {
+		t.Fatal("enter on a vanished target must close the overlay")
+	}
+	if nm.err == "" {
+		t.Fatal("enter on a vanished target must set a status-line note (m.err)")
+	}
+	if cmd != nil {
+		t.Fatal("enter on a vanished target must not fire a Cmd (no doomed mutation)")
+	}
+}
+
+// --- current-parent-out-of-eligibility cursor fallback (E3-T3-Review
+// PFLICHT, carried into bean bt-ppzb/E3 Task 6: "Test: current-parent-out-
+// of-eligibility -> Cursor-Fallback 0") ---
+
+// TestParentPickerCurrentParentOutOfEligibilityCursorFallsBackToZero guards
+// openParentPicker's cursor seed (box_picker_parent.go) for a bean whose
+// CURRENT Parent field is set but points at a bean that is beans-legal
+// (hand-editable frontmatter) yet not a legal parent TYPE for it --
+// tk-1.Parent is hand-edited to tk-9, ANOTHER task (validParentTypes("task")
+// = [milestone, epic, feature] -- a task can never legally parent a task),
+// so tk-9 never appears in parentItems at all. The seed loop
+// (openParentPicker) must fall back to its listState{} zero value (index 0,
+// the "(Kein Parent)" clear row) rather than leaving the cursor on a stale
+// position -- this is already the loop's own documented behavior (no
+// explicit "not found" branch needed), pinned here as an end-to-end
+// regression.
+func TestParentPickerCurrentParentOutOfEligibilityCursorFallsBackToZero(t *testing.T) {
+	beans := append(fixtureBeansForParentPicker(),
+		data.Bean{ID: "tk-9", Title: "Task Nine", Status: "todo", Type: "task", Priority: "normal", Parent: "ft-1"},
+	)
+	for i := range beans {
+		if beans[i].ID == "tk-1" {
+			beans[i].Parent = "tk-9" // out-of-eligibility: a task can't legally parent a task
+		}
+	}
+	m := fixtureModel(t, beans)
+	m = focusBeanFull(m, "tk-1")
+
+	m = step(t, m, runeMsg('a'))
+
+	ids := pickerItemIDs(m.parentItems)
+	if ids["tk-9"] {
+		t.Fatalf("parentItems must exclude tk-9 (wrong type for a task's parent), got %+v", m.parentItems)
+	}
+	if m.menu.cursor != 0 {
+		t.Fatalf("menu.cursor = %d, want 0 (fallback: current parent tk-9 is not in parentItems)", m.menu.cursor)
+	}
+}

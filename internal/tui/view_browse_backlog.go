@@ -215,7 +215,7 @@ func (m model) viewBacklog() string {
 	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
 	head := breadcrumb(m.repoLabel(), "Backlog", globalHint, innerW)
 
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status}) + "  tab:focus"
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
 	localKeys := footer(localHint, innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
