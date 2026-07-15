@@ -128,9 +128,14 @@ func overlayLocalBindings(o overlayID) []keybind.Binding {
 // backlogChrome/view_browse_backlog.go): view-local (viewLocal) in the
 // normal state, but swaps to the active capture state's OWN bindings the
 // instant one fully captures input (Q04-Antwort, PO-Nachtrag 5). Priority
-// order (epic-E7-plan.md Task 7 Step 6, mirrors handleKey's own
-// full-capture dispatch order, update.go): Filter-Menü > Overlay > Suche >
-// Palette > Help > view-local default.
+// order (epic-E7-plan.md Task 7 Step 6): Filter-Menü > Overlay > Suche >
+// Palette > Help > view-local default -- this is its OWN independently
+// chosen order for footer display, NOT a mirror of handleKey's own
+// full-capture dispatch order (update.go), which checks m.searchActive
+// BEFORE m.filterOpen (the reverse of the order here). Harmless in
+// practice since the two states are mutually exclusive (only one capture
+// state is ever active at a time), but the two orderings must not be
+// conflated (T7-Review I03, bean bt-dsog).
 func (m model) contextualLocalHint(viewLocal []keybind.Binding) string {
 	switch {
 	case m.filterOpen:

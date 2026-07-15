@@ -531,8 +531,12 @@ der Footer dessen lokale Bindings statt der (dann irrelevanten) View-Bindings �
 insbesondere `keys.Toggle` (Help-Text „Toggle facet", deckt PO Q04s „space:
 select/toggle" ab) beim offenen Filter-Menü, dem konkreten Fall, an dem PO das
 Fehlen bemerkte. Priorität bei mehreren gleichzeitig denkbaren Zuständen:
-Filter-Menü > Overlay > Suche > Palette > Help > View-Normalzustand (deckt sich mit
-`handleKey`s bestehender Full-Capture-Reihenfolge, `update.go`).
+Filter-Menü > Overlay > Suche > Palette > Help > View-Normalzustand — eine EIGENE,
+für die Footer-Anzeige gewählte Reihenfolge, KEIN Abbild von `handleKey`s
+Full-Capture-Dispatch-Reihenfolge (`update.go`), die `m.searchActive` VOR
+`m.filterOpen` prüft (umgekehrte Reihenfolge). Folgenlos, da die Capture-Zustände
+sich gegenseitig ausschließen (nie gleichzeitig aktiv) — die beiden Reihenfolgen
+dürfen aber nicht verwechselt werden (T7-Review I03, bean bt-dsog).
 
 **PF-14 — Review-Cockpit vollständig entfernt (Feature-Removal)** (PO-Nachtrag 8, PO
 wörtlich: „widerspricht dem lean-stack-Wesen und schafft wieder Zeremonie. Das

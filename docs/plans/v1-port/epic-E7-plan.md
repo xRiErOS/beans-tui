@@ -749,7 +749,6 @@ Filter-Menü, das Q04 auslöste.
   bereits eigenen, vollständigen Footer-Hint)
 - [x] Goldens regeneriert + Vorher/Nachher je Datei (2 von 3 betroffen,
   `chrome.golden` bestätigt unverändert -- s. Step 8 ERRATUM)
-- [ ] Goldens regeneriert + Vorher/Nachher je Datei
 
 ---
 
