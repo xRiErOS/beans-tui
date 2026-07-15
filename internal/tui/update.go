@@ -971,10 +971,16 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "left":
+		// B01 (design-spec.md §15 PF-16, bean bt-ntoz, PF-13-Pfeil-Revision):
+		// the former `else { m.detailFocus = false }` branch is REMOVED --
+		// arrow keys are pure Section/Feld navigation now, never a focus-
+		// exit (right never entered detail focus either, so left exiting it
+		// was asymmetric, PO verbatim "für Nutzer murks"). At section level
+		// (detailLevel==0) left is now simply a no-op; the two-stage
+		// cascade this branch used to perform (Feld->Sektion->Fokus
+		// verlassen) moves to esc instead (D03, below).
 		if m.detailLevel == 1 {
 			m.detailLevel = 0
-		} else {
-			m.detailFocus = false
 		}
 		return m, nil
 	}

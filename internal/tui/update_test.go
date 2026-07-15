@@ -729,9 +729,14 @@ func TestDetailFocusLeftAtFieldLevelReturnsToSectionLevel(t *testing.T) {
 	}
 }
 
-// TestDetailFocusLeftAtSectionLevelExitsDetailFocus guards left/j at section
-// level: it exits detail focus entirely (back to Tree focus).
-func TestDetailFocusLeftAtSectionLevelExitsDetailFocus(t *testing.T) {
+// TestDetailFocusLeftAtSectionLevelIsNoOp guards B01 (design-spec.md §15
+// PF-16, bean bt-ntoz, PF-13-Pfeil-Revision): left/j at section level is now
+// a no-op -- it must NOT exit detail focus anymore. Renamed+inverted from
+// the former TestDetailFocusLeftAtSectionLevelExitsDetailFocus, which pinned
+// the OLD (asymmetric) behavior B01 explicitly revokes: arrow keys are pure
+// navigation, never a focus-exit -- exclusively tab/shift+tab (PF-13) and
+// now esc's cascade (D03, below) change m.detailFocus.
+func TestDetailFocusLeftAtSectionLevelIsNoOp(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.cursorID = "ms-1"
 	m = step(t, m, keyMsg(tea.KeyTab))
@@ -739,8 +744,11 @@ func TestDetailFocusLeftAtSectionLevelExitsDetailFocus(t *testing.T) {
 		t.Fatal("setup: expected detail focus on")
 	}
 	m = step(t, m, keyMsg(tea.KeyLeft))
-	if m.detailFocus {
-		t.Fatal("left at section level must exit detail focus")
+	if !m.detailFocus {
+		t.Fatal("left at section level must NOT exit detail focus anymore (B01)")
+	}
+	if m.detailLevel != 0 {
+		t.Fatalf("left at section level must not change detailLevel either: got %d, want 0", m.detailLevel)
 	}
 }
 
