@@ -98,6 +98,38 @@ func TestTypeIconAllTypes(t *testing.T) {
 	}
 }
 
+// TestSetAccentOverridesThenNoOpOnEmptyOrInvalid — E5 Task 5 (bean bt-0l8c):
+// a valid #rrggbb hex overrides Accent/Header's foreground LIVE; an empty OR
+// malformed hex is a No-Op -- the Golden-Risiko this guards (the bean's own
+// PFLICHT wording): SetAccent must never blank out the built-in Mauve accent
+// just because a caller passes "" (e.g. Settings.Theme.Accent's own
+// "unset" zero value at every TUI start that never touched config.yaml) --
+// the 7 golden snapshots render against that default and must stay
+// byte-identical.
+func TestSetAccentOverridesThenNoOpOnEmptyOrInvalid(t *testing.T) {
+	origAccent, origHeader := Accent, Header
+	t.Cleanup(func() { Accent, Header = origAccent, origHeader })
+
+	SetAccent("#f5a97f")
+	if got := Accent.GetForeground(); got != lipgloss.Color("#f5a97f") {
+		t.Errorf("Accent.GetForeground() = %v, want #f5a97f", got)
+	}
+	if got := Header.GetForeground(); got != lipgloss.Color("#f5a97f") {
+		t.Errorf("Header.GetForeground() = %v, want #f5a97f", got)
+	}
+
+	for _, invalid := range []string{"", "nope", "#zzzzzz", "#fff"} {
+		Accent, Header = origAccent, origHeader // reset before each sub-case
+		SetAccent(invalid)
+		if got := Accent.GetForeground(); got != origAccent.GetForeground() {
+			t.Errorf("SetAccent(%q): Accent.GetForeground() = %v, want unchanged %v (No-Op)", invalid, got, origAccent.GetForeground())
+		}
+		if got := Header.GetForeground(); got != origHeader.GetForeground() {
+			t.Errorf("SetAccent(%q): Header.GetForeground() = %v, want unchanged %v (No-Op)", invalid, got, origHeader.GetForeground())
+		}
+	}
+}
+
 // TestPriorityColorMapping — beans-Priorität → erwartete Farbe + Bold-Flag
 // (Adaptation 4).
 func TestPriorityColorMapping(t *testing.T) {

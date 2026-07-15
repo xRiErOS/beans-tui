@@ -11,9 +11,11 @@ package tui
 // directly.
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
+	"beans-tui/internal/config"
 	"beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,6 +85,38 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 		client := m.client
 		date := time.Now().Format("2006-01-02")
 		return m, mutateCmd(func() error { return client.RejectReview(id, comment, date, etag) })
+	case "settings":
+		// E5 Task 5 (bean bt-0l8c, design decision c, Port devd DD2-221):
+		// mirrors "editTitle"'s direct-fire shape (no Confirm-Gate) but is
+		// PURELY LOCAL -- no data.Client mutation, so there is no Cmd to
+		// return either (unlike editTitle/reject's mutateCmd). Every field's
+		// own huh Validate() (box_form_settings.go) already guarantees
+		// tree_width parses as an in-range integer by the time
+		// huh.StateCompleted is reached, so the strconv.Atoi error here is
+		// unreachable in practice -- kept as a defensive fallback (0 ->
+		// clamped back to the built-in default by validateSettings on the
+		// very next LoadSettings) rather than crashing on a stray parse
+		// error, same "hoped away" convention as createOptsFromDraft's own
+		// tags re-parse (form_create_bean.go).
+		repos := linesToRepos(m.form.GetString("repos"))
+		editor := strings.TrimSpace(m.form.GetString("editor"))
+		accent := strings.TrimSpace(m.form.GetString("accent"))
+		treeWidth, _ := strconv.Atoi(strings.TrimSpace(m.form.GetString("tree_width")))
+		m.form = nil
+		m.formKind = ""
+		if err := config.SaveUserSettings(repos, editor, accent, treeWidth); err != nil {
+			m.err = "Einstellungen speichern fehlgeschlagen: " + err.Error()
+			return m, nil
+		}
+		settings, err := config.LoadSettings() // re-read + clamp/validate, Port devd saveAndApplySettings
+		if err != nil {
+			m.err = "Einstellungen neu laden fehlgeschlagen: " + err.Error()
+			return m, nil
+		}
+		m.settings = settings
+		configuredEditor = settings.Editor     // DD2-221 Port: live, no restart (editor.go)
+		theme.SetAccent(settings.Theme.Accent) // No-Op on empty/invalid (theme.go's own guard)
+		return m, nil
 	}
 	m.form = nil
 	m.formKind = ""

@@ -13,6 +13,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/muesli/termenv v0.16.0
 	github.com/spf13/cobra v1.10.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

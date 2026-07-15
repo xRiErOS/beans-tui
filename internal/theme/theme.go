@@ -7,6 +7,7 @@ package theme
 
 import (
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -71,10 +72,25 @@ var (
 	Chevron = lipgloss.NewStyle().Foreground(Peach)
 )
 
-// SetAccent überschreibt den Akzentstil (Cursor/Header) mit einer User-Farbe (z.B. aus
-// einer künftigen Theme-Config). hex muss bereits validiert sein (#rrggbb). Globale
-// Theme-Mutation — nur einmal beim TUI-Start aufrufen.
+// accentHexRe validates SetAccent's own input independently of any caller
+// (E5 Task 5, bean bt-0l8c) -- the theme package does not trust
+// config.validateSettings to have run first.
+var accentHexRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// SetAccent überschreibt den Akzentstil (Cursor/Header) mit einer User-Farbe
+// (Settings.Theme.Accent, config.yaml, E5 Task 5). Ein leerer ODER
+// ungültiger Hex (nicht #rrggbb) ist ein No-Op — der eingebaute Mauve-Akzent
+// bleibt (Golden-Risiko: die 7 Golden-Snapshots rendern gegen den Default und
+// müssen byte-identisch bleiben, wenn config.yaml nie angefasst wurde bzw.
+// Settings.Theme.Accent auf seinem Zero-Value "" steht). Globale
+// Theme-Mutation über package-level vars — Accent/Header werden von JEDEM
+// Render-Aufruf live gelesen (kein Caching), ein SetAccent-Aufruf wirkt
+// daher sofort auf jede noch folgende Render-Ausgabe (DD2-221-Live-Apply-
+// Prinzip), ohne Neustart.
 func SetAccent(hex string) {
+	if !accentHexRe.MatchString(hex) {
+		return
+	}
 	c := lipgloss.Color(hex)
 	Accent = lipgloss.NewStyle().Foreground(c)
 	Header = lipgloss.NewStyle().Bold(true).Foreground(c)

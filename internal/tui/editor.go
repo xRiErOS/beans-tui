@@ -5,10 +5,12 @@ package tui
 // Bubble Tea program, hands the terminal to the user's editor on a temp file
 // seeded with the bean's current body, and resumes once the editor exits.
 // Port devd editor.go:14-96 (editorFinishedMsg/prepareEditor/
-// readEditorResult/editInEditor) VERBATIM -- the ONE deviation is
-// editorBinary(): devd resolves configuredEditor (a TUI-wide setting from
-// devd's config.yaml, an E5-equivalent scope that does not exist yet here),
-// while beans-tui resolves $VISUAL -> $EDITOR -> a bare "vi" fallback
+// readEditorResult/editInEditor) VERBATIM.
+//
+// editorBinary()'s cascade (E5 Task 5, bean bt-0l8c, updates the E3-era
+// comment this file used to carry here): configuredEditor (Settings, E5's
+// ~/.config/beans-tui/config.yaml -- now wired, see configuredEditor's own
+// doc-stamp below) -> $VISUAL -> $EDITOR -> a bare "vi" fallback
 // (design-spec §7 says literally "$EDITOR"; "vi" is the POSIX default,
 // portable everywhere -- devd's "nvim" assumption is not).
 //
@@ -35,13 +37,27 @@ type editorFinishedMsg struct {
 	err     error
 }
 
+// configuredEditor is E5's Settings override (design decision c, PFLICHT:
+// Settings.Editor > $VISUAL > $EDITOR > vi -- bean bt-0l8c, epic bt-5h4d).
+// Package-level like devd's own configuredEditor: set once at TUI-start
+// (app.go Run(), config.LoadSettings) and LIVE-updated by the Settings-Form's
+// submit (box_form_settings.go, Port devd DD2-221). Default "" -- a NEW
+// layer STRICTLY above the pre-existing $VISUAL/$EDITOR/vi cascade below, so
+// an empty value (out-of-the-box, config.yaml never touched) falls straight
+// through unchanged: TestEditorBinaryResolvesVisualThenEditorThenVi remains
+// green without modification.
+var configuredEditor string
+
 // editorBinary resolves the editor command to launch (design decision c):
-// $VISUAL -> $EDITOR -> a bare "vi" fallback (POSIX default -- portable
-// everywhere, unlike devd's "nvim" assumption; design-spec §7 says literally
-// "$EDITOR"). A value may carry arguments (e.g. "code -w"), split on
-// whitespace like devd's own editorBinary. No configuredEditor here: that is
-// E5's ~/.config/beans-tui/config.yaml, which does not exist yet.
+// configuredEditor (Settings, E5) -> $VISUAL -> $EDITOR -> a bare "vi"
+// fallback (POSIX default -- portable everywhere, unlike devd's "nvim"
+// assumption; design-spec §7 says literally "$EDITOR"). A value may carry
+// arguments (e.g. "code -w"), split on whitespace like devd's own
+// editorBinary.
 func editorBinary() []string {
+	if ed := strings.TrimSpace(configuredEditor); ed != "" {
+		return strings.Fields(ed)
+	}
 	for _, envVar := range []string{"VISUAL", "EDITOR"} {
 		if ed := strings.TrimSpace(os.Getenv(envVar)); ed != "" {
 			return strings.Fields(ed)

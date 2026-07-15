@@ -102,6 +102,35 @@ func TestEditorBinaryResolvesVisualThenEditorThenVi(t *testing.T) {
 	}
 }
 
+// TestEditorBinaryPrefersConfiguredEditorOverEnv guards design decision c's
+// TOP layer (E5 Task 5, bean bt-0l8c): a non-empty configuredEditor
+// (Settings.Editor, box_form_settings.go/app.go's config.LoadSettings)
+// STRICTLY wins over $VISUAL/$EDITOR, even when both env vars are set --
+// Settings > $VISUAL > $EDITOR > vi (the bean's own "design decision c,
+// PFLICHT" wording). configuredEditor is reset via t.Cleanup so this test
+// can never leak into TestEditorBinaryResolvesVisualThenEditorThenVi (or any
+// other test in this package) regardless of run order -- that E3 test stays
+// UNCHANGED and green with configuredEditor at its zero-value default "".
+func TestEditorBinaryPrefersConfiguredEditorOverEnv(t *testing.T) {
+	orig := configuredEditor
+	t.Cleanup(func() { configuredEditor = orig })
+
+	configuredEditor = "code -w"
+	t.Setenv("VISUAL", "vim")
+	t.Setenv("EDITOR", "nano")
+
+	got := editorBinary()
+	want := []string{"code", "-w"}
+	if len(got) != len(want) {
+		t.Fatalf("editorBinary() = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("editorBinary() = %v, want %v", got, want)
+		}
+	}
+}
+
 // TestPrepareEditorWritesInitialContentToTempFile guards prepareEditor's
 // tempfile setup -- testable WITHOUT a tea runtime (Port devd editor.go
 // doc-comment, cmd is built but never run here).

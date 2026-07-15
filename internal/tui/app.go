@@ -9,7 +9,9 @@ package tui
 import (
 	"errors"
 
+	"beans-tui/internal/config"
 	"beans-tui/internal/data"
+	"beans-tui/internal/theme"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -32,7 +34,21 @@ var errNilClient = errors.New("bt: nil beans client (Run() must construct a data
 func Run(client *data.Client, repoDir string) error {
 	lipgloss.SetHasDarkBackground(true)
 
+	// E5 Task 5 (bean bt-0l8c, design decision c): ~/.config/beans-tui/
+	// config.yaml, loaded BEFORE tea.NewProgram so configuredEditor
+	// (editor.go) and the accent override (theme.SetAccent) are already
+	// live for the very first frame -- a missing/corrupt config.yaml (or no
+	// $HOME at all) is NOT fatal (LoadSettings' own contract), Defaults
+	// apply and startup proceeds unchanged ("Missing-Config-Robustheit").
+	settings, err := config.LoadSettings()
+	if err != nil {
+		settings = config.DefaultSettings()
+	}
+	configuredEditor = settings.Editor     // design decision c: Settings > $VISUAL > $EDITOR > vi (editor.go)
+	theme.SetAccent(settings.Theme.Accent) // No-Op on empty/invalid (theme.go's own guard) -- built-in Mauve stays by default
+
 	m := newModel(client, repoDir)
+	m.settings = settings
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	// B05 (MANDATORY, bean bt-7jr8): data.Watch's onChange callback runs on

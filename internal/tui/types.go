@@ -9,6 +9,7 @@ package tui
 import (
 	"time"
 
+	"beans-tui/internal/config"
 	"beans-tui/internal/data"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -431,6 +432,25 @@ type model struct {
 	lastClickIdx int
 	lastClickAt  time.Time
 	clock        func() time.Time
+
+	// Settings (E5 Task 5, bean bt-0l8c, design decision c): the WHOLE
+	// config.Settings struct (mirrors devd app.go's own m.cfg precedent,
+	// epic-E5-plan.md's model-fields sketch) -- loaded once at TUI-start
+	// (app.go Run(), config.LoadSettings) and re-assigned wholesale on every
+	// Settings-Form submit (box_form_settings.go's submitForm "settings"
+	// case, box_confirm_create.go) so the form's next open always prefills
+	// from whatever was last saved, LIVE, no restart. Zero value (a fresh
+	// model in tests that never went through Run(), or newModel()'s own
+	// return before Run() assigns it) is config.Settings{} -- an empty
+	// repos list, editor "", accent "", tree_width 0 (NOT
+	// validateSettings' clamped default 36; this field is a plain struct
+	// value, not a lazy accessor -- code that needs the clamped/defaulted
+	// shape calls config.LoadSettings()/config.DefaultSettings() directly,
+	// same as Run() does). buildSettingsForm tolerates the 0 fine
+	// (strconv.Itoa(0) == "0", no crash) -- Run() populates this BEFORE
+	// tea.NewProgram in the real app, so a live TUI session never observes
+	// the zero value in practice.
+	settings config.Settings
 }
 
 // newModel builds the initial (pre-load) App-Shell state.

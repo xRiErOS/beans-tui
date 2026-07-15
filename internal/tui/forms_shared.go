@@ -140,6 +140,8 @@ func (m model) formTitle() string {
 		return "Edit title"
 	case "reject":
 		return "Review ablehnen"
+	case "settings":
+		return "Settings"
 	}
 	return ""
 }

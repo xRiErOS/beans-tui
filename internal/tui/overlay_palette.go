@@ -76,6 +76,10 @@ func paletteActions(m model) []paletteItem {
 		paletteItem{kind: paletteKindAction, actionID: "filter", label: "filter: facetten"},
 		paletteItem{kind: paletteKindAction, actionID: "search", label: "search: beans"},
 		paletteItem{kind: paletteKindAction, actionID: "reload", label: "reload: daten"},
+		// E5 Task 5 (bean bt-0l8c): the Settings-Form has NO dedicated
+		// keybinding (design-spec §7 knows none) -- reachable exclusively
+		// through the Command-Center, appended last.
+		paletteItem{kind: paletteKindAction, actionID: "settings", label: "settings: öffnen"},
 	)
 	return items
 }
@@ -285,6 +289,11 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 			return m.openSearchInput()
 		case "reload":
 			return m, loadCmd(m.client)
+		case "settings":
+			// E5 Task 5 (bean bt-0l8c): opens the Settings-Form
+			// (box_form_settings.go) -- same open-form shape as edit_title,
+			// no mutTarget (settings are repo-independent).
+			return m.openSettingsForm()
 		}
 	}
 	return m, nil
