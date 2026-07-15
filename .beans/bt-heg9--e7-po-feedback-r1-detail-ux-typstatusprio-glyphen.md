@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:08:09Z
+updated_at: 2026-07-15T14:11:37Z
 parent: bt-apmy
 ---
 
@@ -75,3 +75,10 @@ type: xxxx    status: xxxx    prio: xxxx
 - reload data · create bean · delete bean · search beans · filter facets (analog: 'filter beans'? — Planner: konsistentes verb entity wählen) · switch repo (bzw. 'go to repo picker' — Planner entscheidet konsistent, PO-Beispiele sind maßgeblich)
 
 PO-Beispiele verbatim: 'set tags', 'set status', 'go to backlog', 'reload data', 'go to settings', 'set title'.
+
+
+## PO-Nachtrag 3 (2026-07-15)
+
+- **D01 REVIDIERT / PF-5 präzisiert:** KEIN enter als Detail-Fokus-Einstieg — der bestehende tab-Mechanismus gefällt dem PO und BLEIBT der Einstieg. Die enter-Kaskade gilt nur INNERHALB des Detail-Fokus: enter auf Accordion-Sektion → Feld-Navigation (▷/▶ mit i/k bzw. Pfeilen), erneutes enter auf Feld → Edit-Overlay (z.B. status → Status-Menü). Zifferntasten 1-9 (PF-2) unverändert gewünscht.
+- **PO-Validierung (E6-Evidenz):** Filter-Logik in Backlog/Tree vom PO explizit als 'exzellent' abgenommen → als PO-Statement in US-05-Validierung übernehmen.
+- **Tags:** bleiben (bestätigt). NEU: zentrale Tag-Definition über eigene Page → separates Feature-bean (bt-Verweis folgt), Scope-Entscheid v1 vs. v1.1 offen (Q03 an PO).
