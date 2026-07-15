@@ -276,7 +276,10 @@ func TestBeanMatchesFacetsTagRequiresAnyOverlap(t *testing.T) {
 // matching zero beans renders cleanly -- the Tree pane simply shows no rows
 // below its (still-rendered) search/filter head row. The real assertion is
 // implicit: if View()/visibleNodes() panicked, this test would fail with a
-// stack trace rather than a plain t.Fatal.
+// stack trace rather than a plain t.Fatal. (PF-10, bean bt-uyzf: the Tree
+// pane no longer renders a "Tree" title line -- the Breadcrumb's "Browse"
+// title carries the view identity now, and the search head row is the
+// pane's own still-rendered signal that its frame survived.)
 func TestEmptyFacetMatchViewRendersWithoutPanic(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.width, m.height = 100, 30
@@ -286,7 +289,7 @@ func TestEmptyFacetMatchViewRendersWithoutPanic(t *testing.T) {
 		t.Fatalf("visibleNodes() = %d nodes, want 0 (no fixture bean is scrapped)", n)
 	}
 	out := m.View()
-	if !strings.Contains(out, "Tree") {
-		t.Error("View() with zero filtered matches lost the Tree pane frame entirely")
+	if !strings.Contains(out, searchShield) {
+		t.Error("View() with zero filtered matches lost the Tree pane's search head row entirely")
 	}
 }

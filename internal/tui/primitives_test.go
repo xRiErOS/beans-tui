@@ -213,17 +213,16 @@ func TestRenderPaneFocusedBorderColor(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii)
 
-	p := pane{title: "T", rows: []string{"row one", "row two"}}
+	p := pane{rows: []string{"row one", "row two"}}
 	focused := renderPane(p, 20, 4, true)
 	unfocused := renderPane(p, 20, 4, false)
 
 	mauve := fgEscape(theme.Mauve)
 	overlay := fgEscape(theme.Overlay)
 
-	// Mauve only ever appears via the focused border+title (theme.Header) --
-	// the separator line always renders Dim/Overlay regardless of focus, so
-	// Overlay legitimately appears in BOTH outputs; Mauve is the actual
-	// focus signal and must be exclusive to the focused render.
+	// Mauve only ever appears via the focused BORDER now (PF-10, bean bt-uyzf,
+	// removed the title line that used to also carry it via theme.Header) --
+	// it must be exclusive to the focused render.
 	if !strings.Contains(focused, mauve) {
 		t.Errorf("focused renderPane missing the Mauve border escape %q", mauve)
 	}
@@ -236,6 +235,29 @@ func TestRenderPaneFocusedBorderColor(t *testing.T) {
 
 	if focused == unfocused {
 		t.Fatal("renderPane output identical for focused vs unfocused")
+	}
+}
+
+// TestRenderPaneNoTitleLine guards PF-10 (design-spec.md §15, epic-E7-plan.md
+// »Task 5«, bean bt-uyzf): renderPane must no longer render a title line +
+// underline-separator ahead of its rows -- the Breadcrumb already carries the
+// view identity (PO-Nachtrag 4, PO wörtlich: "Es genügt, wenn es in den
+// Breadcrumbs ... angezeigt wird. Dann die Suche - sonst ist es obsolet.").
+// The FIRST content line inside the border must be rows[0] verbatim, not an
+// empty/short title+separator pair consuming 2 lines ahead of it.
+func TestRenderPaneNoTitleLine(t *testing.T) {
+	p := pane{rows: []string{"first content row", "second content row"}}
+	out := renderPane(p, 30, 4, false)
+
+	lines := strings.Split(out, "\n")
+	if len(lines) != 6 { // border(1) + h=4 content + border(1), Golden Rule #1
+		t.Fatalf("renderPane produced %d lines, want 6 (h=4 + 2 border rows): %q", len(lines), out)
+	}
+	if !strings.Contains(lines[1], "first content row") {
+		t.Fatalf("renderPane's first content line (row 1, right after the top border) must be rows[0] verbatim -- no title/separator line ahead of it. got line 1: %q\nfull:\n%s", lines[1], out)
+	}
+	if !strings.Contains(lines[2], "second content row") {
+		t.Fatalf("renderPane's second content line (row 2) must be rows[1] verbatim, right after rows[0] -- no title/separator line consuming budget. got line 2: %q\nfull:\n%s", lines[2], out)
 	}
 }
 

@@ -425,10 +425,12 @@ func treeRowText(n treeNode) string {
 // bar plus the WHOLE row accent-tinted (own per-cell colors stripped first).
 // focused=false (Detail pane has focus) freezes the cursor muted instead of
 // accent -- only the focused pane's cursor is highlighted (devd D03). bodyH
-// is the pane's available ROW height (renderPane's h minus its own
-// title+separator lines -- Golden Rule #1 still holds: windowing trims the
-// ROWS handed to renderPane, it never forces a Height() on the bordered
-// style itself). B01 (T8 Opus quality review): rows are windowed around the
+// is the caller's own row-window height (viewBrowseRepo passes bodyH-1, the
+// pane's full content budget minus the 1-line search head -- PF-10, bean
+// bt-uyzf, removed renderPane's own title+separator budget entirely, so
+// nothing else is subtracted here anymore). Golden Rule #1 still holds:
+// windowing trims the ROWS handed to renderPane, it never forces a Height()
+// on the bordered style itself. B01 (T8 Opus quality review): rows are windowed around the
 // cursor (devd windowAround/windowStart port, view_browse_project.go:
 // 647-670) so a tree taller than the pane never hides the cursor below the
 // fold.
@@ -559,7 +561,7 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}
-	return renderPane(pane{title: "Detail", rows: rows}, w, h, focused)
+	return renderPane(pane{rows: rows}, w, h, focused)
 }
 
 // searchShield is the search head row's glyph (U+2315 TELEPHONE RECORDER,
@@ -739,13 +741,14 @@ func (m model) viewBrowseRepo() string {
 	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	nodes := m.visibleNodes()
 	// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
-	// pane's rows, costing 1 line of its bodyH-2 content budget -- the actual
-	// tree rows window to bodyH-3 (one less than T8/E1's bodyH-2) so the
-	// combined [searchLine, ...treeRows] slice still fits renderPane's own
-	// Golden-Rule-#1 line cap.
+	// pane's rows, costing 1 line of its bodyH content budget -- the actual
+	// tree rows window to bodyH-1 (PF-10, bean bt-uyzf, widened from bodyH-3
+	// now that renderPane no longer reserves its own title+separator lines)
+	// so the combined [searchLine, ...treeRows] slice still fits renderPane's
+	// own Golden-Rule-#1 line cap.
 	searchLine := m.treeSearchLine(lw - 2)
-	treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-3)...)
-	treeBox := renderPane(pane{title: "Tree", rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
+	treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-1)...)
+	treeBox := renderPane(pane{rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
 	detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
 
@@ -763,10 +766,11 @@ func (m model) viewBrowseRepo() string {
 // analog windowStart's own doc comment): if viewBrowseRepo's algebra ever
 // changes, it changes HERE too automatically (single source), so a click can
 // never silently land on the wrong row through independent drift. Row 0
-// (clickRow==0, right below the pane's title+separator) is the search head
-// line (treeSearchLine) -- never a node target. Row 1+ maps via
-// windowStart(len(nodes), bodyH-3, cursorPos) + (clickRow-1), the SAME
-// bodyH-3 window height treeRows itself windows to (treeRowsWithHead's own
+// (clickRow==0, right below the pane's own top border -- PF-10, bean bt-uyzf,
+// removed the title+separator lines that used to sit there) is the search
+// head line (treeSearchLine) -- never a node target. Row 1+ maps via
+// windowStart(len(nodes), bodyH-1, cursorPos) + (clickRow-1), the SAME
+// bodyH-1 window height treeRows itself windows to (treeRowsWithHead's own
 // budget trade, above). ok=false for a click outside the Tree pane's column
 // span, on/above the search line, or past the last actually-rendered row.
 func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool) {
@@ -790,7 +794,7 @@ func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool
 		return 0, false // above the pane, or row 0 == the search head line
 	}
 
-	windowRows := bodyH - 3
+	windowRows := bodyH - 1
 	if windowRows < 0 {
 		windowRows = 0
 	}

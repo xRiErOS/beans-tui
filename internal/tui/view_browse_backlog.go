@@ -240,11 +240,13 @@ func (m model) viewBacklog() string {
 	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	vis := m.backlogVisible()
 	// Same 1-header-row budget trade as the Tree's search head (Task 3):
-	// the search/filter summary line costs 1 line of the list pane's
-	// bodyH-2 content budget, so the actual rows window to bodyH-3.
+	// the search/filter summary line costs 1 line of the list pane's bodyH
+	// content budget, so the actual rows window to bodyH-1 (PF-10, bean
+	// bt-uyzf, widened from bodyH-3 now that renderPane no longer reserves
+	// its own title+separator lines).
 	searchLine := m.treeSearchLine(lw - 2)
-	rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-3)...)
-	listBox := renderPane(pane{title: "Backlog", rows: rows}, lw, bodyH, !m.detailFocus)
+	rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-1)...)
+	listBox := renderPane(pane{rows: rows}, lw, bodyH, !m.detailFocus)
 	detailBox := m.renderBacklogDetailPane(vis, rw, bodyH, m.detailFocus)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, listBox, detailBox)
 
@@ -335,8 +337,10 @@ func (m model) backlogCursorMove(vis []*data.Bean, delta int) model {
 // clickPaneGeometry): same bodyH/lw algebra, just this view's own head/
 // localKeys. Row 0 is the search/facet head line (m.treeSearchLine, shared
 // with the Tree) -- never a row target; row 1+ maps via
-// windowStart(len(vis), bodyH-3, m.backlogList.cursor) + (clickRow-1) --
-// flat list, no Doppelklick concept (plan epic-E5-plan.md »Task 4« Step 6).
+// windowStart(len(vis), bodyH-1, m.backlogList.cursor) + (clickRow-1) -- PF-10
+// (bean bt-uyzf) widened this from bodyH-3 now that renderPane no longer
+// reserves title+separator lines -- flat list, no Doppelklick concept (plan
+// epic-E5-plan.md »Task 4« Step 6).
 func backlogClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok bool) {
 	w, h := m.width, m.height
 	if w <= 0 {
@@ -358,7 +362,7 @@ func backlogClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok b
 		return 0, false
 	}
 
-	windowRows := bodyH - 3
+	windowRows := bodyH - 1
 	if windowRows < 0 {
 		windowRows = 0
 	}

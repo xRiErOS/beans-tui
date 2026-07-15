@@ -17,6 +17,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -308,5 +309,22 @@ func TestTreeWidthFromSettingsAffectsGeometry(t *testing.T) {
 	}
 	if lwConfigured <= lwDefault {
 		t.Fatalf("configured treeWidth (28) did not widen the left pane vs. the default fallback (lw=%d): got lw=%d", lwDefault, lwConfigured)
+	}
+}
+
+// TestClickPaneGeometryOriginYExcludesTitleAndSeparator guards PF-10
+// (design-spec.md §15, epic-E7-plan.md »Task 5«, bean bt-uyzf): renderPane no
+// longer draws a title line + underline-separator ahead of a pane's rows, so
+// clickPaneGeometry's originY loses the two `+1` terms that used to account
+// for them -- originY is now outer-top-border(1) + head height + divider(1)
+// + the pane's OWN top border(1) (a DIFFERENT line, still there), with row 0
+// of the caller's own windowed-content index space starting immediately
+// after.
+func TestClickPaneGeometryOriginYExcludesTitleAndSeparator(t *testing.T) {
+	head := "head"
+	_, _, _, _, originY := clickPaneGeometry(80, 24, head, "footer", 0)
+	want := 1 + lipgloss.Height(head) + 1 + 1
+	if originY != want {
+		t.Fatalf("originY = %d, want %d (outer border(1) + head(%d) + divider(1) + pane's own top border(1) -- PF-10 drops only the pane's title+separator lines)", originY, want, lipgloss.Height(head))
 	}
 }

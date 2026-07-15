@@ -74,8 +74,9 @@ func treeWidthFloor(configured int) int {
 // two View functions (viewBrowseRepo/viewBacklog, view_browse_repo.go/
 // view_browse_backlog.go) build ahead of their own two-pane body -- bodyH/
 // lw/rw plus the screen origin (originX/originY) of the pane's FIRST
-// windowed content row (title + separator + the search-or-summary head row
-// already consumed). Single source for BOTH halves: the two View functions
+// windowed content row (the search-or-summary head row already consumed --
+// PF-10, bean bt-uyzf, removed the pane's own title+separator lines, so
+// nothing else precedes it now). Single source for BOTH halves: the two View functions
 // themselves (each now calls this instead of an independently maintained
 // avail/bodyH/lw/rw copy) AND treeClickRow/backlogClickRow (Golden-Rule-
 // Drift-Schutz, mirrors windowStart's own shared-geometry rationale,
@@ -111,10 +112,13 @@ func clickPaneGeometry(w, h int, head, localKeys string, treeWidth int) (bodyH, 
 	}
 	lw, rw = masterDetailWidths(innerW, treeWidthFloor(treeWidth))
 	// originY: outer top border(1) + head line(s) + divider(1) + the pane's
-	// OWN top border(1) + its title line(1) + its separator line(1) -- the
-	// row after this is row 0 of the caller's own windowed-content index
-	// space (the search/summary head line).
-	originY = 1 + lipgloss.Height(head) + 1 + 1 + 1 + 1
+	// OWN top border(1) -- its title line + separator line no longer exist
+	// (PF-10, design-spec.md §15, epic-E7-plan.md »Task 5«, bean bt-uyzf:
+	// renderPane dropped both, the Breadcrumb alone carries view identity
+	// now; the pane's own top border is a DIFFERENT line and stays). The row
+	// after this is row 0 of the caller's own windowed-content index space
+	// (the search/summary head line).
+	originY = 1 + lipgloss.Height(head) + 1 + 1
 	originX = 1 // outer border's left column
 	return
 }

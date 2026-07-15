@@ -149,7 +149,11 @@ func TestPalFilteredActionsFuzzyStatMatchesSetStatusAndSetParent(t *testing.T) {
 // browse/repo picker/settings) share PF-8's UNCHANGED "go to X" shape -- a
 // plain "go" query must still fuzzy-match all 4 (not fewer, per the
 // Prelude's "genau die 4 'go to'-Einträge" requirement), in declaration
-// order, with no other action or bean leaking in.
+// order, with no other action or bean leaking in. (T5-mini, bean bt-uyzf,
+// optional T4-review I01): none of fixtureBeans' titles ("Milestone One"/
+// "Epic One"/"Task One"/"Task Two") contain a 'g' at all, so no bean item
+// could ever fuzzy-match "go" and silently inflate the 4-item count above --
+// the exact-length assertion below implicitly guards that absence too.
 func TestPalFilteredActionsFuzzyGoMatchesAllFourGoToEntries(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.palQuery = "go"

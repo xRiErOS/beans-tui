@@ -19,9 +19,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// pane is a titled, bordered column (master lists, previews).
+// pane is a bordered column (master lists, previews). PF-10 (design-spec.md
+// §15, epic-E7-plan.md »Task 5«, bean bt-uyzf) removed the title field: a
+// pane-internal title + underline-separator duplicated the Breadcrumb's own
+// view identity (PO-Nachtrag 4, PO wörtlich: "Es genügt, wenn es in den
+// Breadcrumbs ... angezeigt wird. Dann die Suche - sonst ist es obsolet.") --
+// the Breadcrumb (Chrome-Zeile 1) is now the SOLE carrier of view identity,
+// renderPane starts straight into rows.
 type pane struct {
-	title  string
 	rows   []string
 	cursor int
 	isList bool
@@ -33,14 +38,8 @@ type pane struct {
 // height h+2). That way the alignment never tips over if a future row isn't
 // truncated: the line count is explicitly capped, not dependent on Height().
 func renderPane(p pane, w, h int, focused bool) string {
-	titleStyle := theme.Dim
-	if focused {
-		titleStyle = theme.Header
-	}
 	lines := make([]string, 0, h)
-	lines = append(lines, titleStyle.Render(truncate(p.title, w)))
-	lines = append(lines, theme.Dim.Render(strings.Repeat("─", min(w, lipgloss.Width(p.title)+2))))
-	for i := 0; i < len(p.rows) && len(lines) < h; i++ { // max h lines incl. title+separator
+	for i := 0; i < len(p.rows) && len(lines) < h; i++ { // max h lines, no title/separator budget anymore (PF-10)
 		row := truncate(p.rows[i], w-2)
 		if p.isList && i == p.cursor && focused {
 			row = theme.Accent.Render("▸ ") + row

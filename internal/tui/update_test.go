@@ -401,7 +401,7 @@ func TestTabTogglesDetailFocusAndPaneAccent(t *testing.T) {
 	}
 
 	nodes := m.visibleNodes()
-	treePane := renderPane(pane{title: "Tree", rows: m.treeRows(nodes, !m.detailFocus, 10)}, 30, 10, !m.detailFocus)
+	treePane := renderPane(pane{rows: m.treeRows(nodes, !m.detailFocus, 10)}, 30, 10, !m.detailFocus)
 	detailPane := m.renderDetailPane(nodes, 30, 10, m.detailFocus)
 	if !strings.Contains(treePane, mauve) {
 		t.Error("Tree pane not accented while Tree has focus")
@@ -415,7 +415,7 @@ func TestTabTogglesDetailFocusAndPaneAccent(t *testing.T) {
 		t.Fatal("tab did not flip detailFocus to true")
 	}
 
-	treePane = renderPane(pane{title: "Tree", rows: m.treeRows(nodes, !m.detailFocus, 10)}, 30, 10, !m.detailFocus)
+	treePane = renderPane(pane{rows: m.treeRows(nodes, !m.detailFocus, 10)}, 30, 10, !m.detailFocus)
 	detailPane = m.renderDetailPane(nodes, 30, 10, m.detailFocus)
 	if strings.Contains(treePane, mauve) {
 		t.Error("Tree pane still accented after tab moved focus to Detail")
