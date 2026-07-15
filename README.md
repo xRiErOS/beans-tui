@@ -1,156 +1,270 @@
 # beans-tui (`bt`)
 
-PO-Cockpit-TUI für beans-Repos — Port der DevDash-TUI (`dd`) auf das
-[beans](https://github.com/hmans/beans)-Framework. Design/Architektur:
+PO-cockpit TUI for beans repos — a port of the DevDash TUI (`dd`) onto the
+[beans](https://github.com/hmans/beans) framework. Design/architecture:
 [`docs/plans/v1-port/design-spec.md`](docs/plans/v1-port/design-spec.md).
 
 ## Status
 
-E1 (Foundation), E2 (Browse & Detail), E3 (Mutationen) und E4 (Command-Center)
-sind fertig: read-only Tree über den beans-Datenlayer
-(Milestones → Epics → Tasks) mit Live-Reload via fsnotify-Watcher, Quit-Confirm
-(E1); Master-Detail-Fokus mit Detail-Accordion (Meta/Body/Beziehungen/Historie,
-Beziehungs-Sprung), lokale Live-Suche + Bleve ab 3 Zeichen, Facetten-Filter
-(Status/Type/Priority/Tag, geteilt über Tree UND Backlog) und die
-Backlog-View mit Sort-Toggle (E2); volle Mutations-Verdrahtung — kombiniertes
-Status/Type/Priority-Menü, Tag-/Parent-/Blocking-Picker, Create-Form (huh,
-Confirm-Gate), Titel-/Body-Edit (`$EDITOR`) und Delete-Confirm mit
-Kinder-/Verknüpfungs-Warnung, durchgehend mit ETag-Konflikt-Handling (E3);
-Command-Center (`ctrl+k`, fuzzy Aktionen + Bean-Suche gemischt,
-kontextabhängig zuerst) (E4). E5 (Polish) ist fertig: Toast-System (inkl.
-Konflikt-sticky), Help-Overlay `?`, Yank `y` (OSC52+nativ, Bean-/Epic-Kontext),
-Maus (Wheel/Klick/Doppelklick), Settings
-(`~/.config/beans-tui/`), Lobby V1 + Repo-Picker `p` (Watcher-Lifecycle-
-Switch) und die Archiv-Sicht (completed/scrapped default-aus, togglebar).
-E6 (Validierung & Release) ist offen — offener Stand: `beans list --ready`.
+E1 (Foundation), E2 (Browse & Detail), E3 (Mutations), E4 (Command-Center) and
+E5 (Polish) are done: read-only Tree over the beans data layer (Milestones →
+Epics → Tasks) with live-reload via an fsnotify watcher, quit-confirm (E1);
+master-detail focus with a Detail Accordion (Meta/Body/Relations/History,
+relation-jump), local live search + Bleve from 3 characters, facet filter
+(Status/Type/Priority/Tag, shared across Tree AND Backlog) and the Backlog
+view with sort-toggle (E2); full mutation wiring — combined Status/Type/
+Priority menu, Tag-/Parent-/Blocking-Picker, Create-Form (huh, confirm-gate),
+title/body edit (`$EDITOR`) and delete-confirm with children-/link-warning,
+throughout with ETag-conflict handling (E3); Command-Center (`ctrl+k`, fuzzy
+actions + bean search mixed, context-first) (E4); Toast system (incl. sticky
+conflict), Help-Overlay `?`, Yank `y` (OSC52+native, bean/epic context),
+mouse (wheel/click/double-click), Settings (`~/.config/beans-tui/`), Lobby V1
++ Repo-Picker `p` (watcher lifecycle switch) and the Archive view
+(completed/scrapped default-off, togglable) (E5).
 
-**Review läuft im Chat, nicht in der TUI.** Ein früheres Review-Cockpit-View
-(`R`) wurde per PO-Entscheid entfernt (PF-14, E7 T1, 2026-07-15 — „widerspricht
-dem lean-stack-Wesen und schafft wieder Zeremonie"). Die TUI zeigt Review-Stand
-nur noch als gewöhnliche Tag-Sichtbarkeit: Tag-Trio `to-review` (Agent meldet
-fertig) → `accepted`/`rejected` (PO entscheidet im Chat bzw. via
-`beans update --tag`), auffindbar wie jeder andere Tag über Tree/Detail/Filter/
-Suche — keine eigene TUI-Interaktion dafür.
+E7 (PO-Feedback R1: Detail-UX + Type/Status/Priority glyphs) is done: the
+Review-Cockpit was removed (PF-14, see below), Type/Status/Priority now
+render as single colored letters/glyphs instead of words or shape icons
+(PF-6, see the legend below), all user-facing strings are English (PF-7) with
+a `verb entity` Command-Center schema (PF-8), the Detail pane now opens with
+a header block (bean-id / title / `type: … status: … prio: …`) followed by an
+editable Meta field list with a permanently reserved cursor gutter (PF-1,
+PF-3, PF-4, PF-12), redundant pane titles were removed (PF-10), the Header/
+Footer keybinding split is complete with no duplication (PF-11), and
+Detail-Focus gained an enter-cascade (section → field → edit-overlay) plus
+symmetric `tab`/`shift+tab` focus pairing (PF-2, PF-5, PF-13). E6
+(Validierung & Release) is open — current state: `beans list --ready`.
 
-## Voraussetzungen
+**Review happens in the chat, not in the TUI.** A former Review-Cockpit view
+(`R`) was removed per PO decision (PF-14, E7 T1, 2026-07-15 — "contradicts
+the lean-stack spirit and reintroduces ceremony"). The TUI shows review state
+only as ordinary tag visibility: the tag trio `to-review` (agent reports
+done) → `accepted`/`rejected` (PO decides in chat or via `beans update
+--tag`), discoverable like any other tag via Tree/Detail/Filter/Search — no
+dedicated TUI interaction for it.
 
-- beans-CLI ≥ 0.4.2 im `PATH`
+## Glyph legend
+
+Type, Status and Priority render as a single colored letter/glyph each
+(redundant encoding: color AND shape/letter, for accessibility) — PF-6.
+
+| Type | Glyph | Color |
+|---|---|---|
+| milestone | `M` | blue |
+| epic | `E` | mauve |
+| feature | `F` | mauve |
+| task | `T` | sky |
+| bug | `B` | red |
+
+| Status | Glyph | Color |
+|---|---|---|
+| draft | `d` | blue |
+| todo | `t` | green |
+| in-progress | `i` | yellow |
+| completed | `c` | subtext (muted) |
+| scrapped | `s` | subtext (muted) |
+
+| Priority | Glyph | Color |
+|---|---|---|
+| critical | `‼` | red, bold |
+| high | `!` | yellow, bold |
+| normal | `·` | text |
+| low | `↓` | subtext (muted) |
+| deferred | `→` | subtext (muted) |
+
+Unknown/future enum values fall back to a neutral `·` glyph in text color
+rather than disappearing or signalling incorrectly. Set `BT_ASCII_ICONS=1`
+for an ASCII-only fallback set on terminals without EAW-neutral Unicode
+support (affects Priority only — Type/Status letters are already ASCII).
+
+## Prerequisites
+
+- beans CLI ≥ 0.4.2 on `PATH`
 - Go 1.26+
 
 ## Installation
 
 ```sh
 make build          # → bin/bt
-# oder
+# or
 command go install .
 ```
 
 ## Start
 
 ```sh
-bt          # sucht .beans.yml aufwärts vom cwd
-bt <pfad>   # explizites Repo
+bt          # searches .beans.yml upward from cwd
+bt <path>   # explicit repo
 ```
 
-## Keybindings (Stand E5)
+## Keybindings
 
-| Taste | Aktion |
+The Header (top row) always shows the same 7 globally-reachable bindings, no
+matter which view is active. The Footer (bottom row) is context-sensitive: it
+shows the bindings local to whatever currently has full input focus — the
+active view when nothing else is open, or the active overlay/form/menu's own
+bindings the instant one opens (so the footer never shows a stale hint for a
+key that isn't live). No binding ever appears in both places at once.
+
+### Header (global, always visible)
+
+| Key | Action |
 |---|---|
-| `↑`/`i`, `↓`/`k` | Cursor (Tree/Backlog) bzw. Section-/Feld-Cursor im Detail-Fokus |
-| `→`/`l` | Knoten expandieren; im Detail-Fokus: Beziehungen-Section → Feld-Ebene rein |
-| `←`/`j` | Knoten einklappen; im Detail-Fokus: Feld-Ebene raus, danach Detail-Fokus verlassen |
-| `enter` | Öffnen/Bestätigen; im Detail-Fokus auf einer Beziehung: dorthin springen |
-| `tab` | Fokus-Tausch Tree/Backlog ↔ Detail-Accordion |
-| `1`–`4` | Detail-Accordion: direkter Section-Sprung (Meta/Body/Beziehungen/Historie) |
-| `/` | Suche — lokaler Live-Filter (Titel), ab 3 Zeichen zusätzlich Bleve (Titel+Body) |
-| `f` | Facetten-Filter öffnen (Status/Type/Priority/Tag/Archiv, siehe unten) |
-| `X` | Facetten-Filter zurücksetzen (Tree und Backlog) |
-| `b` | Backlog-View (parentlose+ready beans, geteilter Such-/Filter-Zustand) |
-| `S` | Backlog: Sort-Toggle, zyklisch status → priority → created → updated |
-| `s` | Status/Type/Priority-Menü (kombiniert, ein Key für alle drei) |
-| `t` | Tag-Picker (Toggle-Multi-Select, Zähler, Freitext-Neuanlage) |
-| `a` | Parent-Picker (Zyklen-Ausschluss + Typ-Hierarchie) |
-| `B` | Blocking-Picker (Toggle-Multi-Select) |
-| `c` | Bean anlegen (huh-Formular, Confirm-Gate) |
-| `e` | Titel bearbeiten (Formular, direkt ohne Confirm) |
-| `ctrl+e` | Body im `$EDITOR` bearbeiten (`$VISUAL` → `$EDITOR` → `vi`, Settings-`editor` hat Vorrang vor beiden — siehe Settings unten) |
-| `d` | Löschen (Confirm, Kinder-/Verknüpfungs-Warnung — kaskadiert nicht) |
-| `y` | Yank — Bean-/Epic-Kontext (Markdown, inkl. Children-Tabelle bei Epic/Milestone) in die Zwischenablage (OSC52 + nativ), Toast bestätigt |
-| `p` | Repo-Picker/Lobby öffnen (von überall), letztes Repo persistiert (`~/.config/beans-tui/state.json`) |
-| `?` | Help-Overlay (aus der Keymap generiert), `esc`/`?`/`q` schließt |
-| `ctrl+r` | Daten neu laden |
-| `ctrl+k`/`K` | Command-Center öffnen (fuzzy Aktionen + Bean-Suche, von überall außer aus einem offenen Overlay/Formular/Filter/Suchfeld heraus) |
-| `q` | Quit (mit Confirm) |
-| `ctrl+c` | Sofort-Quit |
-| Maus: Wheel | Cursor der aktiven View bewegen (Tree/Backlog — kein Scroll-Offset, der Cursor folgt dem Render automatisch) |
-| Maus: Klick | Cursor auf die geklickte Zeile setzen; bei einem expandierbaren, noch geschlossenen Tree-Knoten expandiert der Klick direkt |
-| Maus: Doppelklick | Auf einem bereits offenen, expandierbaren Tree-Knoten (<500ms zweiter Klick) klappt ihn ein — ein Einzelklick auf einem offenen Knoten kollabiert NICHT, nur Cursor (devd-D03-Semantik) |
-| Maus: Klick auf Toast | Dismisst den Toast sofort, hat Vorrang vor jedem offenen Formular/Overlay |
+| `ctrl+r` | Reload data |
+| `ctrl+k` / `K` | Open Command-Center |
+| `p` | Open repo-picker/Lobby |
+| `?` | Help-Overlay |
+| `esc` | Back |
+| `enter` | Open/confirm |
+| `q` / `ctrl+c` | Quit (confirm) / immediate quit |
 
-Archiv-Toggle liegt bewusst als Facetten-Zeile ("Archivierte einblenden") im
-`f`-Menü statt als eigener Key — Toggle mit `space`/`x` wie jede andere
-Facette. Default aus: `completed`/`scrapped` Beans sind ausgeblendet (auch
-archivierte), togglebar sichtbar.
+### Footer — Browse (Tree + Detail-Focus)
 
-### Review (Tag-Trio, im Chat)
+| Key | Action |
+|---|---|
+| `↑`/`i`, `↓`/`k` | Cursor (Tree) / Section- or field-cursor (Detail-Focus) |
+| `→`/`l` | Expand node / Detail-Focus: descend a section into its field list |
+| `←`/`j` | Collapse node / Detail-Focus: leave field list, then leave Detail-Focus |
+| `/` | Search — local live filter (title), from 3 characters also Bleve (title+body) |
+| `s` | Status/Type/Priority menu (combined, one key for all three) |
+| `c` | Create bean (huh form, confirm-gate) |
+| `d` | Delete (confirm, children-/link-warning — no cascade) |
+| `e` | Edit body in `$EDITOR` (`$VISUAL` → `$EDITOR` → `vi`, Settings `editor` wins over both — see Settings below) |
+| `tab` | Focus toggle Tree ↔ Detail-Accordion |
+| `shift+tab` | Focus back to Tree (one-way, no-op if already in Tree) |
+| `1`–`4` | Detail-Focus: direct section jump (Meta/Body/Relations/History) |
 
-Kein eigenes TUI-View mehr (PF-14, s.o.). Review läuft komplett außerhalb der
-TUI:
+`f`/`X`/`b`/`t`/`a`/`B`/`y` (Filter/Clear-Filter/Backlog/Tag-Picker/
+Parent-Picker/Blocking-Picker/Yank) are reachable from Browse but are not
+listed in this footer — a known, deliberately narrow footer scope (see Known
+Issues below); they remain in the Help-Overlay (`?`).
 
-| Schritt | Wer | beans-Operation |
+**Detail-Focus enter-cascade** (`tab` is the only way IN — this does not
+change): with a section highlighted, `enter` (alias: `→`/`l`) descends into
+its field list; with a field highlighted, `enter` opens that field's
+edit-overlay (status/type/priority → the combined Value-Menu; title → the
+Title-Edit-Form; `created_at`/`updated_at` are read-only, a no-op) — or, on a
+Relations field, jumps the Tree cursor to that related bean and returns focus
+to Tree. `1`–`9` always jump directly to a section (Meta is always expanded
+and non-collapsible — PF-1).
+
+### Footer — Backlog (`b`)
+
+| Key | Action |
+|---|---|
+| `↑`/`i`, `↓`/`k` | Cursor |
+| `S` | Sort-toggle, cycles status → priority → created → updated |
+| `/` | Search |
+| `f` | Facet filter |
+| `b` | Back to Browse |
+| `s` | Status/Type/Priority menu |
+| `c` | Create bean |
+| `d` | Delete |
+| `e` | Edit body in `$EDITOR` |
+| `tab` | Focus toggle Backlog-List ↔ Detail-Accordion |
+| `shift+tab` | Focus back to the list |
+
+`enter` on a Backlog row is a deliberate no-op — `tab` is the only entry into
+Detail-Focus (same as Browse).
+
+### Footer — Filter-Menu (`f`)
+
+`↑`/`↓` move · `space`/`x` toggle facet · `X` clear filters · `enter`/`esc`/
+`f` close. Facets: Status, Type, Priority, Tags, Archive ("Show archived" —
+completed/scrapped are hidden by default).
+
+### Footer — Value-Menu / Tag-/Parent-/Blocking-Picker (opened via `s`/`t`/`a`/`B`, or the enter-cascade)
+
+`↑`/`↓` move · `enter` apply/save · `esc` cancel/discard · Tag-Picker/
+Filter-Menu additionally: `space`/`x` toggle (multi-select).
+
+### Mouse
+
+| Action | Behavior |
+|---|---|
+| Wheel | Moves the cursor of the active view (Tree/Backlog — no scroll offset, the cursor follows the render) |
+| Click | Sets the cursor to the clicked row; a click on a closed, expandable Tree node expands it directly |
+| Double-click | On an already-open, expandable Tree node (second click <500ms) collapses it — a single click on an open node does NOT collapse it, only moves the cursor (devd D03 semantics) |
+| Click on a toast | Dismisses it immediately, takes priority over any open form/overlay |
+
+### Review (tag trio, in chat)
+
+No dedicated TUI view (PF-14, see above). Review happens entirely outside
+the TUI:
+
+| Step | Who | beans operation |
 |---|---|---|
-| Arbeit fertig, Abnahme angefragt | Agent | Tag `to-review` setzen, Status bleibt `in-progress` |
-| Review-Sichtbarkeit | PO (TUI, passiv) | beans mit Tag `to-review` erscheinen wie jeder andere Tag im Tree/Detail, auffindbar via Filter/Suche |
-| Pass | PO (Chat/CLI) | Tag `to-review` → `accepted` (`beans update --tag`) |
-| Reject | PO (Chat/CLI) | Tag `to-review` → `rejected`; Feedback landet im Chat |
-| Rework fertig | Agent | Tag `rejected` → `to-review` |
+| Work done, review requested | Agent | Set tag `to-review`, status stays `in-progress` |
+| Review visibility | PO (TUI, passive) | Beans tagged `to-review` appear like any other tag in Tree/Detail, discoverable via filter/search |
+| Pass | PO (chat/CLI) | Tag `to-review` → `accepted` (`beans update --tag`) |
+| Reject | PO (chat/CLI) | Tag `to-review` → `rejected`; feedback lands in chat |
+| Rework done | Agent | Tag `rejected` → `to-review` |
 
 ## Settings
 
-Konfiguration liegt unter `~/.config/beans-tui/`:
+Configuration lives under `~/.config/beans-tui/`:
 
-- `config.yaml` — `repos:` (Liste von Repo-Pfaden für die Lobby), `editor:`
-  (leer = `$VISUAL` → `$EDITOR` → `vi`; gesetzt gewinnt IMMER vor beiden
-  Umgebungsvariablen), `theme.accent:` (Hex `#rrggbb`, leer = eingebautes
-  Mauve), `layout.tree_width:` (Baumbreite-Floor, 24–60).
-- `state.json` — Laufzeit-Zustand, aktuell nur das zuletzt geöffnete Repo
-  (persistiert bei jedem Repo-Wechsel, siehe Lobby unten).
+- `config.yaml` — `repos:` (list of repo paths for the Lobby), `editor:`
+  (empty = `$VISUAL` → `$EDITOR` → `vi`; if set, ALWAYS wins over both
+  environment variables), `theme.accent:` (hex `#rrggbb`, empty = built-in
+  mauve), `layout.tree_width:` (tree-width floor, 24–60).
+- `state.json` — runtime state, currently only the last-opened repo
+  (persisted on every repo switch, see Lobby below).
 
-Formular via Command-Center (`ctrl+k` → "settings: öffnen"): Editor/Akzent/
-Baumbreite wirken beim Speichern SOFORT (kein Neustart nötig), `repos`
-wirkt beim nächsten Öffnen der Lobby (`p`).
+Reachable via Command-Center (`ctrl+k` → "go to settings"): editor/accent/
+tree-width take effect IMMEDIATELY on save (no restart needed), `repos`
+takes effect the next time the Lobby (`p`) opens.
 
 ## Lobby + Repo-Picker (`p`)
 
-`p` öffnet von überall die Lobby: Suchfeld + Liste der in `config.yaml`
-konfigurierten Repos (Anzeige "offen/gesamt" je Repo, asynchron ermittelt).
-`enter` wechselt das Repo — der alte fsnotify-Watcher wird gestoppt, ein
-neuer für das neue Repo gestartet (Datei-Änderungen im vorherigen Repo lösen
-danach KEIN Reload mehr aus), das zuletzt gewählte Repo landet in
+`p` opens the Lobby from anywhere: a search field + the list of repos
+configured in `config.yaml` (shows "open/total" per repo, resolved
+asynchronously). `enter` switches the repo — the old fsnotify watcher is
+stopped, a new one started for the new repo (file changes in the previous
+repo no longer trigger a reload afterwards), the last-chosen repo lands in
 `state.json`.
 
-**Start-Trigger:** ein explizites `bt <pfad>`-Argument gewinnt immer;
-ansonsten direkt ins Repo, wenn `.beans.yml` vom cwd aufwärts gefunden wird
-(unverändertes E1-Verhalten); nur wenn beides fehlschlägt UND `repos:`
-mindestens 2 Einträge hat, öffnet sich die Lobby beim Start — bei 0/1
-konfigurierten Repos bleibt die bisherige Fehlermeldung/Direktstart.
+**Start trigger:** an explicit `bt <path>` argument always wins; otherwise
+straight into the repo if `.beans.yml` is found upward from cwd (unchanged
+E1 behavior); only if both fail AND `repos:` has at least 2 entries does the
+Lobby open on start — with 0/1 configured repos the previous error message/
+direct-start behavior stays.
 
 ## Known Issues
 
-- **Picker zeigen bewusst alle gültigen Relationsziele:** Parent-Picker
-  (`a`) und Blocking-Picker (`B`) filtern NICHT nach Status/Archiv-Sichtbarkeit
-  — auch archivierte/`completed`/`scrapped` Beans bleiben als Relationsziele
-  wählbar, solange sie typ-/zyklen-gültig sind. Bewusste v1-Design-
-  Entscheidung (kein Fix), da Beziehungen zu bereits abgeschlossenen Beans
-  legitim bleiben (z.B. "blocked by" ein fertiges Bean). Vorbestehend seit E3.
-- **Lobby-Repo-Metriken laufen nicht kontext-gecancelt:** in-flight
-  Metrik-Abfragen (`beans list` je konfiguriertem Repo) eines vorherigen
-  Lobby-Öffnens laufen bei erneutem Öffnen weiter — redundante, pfadgekeyte
-  Subprozesse, keine Datenverwechslung. Für v1 akzeptiert; bei vielen
-  konfigurierten Repos später ein Kontext-Cancel nachziehen.
+- **Pickers deliberately show every valid relation target:** the Parent-
+  Picker (`a`) and Blocking-Picker (`B`) do NOT filter by status/archive
+  visibility — archived/`completed`/`scrapped` beans stay selectable as
+  relation targets as long as they're type-/cycle-valid. Deliberate v1
+  design decision (not a bug), since relations to already-finished beans
+  remain legitimate (e.g. "blocked by" a completed bean). Pre-existing
+  since E3.
+- **Lobby repo metrics are not context-cancelled:** in-flight metric queries
+  (`beans list` per configured repo) from a previous Lobby opening keep
+  running when the Lobby is reopened — redundant, path-keyed subprocesses,
+  no data mix-up. Accepted for v1; worth a context-cancel once many repos
+  are configured.
+- **I01 (medium, open PO point, E7 T7-Review) — Header wraps/truncates at
+  ~80 columns:** the 7-item global Header can lose `q:quit` on a narrow
+  (~80-column) terminal, a common terminal size. Candidate fixes: wrap the
+  Header like the Footer already does, or a priority-truncation order.
+  Raised to the PO in the E7 epic review, not yet decided.
+- **I02 (low, open PO point, E7 T7-Review) — Overlay footer restates
+  Enter/Back despite a visible Header:** several overlay-local footer hints
+  (e.g. paletteLocalBindings/helpLocalBindings) repeat `enter`/`esc` even
+  though the Header already shows them. Possibly deliberate reinforcement
+  for a modal context; raised to the PO for a sign-off or an explicit
+  invariant test.
+- **D01 (open PO point, E7 T7-Review) — Footer scope is deliberately
+  narrow:** `browseRepoLocalBindings`/`backlogLocalBindings` intentionally
+  leave out `f`/`X`/`b`/`t`/`a`/`B`/`y` (Filter/Clear-Filter/Backlog/Tag-/
+  Parent-/Blocking-Picker/Yank) — all remain reachable and are documented in
+  the Help-Overlay (`?`), just not restated in the footer. The PO may choose
+  to widen this.
 
-## Entwicklung
+## Development
 
-TDD (`superpowers:test-driven-development`), Ausführung `make test`
-(`command go test ./...`). Konventionen (Build immer `command go …`,
-Datei-Namensschema, Theme-Token, Commit-/Review-Flow) → [`CLAUDE.md`](CLAUDE.md).
+TDD (`superpowers:test-driven-development`), run via `make test`
+(`command go test ./...`). Conventions (always build with `command go …`,
+file-naming scheme, theme tokens, commit/review flow) →
+[`CLAUDE.md`](CLAUDE.md).
