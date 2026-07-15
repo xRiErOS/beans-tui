@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -61,5 +62,34 @@ func TestBrowseRepoChromeFooterIsContextSensitiveOnFilterOpen(t *testing.T) {
 	}
 	if strings.Contains(plain, "c:Create") {
 		t.Errorf("browseRepoChrome footer while filterOpen = %q, must not leak the (now irrelevant) view-local Create hint", plain)
+	}
+}
+
+// TestTreeNodeMarkerBlankForLeaf is B03's regression lock (bean bt-ntoz,
+// design-spec.md §15 PF-16): kinderlose Beans dürfen NIE ein Expand-Dreieck
+// zeigen -- nur gleich breiten Leerraum. ERRATUM (bean bt-e6q9, B03): der
+// PO-gemeldete Bug reproduziert NICHT gegen den aktuellen Code-Stand --
+// treeNodeMarker prüft bereits `!n.hasKids` zuerst und gibt dann "  " (2
+// Leerzeichen, dieselbe Breite wie "▾ "/"▸ ") zurück. Kein Code-Fix, nur
+// dieser Regressionstest, der das bereits-korrekte Verhalten festschreibt.
+func TestTreeNodeMarkerBlankForLeaf(t *testing.T) {
+	leaf := treeNode{id: "leaf-1", hasKids: false, open: false}
+	if got := treeNodeMarker(leaf); got != "  " {
+		t.Errorf("treeNodeMarker(leaf, hasKids=false) = %q, want \"  \" (blank, no expand triangle)", got)
+	}
+	if w := lipgloss.Width(treeNodeMarker(leaf)); w != lipgloss.Width("▾ ") {
+		t.Errorf("treeNodeMarker(leaf) cell-width = %d, want %d (same width as the open/closed markers, no layout shift)", w, lipgloss.Width("▾ "))
+	}
+
+	// Regression guard for the branch cases too, so a future change can't
+	// silently swap the hasKids-gate for something else without this test
+	// catching it.
+	openBranch := treeNode{id: "branch-open", hasKids: true, open: true}
+	if got := treeNodeMarker(openBranch); got != "▾ " {
+		t.Errorf("treeNodeMarker(hasKids=true, open=true) = %q, want \"▾ \"", got)
+	}
+	closedBranch := treeNode{id: "branch-closed", hasKids: true, open: false}
+	if got := treeNodeMarker(closedBranch); got != "▸ " {
+		t.Errorf("treeNodeMarker(hasKids=true, open=false) = %q, want \"▸ \"", got)
 	}
 }
