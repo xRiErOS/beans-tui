@@ -296,6 +296,15 @@ func (c *Client) AppendBody(id, text, etag string) error {
 	return c.update(id, etag, "--body-append", text)
 }
 
+// SetBody replaces a bean's whole body (`--body` -- a FULL replace, verified
+// against beans 0.4.2 --help: "New body"; AppendBody/--body-append above is
+// additive and unsuitable for the $EDITOR round-trip (E3 Task 5, bean
+// bt-sl45): the editor's returned content must fully replace what's on
+// disk, not append to it.
+func (c *Client) SetBody(id, body, etag string) error {
+	return c.update(id, etag, "--body", body)
+}
+
 // Delete deletes a bean outright. `beans delete` normally prompts for
 // confirmation on the CLI; --json skips that prompt (and any
 // reference/child warnings) since bt drives this non-interactively --

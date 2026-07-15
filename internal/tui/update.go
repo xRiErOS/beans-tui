@@ -53,6 +53,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// other mutation.
 		return m.applyCreateDone(msg)
 
+	case editorFinishedMsg:
+		// E3 Task 5 (bean bt-sl45): the ctrl+e $EDITOR-Suspend's result --
+		// err -> status line only; unchanged -> silent no-op (no CLI call
+		// for a no-op edit); otherwise SetBody against a FRESH etag
+		// (applyEditorFinished below).
+		return m.applyEditorFinished(msg)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -105,8 +112,23 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 // expansion at all -- idx.Roots() already surfaces every parentless bean.
 func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
+		// B01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45): a
+		// CLI-rejected create (e.g. VALIDATION_ERROR) must not lose the
+		// PO's filled-in draft. createDraft is no longer nulled at the
+		// Confirm-Gate's own enter (keyCreateConfirm, box_confirm_create.go)
+		// -- it survives until HERE, so a failure can reopen the Create-Form
+		// FILLED from it instead of routing through the draft-agnostic
+		// applyMutationResult tail (which would just show the error and
+		// reload, discarding the work).
+		if m.createDraft != nil {
+			d := *m.createDraft
+			m.createDraft = nil
+			m.err = msg.err.Error()
+			return m.openCreateFormWithDraft(d)
+		}
 		return m.applyMutationResult(msg.err)
 	}
+	m.createDraft = nil // success: draft consumed, no reopen needed (B01's other half)
 	if msg.bean.Parent != "" {
 		m.expanded = expandAncestorsOf(m.idx, m.expanded, msg.bean.Parent)
 		exp := cloneBoolMap(m.expanded) // I01: copy-on-write
@@ -116,6 +138,34 @@ func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 	m.cursorID = msg.bean.ID
 	m.err = ""
 	return m, loadCmd(m.client)
+}
+
+// applyEditorFinished handles the ctrl+e $EDITOR-Suspend's result (E3 Task
+// 5, bean bt-sl45, keyNodeAction's Editor branch below): a process-level err
+// surfaces in the status line with no mutation; unchanged content is a
+// silent no-op (no CLI call for a no-op edit, mirrors the plan's own
+// Akzeptanz wording); otherwise SetBody fires against a FRESH etag (design
+// decision d, m.beanETag) -- a vanished target (ok==false, the bean was
+// deleted during the suspend) surfaces a status-line note instead of firing
+// a doomed mutation, same guard shape as applyValueMenuSelection.
+func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
+	id := m.editorTarget
+	m.editorTarget = ""
+	if msg.err != nil {
+		m.err = msg.err.Error()
+		return m, nil
+	}
+	if !msg.changed {
+		return m, nil
+	}
+	etag, ok := m.beanETag(id)
+	if !ok {
+		m.err = "Bean nicht mehr vorhanden — Editor-Änderung verworfen"
+		return m, nil
+	}
+	client := m.client
+	body := msg.content
+	return m, mutateCmd(func() error { return client.SetBody(id, body, etag) })
 }
 
 // beanETag reads id's CURRENT etag straight from the live index (design
@@ -166,7 +216,8 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		keybind.Matches(msg, keys.Blocking),
 		keybind.Matches(msg, keys.Delete),
 		keybind.Matches(msg, keys.Editor):
-		if m.focusedBean() == nil {
+		b := m.focusedBean()
+		if b == nil {
 			return true, m, nil // handled, silent no-op -- no node to act on
 		}
 		if keybind.Matches(msg, keys.Status) {
@@ -181,7 +232,19 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		if keybind.Matches(msg, keys.Blocking) {
 			return true, m.openBlockingPicker(), nil
 		}
-		return true, m, nil // stub: T5 (Editor), T6 (Delete)
+		if keybind.Matches(msg, keys.Editor) {
+			// E3 Task 5 (bean bt-sl45, design decision h): "e"/"ctrl+e"
+			// share ONE keys.Editor binding (design-spec §7), branching on
+			// msg.String() -- "ctrl+e" suspends into $EDITOR on the Body,
+			// "e" opens the Title-Edit-Form.
+			if msg.String() == "ctrl+e" {
+				m.editorTarget = b.ID
+				return true, m, editInEditor(b.Body, ".md")
+			}
+			nm, cmd := m.openEditTitleForm(b)
+			return true, nm, cmd
+		}
+		return true, m, nil // stub: T6 (Delete)
 	}
 	return false, m, nil
 }

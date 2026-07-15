@@ -152,8 +152,13 @@ func TestCreateConfirmEnterFiresPendingCmd(t *testing.T) {
 	if nm.pendingCreate != nil {
 		t.Fatal("pendingCreate not cleared after enter")
 	}
-	if nm.createDraft != nil {
-		t.Fatal("createDraft must be consumed (nil) after a real create fires")
+	// B01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45): createDraft
+	// must SURVIVE the Confirm-Gate's own enter now -- only createDoneMsg
+	// (applyCreateDone, update.go) resolves it, on either outcome (see
+	// TestCreateConfirmEnterErrorPreservesDraftAndReopensForm/
+	// TestCreateDoneSuccessConsumesDraft below for both halves).
+	if nm.createDraft == nil {
+		t.Fatal("createDraft must survive the Confirm-Gate's enter (B01 fix) -- nulled only once createDoneMsg resolves")
 	}
 	if cmd == nil {
 		t.Fatal("enter must fire the parked createCmd")
@@ -165,6 +170,76 @@ func TestCreateConfirmEnterFiresPendingCmd(t *testing.T) {
 	}
 	if cdm.err == nil || !strings.Contains(cdm.err.Error(), "beans create") {
 		t.Fatalf("createDoneMsg.err = %v, want an error containing %q (proves Create dispatched)", cdm.err, "beans create")
+	}
+}
+
+// TestCreateConfirmEnterErrorPreservesDraftAndReopensForm guards B01 (E3-T4-
+// Review PFLICHT, Important, closed in T5, bean bt-sl45): a CLI-rejected
+// create (e.g. VALIDATION_ERROR) must not lose the PO's filled-in draft --
+// createDraft survives the Confirm-Gate's own enter (keyCreateConfirm no
+// longer nulls it), so applyCreateDone's error branch reopens the FILLED
+// Create-Form from it instead of routing through the draft-agnostic
+// applyMutationResult tail (status line + reload, which would just discard
+// the work).
+func TestCreateConfirmEnterErrorPreservesDraftAndReopensForm(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t5-scratch-dir"}
+	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(enter) did not return a model, got %T", tm)
+	}
+	if cmd == nil {
+		t.Fatal("enter must fire the parked createCmd")
+	}
+	msg := cmd()
+	cdm, ok := msg.(createDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want createDoneMsg", msg)
+	}
+	if cdm.err == nil {
+		t.Fatal("setup: expected the bogus RepoDir to fail the create")
+	}
+
+	tm2, _ := nm.Update(cdm)
+	fm, ok := tm2.(model)
+	if !ok {
+		t.Fatalf("Update(createDoneMsg) did not return a model, got %T", tm2)
+	}
+	if fm.form == nil {
+		t.Fatal("a CLI-rejected create must reopen the Create-Form (B01, draft-loss fix)")
+	}
+	if fm.overlay != overlayNone {
+		t.Fatalf("overlay = %v, want overlayNone (Confirm-Gate must not linger)", fm.overlay)
+	}
+	if fm.err == "" {
+		t.Fatal("the rejected create's error must still surface in the status line")
+	}
+	if fm.createDraft != nil {
+		t.Fatal("createDraft must be consumed (nil) once reopened into the form, same as the esc/n path")
+	}
+
+	fm = advanceFieldsModel(t, fm, 7)
+	if !strings.Contains(fm.createLabel, "New Task") {
+		t.Fatalf("createLabel after reopen+resubmit = %q, want it to still mention %q (B01: draft survived a REJECTED create too)", fm.createLabel, "New Task")
+	}
+}
+
+// TestCreateDoneSuccessConsumesDraft guards B01's other half (mirrors
+// TestCreateConfirmEnterErrorPreservesDraftAndReopensForm's failure-path
+// counterpart above): a SUCCESSFUL create clears createDraft -- no stale
+// draft lingers for some later, unrelated reopen to accidentally pick up.
+func TestCreateDoneSuccessConsumesDraft(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	d := beanDraft{title: "New Task"}
+	m.createDraft = &d
+	newBean := data.Bean{ID: "tk-9", Title: "New Task", Type: "task", Status: "todo", Priority: "normal"}
+
+	nm := step(t, m, createDoneMsg{bean: newBean})
+	if nm.createDraft != nil {
+		t.Fatal("a successful create must consume (nil) the draft")
 	}
 }
 
@@ -268,22 +343,58 @@ func TestCreateDoneErrRoutesToApplyMutationResult(t *testing.T) {
 // TestFormCapturesAllKeysWhileOpen guards the capture-order contract
 // (handleKey doc-stamp): "q" while a Create-Form is open must type into the
 // focused field, NOT request a quit -- same precedent as searchActive/
-// filterOpen's full-capture behavior.
+// filterOpen's full-capture behavior. ctrl+c (I02, E3-T4-Review PFLICHT,
+// closed in T5, bean bt-sl45) is a DIFFERENT case: huh binds its OWN Quit
+// keymap to ctrl+c (huh keymap.go's NewDefaultKeyMap), and handleKey's
+// m.form != nil capture routes it to keyForm -> updateForm BEFORE bt's own
+// ctrl+c/tea.Quit switch ever sees it -- so ctrl+c must abort the FORM
+// (huh.StateAborted -> m.form nil, updateForm's own doc-stamp), never the
+// whole app.
 func TestFormCapturesAllKeysWhileOpen(t *testing.T) {
-	m := fixtureModel(t, fixtureBeans())
-	m = step(t, m, runeMsg('c'))
-	if m.form == nil {
-		t.Fatal("setup: c did not open the create form")
-	}
+	t.Run("q types into the field", func(t *testing.T) {
+		m := fixtureModel(t, fixtureBeans())
+		m = step(t, m, runeMsg('c'))
+		if m.form == nil {
+			t.Fatal("setup: c did not open the create form")
+		}
 
-	nm := step(t, m, runeMsg('q'))
-	if nm.confirmQuit {
-		t.Fatal("q while the create form is open must type 'q', not request quit (searchActive-style capture precedent)")
-	}
-	if nm.form == nil {
-		t.Fatal("form must still be open after typing q into it")
-	}
-	if nm.overlay != overlayNone {
-		t.Fatalf("overlay = %v, want overlayNone (q must not open anything either)", nm.overlay)
-	}
+		nm := step(t, m, runeMsg('q'))
+		if nm.confirmQuit {
+			t.Fatal("q while the create form is open must type 'q', not request quit (searchActive-style capture precedent)")
+		}
+		if nm.form == nil {
+			t.Fatal("form must still be open after typing q into it")
+		}
+		if nm.overlay != overlayNone {
+			t.Fatalf("overlay = %v, want overlayNone (q must not open anything either)", nm.overlay)
+		}
+	})
+
+	t.Run("ctrl+c aborts the form, not the app", func(t *testing.T) {
+		m := fixtureModel(t, fixtureBeans())
+		m = step(t, m, runeMsg('c'))
+		if m.form == nil {
+			t.Fatal("setup: c did not open the create form")
+		}
+
+		tm, cmd := m.Update(keyMsg(tea.KeyCtrlC))
+		nm, ok := tm.(model)
+		if !ok {
+			t.Fatalf("Update(ctrl+c) did not return a model, got %T", tm)
+		}
+		if nm.confirmQuit {
+			t.Fatal("ctrl+c while the create form is open must not open the quit-confirm")
+		}
+		if cmd != nil {
+			if _, isQuit := cmd().(tea.QuitMsg); isQuit {
+				t.Fatal("ctrl+c while the create form is open must NOT quit the app -- huh's own Quit binding aborts the form instead")
+			}
+		}
+		if nm.form != nil {
+			t.Fatal("ctrl+c must abort the open form (huh.StateAborted), form should be nil")
+		}
+		if nm.formKind != "" {
+			t.Error("formKind not cleared after ctrl+c aborted the form")
+		}
+	})
 }

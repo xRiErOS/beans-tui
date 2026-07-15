@@ -166,7 +166,16 @@ blockItems     []pickerItem
 // huh-Form-Hosting (T4/T5, Port devd forms_shared.go):
 form     *huh.Form
 formKind string // "create" | "editTitle"
-createConfirm bool     // Confirm-Gate (T4)
+// D01 (Plan-Hygiene, E3-T4-Review PFLICHT, closed in T5, bean bt-sl45,
+// ERRATUM): this sketch originally also listed a `createConfirm bool`
+// field here -- struck. Design decision a2 is unambiguous that the E3
+// overlays, INCLUDING Create-Confirm, are ONE model.overlay overlayID
+// enum, not "6 weitere Bools neben filterOpen/confirmQuit"; Task 4's own
+// Step 4 pseudocode already agreed (`overlay = overlayCreateConfirm`,
+// never `createConfirm = true`), and the real implementation
+// (internal/tui/types.go) carries its own matching ERRATUM doc-stamp.
+// This was a stale holdover from an earlier draft of this sketch, not a
+// second, independent field.
 pendingCreate tea.Cmd
 createLabel   string
 createDraft   *beanDraft

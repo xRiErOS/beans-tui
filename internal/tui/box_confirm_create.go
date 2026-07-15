@@ -24,6 +24,10 @@ import (
 // parks the resulting createCmd, and opens the Confirm-Gate
 // (m.overlay = overlayCreateConfirm, design decision a2 -- see types.go's
 // ERRATUM doc-stamp on why there is no separate createConfirm bool).
+// "editTitle" (E3 Task 5, bean bt-sl45, design decision h) is NOT a
+// create-kind: it fires mutateCmd(SetTitle) DIRECTLY against a FRESH etag
+// (design decision d, m.beanETag) -- no Confirm-Gate detour (Port devd
+// isCreateKind's own exclusion, only "create" is gated).
 func (m model) submitForm() (tea.Model, tea.Cmd) {
 	switch m.formKind {
 	case "create":
@@ -35,6 +39,18 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 		m.formKind = ""
 		m.overlay = overlayCreateConfirm
 		return m, nil
+	case "editTitle":
+		title := m.form.GetString("title")
+		id := m.mutTarget
+		m.form = nil
+		m.formKind = ""
+		etag, ok := m.beanETag(id)
+		if !ok {
+			m.err = "Bean nicht mehr vorhanden — Titel-Edit verworfen"
+			return m, nil
+		}
+		client := m.client
+		return m, mutateCmd(func() error { return client.SetTitle(id, title, etag) })
 	}
 	m.form = nil
 	m.formKind = ""
@@ -63,7 +79,14 @@ func (m model) keyCreateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		m.pendingCreate = nil
 		m.createLabel = ""
-		m.createDraft = nil // draft consumed -- no reopen after a real create
+		// B01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45):
+		// createDraft is deliberately NOT nulled here anymore -- a
+		// CLI-rejected create (e.g. VALIDATION_ERROR) must not lose the
+		// PO's filled-in draft. Only createDoneMsg (applyCreateDone,
+		// update.go) resolves it now, on EITHER outcome: success consumes
+		// it (no reopen needed), a failure reopens the FILLED form from it
+		// instead of routing through the draft-agnostic
+		// applyMutationResult tail.
 		return m, cmd
 	case keybind.Matches(msg, keys.Back), msg.String() == "n":
 		m.overlay = overlayNone

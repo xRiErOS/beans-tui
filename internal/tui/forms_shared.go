@@ -136,6 +136,8 @@ func (m model) formTitle() string {
 	switch m.formKind {
 	case "create":
 		return "New bean"
+	case "editTitle":
+		return "Edit title"
 	}
 	return ""
 }

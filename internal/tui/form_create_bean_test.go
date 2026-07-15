@@ -28,6 +28,23 @@ import (
 // legitimate field-advance chain settles in well under this budget; a blink
 // timer just burns through it harmlessly (blink touches neither f.results
 // nor field selection) and the helper returns once exhausted.
+//
+// I01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45): the remaining
+// budget SATURATES at exactly 0 (driveFormStep/driveFormCmd's own `if
+// budget <= 0 { return ..., 0 }` guards), never negative -- and whether 6
+// rounds is ENOUGH for the legitimate chain to settle is NOT a hard
+// contract, it depends on huh's internal Cmd ORDERING (field-advance Cmds
+// firing before/interleaved with the blink timer's own re-arm). That
+// ordering is empirically stable against huh v1.0.0, not something this
+// package controls -- a huh upgrade could shift it. Budget hitting 0 is
+// therefore NOT on its own proof of a problem (a normal, fully-settled call
+// commonly burns the rest of the budget on harmless blink-timer chasing
+// too) -- but combined with a caller's OWN postcondition still failing
+// afterwards, it narrows "did the chase simply run out of rounds" from "real
+// logic bug" instead of leaving that ambiguity to a bare want/got diff.
+// advanceFieldsExhausted/requireFieldValue below expose that signal for
+// callers that want the loud-fail distinction (advanceFields/driveForm/
+// driveModel themselves stay unchanged -- most callers don't need it).
 const driveFormBudget = 6
 
 func driveForm(f *huh.Form, msg tea.Msg) *huh.Form {
@@ -91,6 +108,38 @@ func advanceFields(f *huh.Form, n int) *huh.Form {
 	return f
 }
 
+// advanceFieldsExhausted is advanceFields' loud-fail-capable counterpart
+// (I01, E3-T4-Review PFLICHT, closed in T5, bean bt-sl45): same n-field
+// advance, but also reports whether the LAST field-advance call's chase
+// budget saturated at exactly 0 (driveFormBudget's own doc-stamp on what
+// that does and doesn't prove). Pair with requireFieldValue below.
+func advanceFieldsExhausted(f *huh.Form, n int) (*huh.Form, bool) {
+	exhausted := false
+	for i := 0; i < n; i++ {
+		var remaining int
+		f, remaining = driveFormStep(f, enterMsg(), driveFormBudget)
+		exhausted = remaining == 0
+	}
+	return f, exhausted
+}
+
+// requireFieldValue is I01's loud-fail assertion: a bare want/got mismatch
+// cannot distinguish a real logic bug from the chase budget running out
+// before huh's Cmd chain settled (driveFormBudget's own doc-stamp) --
+// exhausted (advanceFieldsExhausted's own signal) narrows a MISMATCH
+// specifically to the second, more actionable cause instead of leaving that
+// ambiguity to an opaque diff.
+func requireFieldValue(t *testing.T, exhausted bool, what, got, want string) {
+	t.Helper()
+	if got == want {
+		return
+	}
+	if exhausted {
+		t.Fatalf("%s = %q, want %q -- AND the chase budget (driveFormBudget=%d) was exhausted reaching it: bump the budget before assuming a logic bug", what, got, want, driveFormBudget)
+	}
+	t.Fatalf("%s = %q, want %q", what, got, want)
+}
+
 func idxWithMS1() *data.Index {
 	return data.NewIndex([]data.Bean{
 		{ID: "ms-1", Title: "Milestone One", Status: "todo", Type: "milestone", Priority: "normal"},
@@ -107,11 +156,9 @@ func idxWithMS1() *data.Index {
 func TestBuildCreateBeanFormPrefillsParentFromCursor(t *testing.T) {
 	idx := idxWithMS1()
 	f := buildCreateBeanForm(idx, beanDraft{title: "New Task", parent: "ms-1"})
-	f = advanceFields(f, 5) // title, type, priority, status, parent
+	f, exhausted := advanceFieldsExhausted(f, 5) // title, type, priority, status, parent
 
-	if got := f.GetString("parent"); got != "ms-1" {
-		t.Fatalf("GetString(parent) = %q, want %q (prefill survived unedited)", got, "ms-1")
-	}
+	requireFieldValue(t, exhausted, "GetString(parent)", f.GetString("parent"), "ms-1")
 }
 
 // TestParseTagsFieldSplitsAndValidates covers both the split (whitespace AND

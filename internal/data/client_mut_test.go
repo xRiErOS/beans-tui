@@ -189,6 +189,41 @@ func TestAppendBodyAddsSection(t *testing.T) {
 	}
 }
 
+// TestSetBodyReplacesWholeBody guards SetBody's FULL-replace contract (E3
+// Task 5, bean bt-sl45, `--body` -- verified against beans 0.4.2 --help: "New
+// body"): the old fixture body ("Task fixture body.") must be GONE
+// afterwards, not merely have the new text appended alongside it --
+// distinguishing this from AppendBody above (--body-append, additive).
+func TestSetBodyReplacesWholeBody(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	const newBody = "Replaced via TestSetBodyReplacesWholeBody."
+	if err := client.SetBody(task.ID, newBody, task.ETag); err != nil {
+		t.Fatalf("SetBody() error = %v", err)
+	}
+
+	after, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after SetBody error = %v", err)
+	}
+	updated := findBean(t, after, "tt-task")
+	if !strings.Contains(updated.Body, newBody) {
+		t.Errorf("Body = %q, want it to contain %q", updated.Body, newBody)
+	}
+	if strings.Contains(updated.Body, "Task fixture body.") {
+		t.Errorf("Body = %q, still contains the OLD fixture body -- SetBody must be a FULL replace, not append", updated.Body)
+	}
+}
+
 // TestSetTagsAddsAndRemovesInOneCall guards the E3 Task 2 design decision
 // (bean bt-8v69): a SINGLE SetTags call combining --tag/--remove-tag adds
 // AND removes tags against ONE etag.

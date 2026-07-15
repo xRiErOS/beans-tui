@@ -255,6 +255,17 @@ type model struct {
 	createLabel   string
 	createDraft   *beanDraft
 
+	// Editor (E3 Task 5, bean bt-sl45, design decisions c/h): editorTarget
+	// captures WHICH bean's body a ctrl+e $EDITOR-Suspend acts on, set
+	// immediately before tea.ExecProcess fires (the cursor cannot move
+	// DURING a suspend, but capturing explicitly avoids relying on that --
+	// same rationale as mutTarget above). The Title-Edit-Form ("e") reuses
+	// mutTarget instead, mirroring the value-menu/picker convention (one
+	// node-action target at a time) -- forms and the editor suspend are
+	// mutually exclusive capture states (m.form != nil vs. a fired
+	// editInEditor Cmd), so there is no collision between the two fields.
+	editorTarget string
+
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works
 	// (ctrl+r reloads manually), it just never reacts to on-disk changes on
