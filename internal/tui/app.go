@@ -24,7 +24,11 @@ var errNilClient = errors.New("bt: nil beans client (Run() must construct a data
 // Run starts the bt TUI against repoDir (an already-resolved beans repo, see
 // data.FindRepo) using client for all reads. AltScreen + mouse (wheel/click)
 // are enabled from the start (design-spec.md §9: "Maus (Wheel, Klick-
-// Cursor)" is in v1 scope even though T8 doesn't yet wire click handling).
+// Cursor)" is in v1 scope, T8 only reserved the flag). E5 Task 4 (bean
+// bt-mne6) wires the actual handling -- tea.WithMouseCellMotion() itself is
+// UNCHANGED since T8, just no longer a reservation: every tea.MouseMsg it
+// now emits reaches Update()'s own case (update.go) -> handleMouse
+// (mouse.go).
 func Run(client *data.Client, repoDir string) error {
 	lipgloss.SetHasDarkBackground(true)
 
