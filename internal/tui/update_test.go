@@ -906,17 +906,141 @@ func TestKeyDetailFocusEnterAtSectionLevelEntersFieldLevel(t *testing.T) {
 }
 
 // TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields guards the same
-// alias's guard condition: Body (section 2) carries no fields, so enter must
-// stay at section level (mirrors the existing right/l behavior for
-// fieldless sections).
+// alias's guard condition using History (section 4, historySectionIdx) --
+// like Body, History carries no .fields, so enter must stay at section
+// level (mirrors the existing right/l behavior for fieldless sections).
+// RENAMED/MOVED off Body (E8 Task 6, bean bt-y2iw, B10): Body is no longer a
+// generic fieldless-section example -- enter on Body now opens $EDITOR (see
+// TestKeyDetailFocusEnterOnBodySectionOpensEditor below), so this test needed
+// a DIFFERENT fieldless section to keep pinning the generic no-fields-noop
+// invariant the original test intended.
 func TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2")
 	m = step(t, m, keyMsg(tea.KeyTab))
-	m = step(t, m, runeMsg('2')) // Body -- no fields
+	m = step(t, m, runeMsg('4')) // History -- no fields
 	m = step(t, m, keyMsg(tea.KeyEnter))
 	if m.detailLevel != 0 {
-		t.Fatal("enter on Body (no fields) must stay at section level")
+		t.Fatal("enter on History (no fields) must stay at section level")
+	}
+	if m.form != nil || m.overlay != overlayNone {
+		t.Fatal("enter on History (no fields) must be a pure no-op -- no form/overlay")
+	}
+}
+
+// TestKeyDetailFocusEnterOnBodySectionOpensEditor guards B10 (design-spec.md
+// §15 PF-16, bean bt-ntoz, E8 Task 6): enter on Section [2] BODY (which
+// carries no .fields, so the OLD code fell straight to the fields>0 guard
+// and did nothing) now opens $EDITOR via the shared openBodyEditor helper
+// (editor.go) -- consistent with [1] META, where enter already opened the
+// field-level overlay cascade. m.detailLevel/m.secCursor stay untouched
+// (openBodyEditor doesn't touch either), only editorTarget/editorETag get
+// set and a non-nil Cmd (the ExecProcess-wrapped suspend) comes back.
+func TestKeyDetailFocusEnterOnBodySectionOpensEditor(t *testing.T) {
+	beans := fixtureBeans()
+	for i := range beans {
+		if beans[i].ID == "tk-2" {
+			beans[i].ETag = "tk-2-etag"
+		}
+	}
+	m := fixtureModel(t, beans)
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('2')) // Body -- no fields
+	if m.detailLevel != 0 {
+		t.Fatal("setup: expected section level")
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(enter) did not return a model, got %T", tm)
+	}
+	if nm.editorTarget != "tk-2" {
+		t.Fatalf("editorTarget = %q, want tk-2", nm.editorTarget)
+	}
+	if nm.editorETag != "tk-2-etag" {
+		t.Fatalf("editorETag = %q, want %q (captured at open, F2)", nm.editorETag, "tk-2-etag")
+	}
+	if nm.detailLevel != 0 {
+		t.Fatalf("detailLevel = %d, want unchanged 0 (BODY has no field level)", nm.detailLevel)
+	}
+	if cmd == nil {
+		t.Fatal("enter on BODY must return a Cmd (the ExecProcess-wrapped editor suspend)")
+	}
+}
+
+// --- B10 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6): keyNodeAction's
+// "e"/"ctrl+e" Editor dispatch becomes section-context-sensitive too. ---
+
+// TestKeyNodeActionBareEOnBodySectionOpensEditor mirrors
+// TestKeyNodeActionCtrlEStartsEditorSuspend (editor_test.go) for the PLAIN
+// "e" key: while Detail-Focus is parked on Section [2] BODY, "e" now opens
+// $EDITOR too -- not the Title-Edit-Form it opened before this task
+// (inconsistent with ctrl+e, PO-reported).
+func TestKeyNodeActionBareEOnBodySectionOpensEditor(t *testing.T) {
+	beans := fixtureBeans()
+	for i := range beans {
+		if beans[i].ID == "tk-1" {
+			beans[i].ETag = "tk-1-etag"
+		}
+	}
+	m := fixtureModel(t, beans)
+	m = focusBean(m, "tk-1")
+	m.detailFocus = true
+	m.secCursor = bodySectionIdx
+
+	handled, nm, cmd := m.keyNodeAction(runeMsg('e'))
+	if !handled {
+		t.Fatal("e must be handled")
+	}
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("keyNodeAction did not return a model, got %T", nm)
+	}
+	if mm.editorTarget != "tk-1" {
+		t.Fatalf("editorTarget = %q, want tk-1", mm.editorTarget)
+	}
+	if mm.editorETag != "tk-1-etag" {
+		t.Fatalf("editorETag = %q, want %q (captured at open, F2)", mm.editorETag, "tk-1-etag")
+	}
+	if mm.form != nil {
+		t.Fatal("e on Section [2] BODY must NOT open the Title-Edit-Form")
+	}
+	if cmd == nil {
+		t.Fatal("e on Section [2] BODY must return a Cmd (the ExecProcess-wrapped editor suspend)")
+	}
+}
+
+// TestKeyNodeActionBareEOutsideBodySectionOpensTitleForm is B10's regression
+// guard: "e" pressed while Detail-Focus is parked on any OTHER section
+// (META/RELATIONS/HISTORY) must still open the Title-Edit-Form exactly as
+// before this task -- only Section [2] BODY gets the new $EDITOR dispatch
+// (PO named only BODY as inconsistent, no further per-section fall
+// requested).
+func TestKeyNodeActionBareEOutsideBodySectionOpensTitleForm(t *testing.T) {
+	for _, sec := range []int{metaSectionIdx, relationsSectionIdx, historySectionIdx} {
+		t.Run(fmt.Sprintf("section=%d", sec), func(t *testing.T) {
+			m := fixtureModel(t, fixtureBeans())
+			m = focusBean(m, "tk-1")
+			m.detailFocus = true
+			m.secCursor = sec
+
+			handled, nm, _ := m.keyNodeAction(runeMsg('e'))
+			if !handled {
+				t.Fatal("e must be handled")
+			}
+			mm, ok := nm.(model)
+			if !ok {
+				t.Fatalf("keyNodeAction did not return a model, got %T", nm)
+			}
+			if mm.form == nil || mm.formKind != "editTitle" {
+				t.Fatalf("section %d: e did not open the edit-title form (form=%v formKind=%q)", sec, mm.form, mm.formKind)
+			}
+			if mm.editorTarget != "" {
+				t.Fatalf("section %d: editorTarget = %q, want empty (must not open $EDITOR outside BODY)", sec, mm.editorTarget)
+			}
+		})
 	}
 }
 

@@ -31,17 +31,19 @@ func focusBean(m model, id string) model {
 // --- openValueMenu / buildValueMenuItems ---
 
 // TestOpenValueMenuBuildsGroupedItemsCursorOnCurrentStatus guards `s` on a
-// focused bean: 15 rows (5 status + 5 type + 5 priority), mutTarget captures
-// the bean's ID, and the cursor seeds onto the bean's CURRENT status within
-// the status group (port beans-src statuspicker.go's selectedIndex seed).
+// focused bean: 5 rows (B11/B12, design-spec.md §15 PF-16, bean bt-ntoz --
+// `s` is Status-only, the menu used to always return all 15 rows regardless
+// of the requested group before this task), mutTarget captures the bean's
+// ID, and the cursor seeds onto the bean's CURRENT status within the status
+// group (port beans-src statuspicker.go's selectedIndex seed).
 func TestOpenValueMenuBuildsGroupedItemsCursorOnCurrentStatus(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2") // status=todo, type=task, priority=normal (fixtureBeans, ms-1 -> ep-1 -> tk-2)
 
 	m = step(t, m, runeMsg('s'))
 
-	if len(m.menuItems) != 15 {
-		t.Fatalf("menuItems len = %d, want 15 (5 status + 5 type + 5 priority)", len(m.menuItems))
+	if len(m.menuItems) != 5 {
+		t.Fatalf("menuItems len = %d, want 5 (status group only, B11/B12)", len(m.menuItems))
 	}
 	if m.mutTarget != "tk-2" {
 		t.Fatalf("mutTarget = %q, want tk-2", m.mutTarget)
@@ -55,6 +57,61 @@ func TestOpenValueMenuBuildsGroupedItemsCursorOnCurrentStatus(t *testing.T) {
 	}
 	if got := m.menuItems[m.menu.cursor]; got.group != "status" || got.value != "todo" {
 		t.Fatalf("cursored item = %+v, want {status todo}", got)
+	}
+}
+
+// TestBuildValueMenuItemsReturnsOnlyRequestedGroup guards B11/B12's core fix:
+// buildValueMenuItems(group) returns EXACTLY that group's 5 rows, never the
+// other two -- the combined-15-rows behavior it replaces.
+func TestBuildValueMenuItemsReturnsOnlyRequestedGroup(t *testing.T) {
+	cases := []struct {
+		group string
+		want  int
+	}{
+		{"status", len(data.StatusValues())},
+		{"type", len(data.TypeValues())},
+		{"priority", len(data.PriorityValues())},
+	}
+	for _, tc := range cases {
+		t.Run(tc.group, func(t *testing.T) {
+			items := buildValueMenuItems(tc.group)
+			if len(items) != tc.want {
+				t.Fatalf("buildValueMenuItems(%q) len = %d, want %d", tc.group, len(items), tc.want)
+			}
+			for _, it := range items {
+				if it.group != tc.group {
+					t.Fatalf("buildValueMenuItems(%q) leaked item from group %q: %+v", tc.group, it.group, it)
+				}
+			}
+		})
+	}
+}
+
+// TestOpenValueMenuStatusShowsOnlyStatusItems is openValueMenu's own
+// end-to-end counterpart to TestBuildValueMenuItemsReturnsOnlyRequestedGroup
+// above -- guards that the group parameter actually reaches
+// buildValueMenuItems (not just seeds the cursor, the OLD bug this task
+// fixes) for all three groups via the direct method call (T6's own seeding
+// test, TestOpenValueMenuSeedsOnGivenGroup, already covers "type" the same
+// way -- this test is the explicit B11/B12 "only 5, not 15" regression pin
+// the bean's own TDD-Schritte name).
+func TestOpenValueMenuStatusShowsOnlyStatusItems(t *testing.T) {
+	for _, group := range []string{"status", "type", "priority"} {
+		t.Run(group, func(t *testing.T) {
+			m := fixtureModel(t, fixtureBeans())
+			m = focusBean(m, "tk-2")
+
+			m = m.openValueMenu(group)
+
+			if len(m.menuItems) != 5 {
+				t.Fatalf("openValueMenu(%q): menuItems len = %d, want 5", group, len(m.menuItems))
+			}
+			for _, it := range m.menuItems {
+				if it.group != group {
+					t.Fatalf("openValueMenu(%q) leaked item from group %q: %+v", group, it.group, it)
+				}
+			}
+		})
 	}
 }
 
@@ -129,15 +186,20 @@ func TestValueMenuEnterAppliesCursoredValueAndCloses(t *testing.T) {
 
 // TestValueMenuEnterOnTypeGroupDispatchesSetType mirrors the status-group
 // test for the type group, guarding that the group->Set* dispatch itself is
-// keyed correctly (not just "some mutation fired").
+// keyed correctly (not just "some mutation fired"). B11/B12 (bean bt-ntoz):
+// `s` now opens the status group ONLY (buildValueMenuItems is filtered), so
+// unlike before this task, driving KeyDown from an `s`-opened menu can never
+// reach the type group anymore -- the type group is reached directly via
+// m.openValueMenu("type"), the same call the PF-5 Meta field-level enter
+// cascade (keyDetailFocus) and the Palette's new "set type" action use.
 func TestValueMenuEnterOnTypeGroupDispatchesSetType(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t1-scratch-dir"}
 	m = focusBean(m, "tk-2") // status=todo, type=task, priority=normal (fixtureBeans, ms-1 -> ep-1 -> tk-2)
 
-	m = step(t, m, runeMsg('s'))
-	for m.menuItems[m.menu.cursor].group != "type" {
-		m = step(t, m, keyMsg(tea.KeyDown))
+	m = m.openValueMenu("type")
+	if m.menuItems[m.menu.cursor].group != "type" {
+		t.Fatalf("setup: cursored group = %q, want type", m.menuItems[m.menu.cursor].group)
 	}
 
 	_, cmd := m.Update(keyMsg(tea.KeyEnter))
@@ -151,15 +213,16 @@ func TestValueMenuEnterOnTypeGroupDispatchesSetType(t *testing.T) {
 }
 
 // TestValueMenuEnterOnPriorityGroupDispatchesSetPriority mirrors the above
-// for the priority group.
+// for the priority group (same B11/B12 rationale: reached directly via
+// m.openValueMenu("priority"), not via `s` + KeyDown).
 func TestValueMenuEnterOnPriorityGroupDispatchesSetPriority(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t1-scratch-dir"}
 	m = focusBean(m, "tk-2") // status=todo, type=task, priority=normal (fixtureBeans, ms-1 -> ep-1 -> tk-2)
 
-	m = step(t, m, runeMsg('s'))
-	for m.menuItems[m.menu.cursor].group != "priority" {
-		m = step(t, m, keyMsg(tea.KeyDown))
+	m = m.openValueMenu("priority")
+	if m.menuItems[m.menu.cursor].group != "priority" {
+		t.Fatalf("setup: cursored group = %q, want priority", m.menuItems[m.menu.cursor].group)
 	}
 
 	_, cmd := m.Update(keyMsg(tea.KeyEnter))
@@ -224,6 +287,40 @@ func TestValueMenuCurrentValueMarked(t *testing.T) {
 	out := m.valueMenuBox()
 	if !strings.Contains(out, "(current)") {
 		t.Fatalf("valueMenuBox() missing a (current) marker:\n%s", out)
+	}
+}
+
+// TestValueMenuBoxTitleReflectsGroup guards the Planner addition to B11/B12
+// (bean bt-y2iw, commit-body-documented as beyond the bare wording): the
+// modalPanel title names the open group ("Set status"/"Set type"/
+// "Set priority") instead of the old hard-coded "Set value" -- so which of
+// the three now-separate menus is open is never ambiguous. An empty
+// menuItems slice (defensive, e.g. a zero-value model) falls back to the old
+// "Set value" wording.
+func TestValueMenuBoxTitleReflectsGroup(t *testing.T) {
+	cases := []struct {
+		group string
+		want  string
+	}{
+		{"status", "Set status"},
+		{"type", "Set type"},
+		{"priority", "Set priority"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.group, func(t *testing.T) {
+			m := fixtureModel(t, fixtureBeans())
+			m = focusBean(m, "tk-2")
+			m = m.openValueMenu(tc.group)
+
+			out := m.valueMenuBox()
+			if !strings.Contains(out, tc.want) {
+				t.Fatalf("valueMenuBox() for group %q missing title %q:\n%s", tc.group, tc.want, out)
+			}
+		})
+	}
+
+	if got := valueMenuTitle(nil); got != "Set value" {
+		t.Fatalf("valueMenuTitle(nil) = %q, want %q (defensive fallback)", got, "Set value")
 	}
 }
 

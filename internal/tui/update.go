@@ -550,18 +550,24 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		if keybind.Matches(msg, keys.Editor) {
 			// E3 Task 5 (bean bt-sl45, design decision h): "e"/"ctrl+e"
 			// share ONE keys.Editor binding (design-spec §7), branching on
-			// msg.String() -- "ctrl+e" suspends into $EDITOR on the Body,
-			// "e" opens the Title-Edit-Form.
-			if msg.String() == "ctrl+e" {
-				m.editorTarget = b.ID
-				// F2 (Review-Runde 2, Finding 2, ETag-Lost-Update): capture
-				// the etag HERE, at open time -- not a fresh m.beanETag(id)
-				// read in applyEditorFinished at submit time (see that
-				// func's doc-stamp, update.go, for the full lost-update
-				// rationale this deliberately deviates from design decision
-				// d for).
-				m.editorETag = b.ETag
-				return true, m, editInEditor(b.Body, ".md")
+			// msg.String() -- "ctrl+e" ALWAYS suspends into $EDITOR on the
+			// Body; "e" opens the Title-Edit-Form EXCEPT when Detail-Focus is
+			// parked on Section [2] BODY (B10, design-spec.md §15 PF-16, bean
+			// bt-ntoz, E8 Task 6) -- there it is context-sensitive to the
+			// selected section too, opening $EDITOR like ctrl+e. Every OTHER
+			// section (META/RELATIONS/HISTORY) keeps the Title-Edit-Form
+			// fallback (PO named only BODY as inconsistent).
+			if msg.String() == "ctrl+e" || (m.detailFocus && m.secCursor == bodySectionIdx) {
+				// B10 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6):
+				// shares the openBodyEditor helper (editor.go) with
+				// keyDetailFocus's new enter-on-BODY branch below -- F2
+				// (Review-Runde 2, Finding 2, ETag-Lost-Update) still holds:
+				// the etag is captured HERE, at open time -- not a fresh
+				// m.beanETag(id) read in applyEditorFinished at submit time
+				// (see that func's doc-stamp for the full lost-update
+				// rationale).
+				nm, cmd := m.openBodyEditor(b)
+				return true, nm, cmd
 			}
 			nm, cmd := m.openEditTitleForm(b)
 			return true, nm, cmd
@@ -1009,6 +1015,18 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// enter detail focus itself (D01 revidiert, PO-Nachtrag 3) -- this alias
 	// only fires once m.detailFocus is already true.
 	if keybind.Matches(msg, keys.Enter) && m.detailLevel == 0 {
+		// B10 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6): enter on
+		// Section [2] BODY was a No-Op before (bodySectionBody carries no
+		// .fields, so the fields>0 guard below never fired) -- inconsistent
+		// with [1] META, where enter opens the field-level overlay cascade.
+		// FIX: enter on BODY now opens $EDITOR (same openBodyEditor helper,
+		// editor.go, as keyNodeAction's e/ctrl+e-on-BODY branch above) --
+		// checked BEFORE the generic fields>0 guard so BODY never falls
+		// through to it (BODY never has fields to enter anyway).
+		if m.secCursor == bodySectionIdx {
+			nm, cmd := m.openBodyEditor(b)
+			return nm, cmd
+		}
 		if len(secs[m.secCursor].fields) > 0 {
 			m.detailLevel = 1
 			m.fieldCursor = 0

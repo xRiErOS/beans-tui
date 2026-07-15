@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -121,4 +122,19 @@ func editInEditor(initial, suffix string) tea.Cmd {
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
 		return readEditorResult(path, initial, runErr)
 	})
+}
+
+// openBodyEditor suspends into $EDITOR on b's Body (B10, design-spec.md §15
+// PF-16, bean bt-ntoz, E8 Task 6) -- the ONE shared helper for BOTH call
+// sites that need to open the Body in $EDITOR: keyNodeAction's "ctrl+e"/"e"-
+// on-BODY-section branch and keyDetailFocus's "enter"-on-BODY-section branch
+// (update.go). Factored out specifically so B10's second call site (the new
+// enter-on-BODY case) does not duplicate the etag-capture dance ctrl+e
+// already established (F2, Review-Runde 2: the etag is captured HERE, at
+// open time -- never a fresh m.beanETag(id) re-read later, see
+// applyEditorFinished's own doc-stamp for the full lost-update rationale).
+func (m model) openBodyEditor(b *data.Bean) (model, tea.Cmd) {
+	m.editorTarget = b.ID
+	m.editorETag = b.ETag
+	return m, editInEditor(b.Body, ".md")
 }

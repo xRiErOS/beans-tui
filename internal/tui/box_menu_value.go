@@ -35,21 +35,33 @@ var valueMenuGroupHead = map[string]string{
 	"priority": "Priority",
 }
 
-// buildValueMenuItems assembles the combined menu's 15 rows (5 status + 5
-// type + 5 priority), each group in the SAME canonical tier order the rest
-// of the app already sorts by (data.StatusValues/TypeValues/PriorityValues,
-// design decision b -- single source; box_filter_facets.go's
-// buildFilterItems consumes the exact same accessors).
-func buildValueMenuItems() []valueMenuItem {
+// buildValueMenuItems assembles ONE group's 5 rows (B11/B12, design-spec.md
+// §15 PF-16, bean bt-ntoz): the menu USED to always return all 15 rows (5
+// status + 5 type + 5 priority) regardless of which group the caller asked
+// for -- confusing both for the `s` key (Status-only by design decision a3)
+// and for the PF-5 Meta field-level enter cascade (which reaches this menu
+// already correctly group-scoped via f.kind, but the combined render then
+// showed the other two groups anyway). group selects exactly one of
+// data.StatusValues/TypeValues/PriorityValues (design decision b -- single
+// source; box_filter_facets.go's buildFilterItems consumes the exact same
+// accessors); an unrecognized group returns nil (openValueMenu's caller
+// contract only ever passes "status"/"type"/"priority", mirrors
+// currentValueForGroup's own unrecognized-group fallback).
+func buildValueMenuItems(group string) []valueMenuItem {
 	var items []valueMenuItem
-	for _, v := range data.StatusValues() {
-		items = append(items, valueMenuItem{group: "status", value: v})
-	}
-	for _, v := range data.TypeValues() {
-		items = append(items, valueMenuItem{group: "type", value: v})
-	}
-	for _, v := range data.PriorityValues() {
-		items = append(items, valueMenuItem{group: "priority", value: v})
+	switch group {
+	case "status":
+		for _, v := range data.StatusValues() {
+			items = append(items, valueMenuItem{group: "status", value: v})
+		}
+	case "type":
+		for _, v := range data.TypeValues() {
+			items = append(items, valueMenuItem{group: "type", value: v})
+		}
+	case "priority":
+		for _, v := range data.PriorityValues() {
+			items = append(items, valueMenuItem{group: "priority", value: v})
+		}
 	}
 	return items
 }
@@ -110,22 +122,24 @@ func currentValueForGroup(b *data.Bean, group string) string {
 	return ""
 }
 
-// openValueMenu opens the combined value menu on the focused bean, seeded on
-// group's current value (the focusedBean()!=nil guard lives in the caller,
-// keyNodeAction/keyDetailFocus/dispatchPalette). group is "status"/"type"/
-// "priority" (T6, design-spec.md §15 PF-5 -- was hardcoded to "status" before
-// the Meta field-level enter cascade needed to seed the other two groups as
-// well). mutTarget captures WHICH bean the open overlay acts on; the ETag is
-// deliberately NOT captured here (design decision d, see beanETag in
-// update.go) -- only the ID, so a watch-reload between open and submit is
-// automatically honored.
+// openValueMenu opens the value menu on the focused bean, filtered to and
+// seeded on group's current value (the focusedBean()!=nil guard lives in the
+// caller, keyNodeAction/keyDetailFocus/dispatchPalette). group is "status"/
+// "type"/"priority" (T6, design-spec.md §15 PF-5 -- was hardcoded to "status"
+// before the Meta field-level enter cascade needed to seed the other two
+// groups as well). B11/B12 (E8 Task 6, bean bt-ntoz): group now ALSO filters
+// buildValueMenuItems, not just the cursor seed -- the menu shows ONLY the
+// requested group's 5 rows. mutTarget captures WHICH bean the open overlay
+// acts on; the ETag is deliberately NOT captured here (design decision d, see
+// beanETag in update.go) -- only the ID, so a watch-reload between open and
+// submit is automatically honored.
 func (m model) openValueMenu(group string) model {
 	b := m.focusedBean()
 	if b == nil {
 		return m
 	}
 	m.mutTarget = b.ID
-	m.menuItems = buildValueMenuItems()
+	m.menuItems = buildValueMenuItems(group)
 	m.menu = listState{}
 	m.menu.setLen(len(m.menuItems))
 	m.menu.cursor = valueMenuCursorFor(m.menuItems, group, currentValueForGroup(b, group))
@@ -189,10 +203,38 @@ func (m model) applyValueMenuSelection() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// valueMenuBox renders the floating combined value menu -- same modalPanel +
-// facetHead-group-header render pattern as box_filter_facets.go's
-// treeFilterBox, "(current)" suffix (theme.Muted) on each group's current
-// value (port beans-src statuspicker.go isCurrent).
+// valueMenuTitle picks modalPanel's title from the open menu's (now single,
+// B11/B12) group -- "Set status"/"Set type"/"Set priority" instead of the old
+// hard-coded "Set value", so it's unambiguous WHICH group is currently open
+// (Planner addition beyond the bare B12 wording, bean bt-y2iw: "welches Menü
+// ist gerade offen" must not become the new source of confusion once the
+// combined 15-row menu splits into three single-group ones). Falls back to
+// "Set value" for an empty menuItems slice (defensive -- openValueMenu never
+// produces one for a recognized group, but valueMenuBox must not panic on a
+// zero-value model either, e.g. in a render-only test).
+func valueMenuTitle(items []valueMenuItem) string {
+	if len(items) == 0 {
+		return "Set value"
+	}
+	switch items[0].group {
+	case "status":
+		return "Set status"
+	case "type":
+		return "Set type"
+	case "priority":
+		return "Set priority"
+	}
+	return "Set value"
+}
+
+// valueMenuBox renders the floating (now single-group, B11/B12) value menu --
+// same modalPanel + facetHead-group-header render pattern as
+// box_filter_facets.go's treeFilterBox, "(current)" suffix (theme.Muted) on
+// the group's current value (port beans-src statuspicker.go isCurrent). The
+// per-row group-header line still renders (lastGroup bookkeeping) even though
+// exactly one group is present now -- harmless, keeps the render loop
+// unchanged/simple, and the header text still adds value confirming which
+// group is open.
 func (m model) valueMenuBox() string {
 	var b strings.Builder
 	b.WriteString(theme.Muted.Render("enter:apply  esc/s:cancel") + "\n")
@@ -219,5 +261,5 @@ func (m model) valueMenuBox() string {
 		}
 		b.WriteString(cursor + label + "\n")
 	}
-	return modalPanel("Set value", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
+	return modalPanel(valueMenuTitle(m.menuItems), b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
 }

@@ -18,8 +18,11 @@ import (
 // --- paletteActions: context-aware ordering (design decision b) ---
 
 // TestPaletteActionsBeanContextFirst guards that a focused bean's node
-// actions (status/tags/parent/blocking/edit_title/delete) come BEFORE the
-// global actions (create/go_backlog/...).
+// actions (status/type/priority/tags/parent/blocking/edit_title/delete) come
+// BEFORE the global actions (create/go_backlog/...). type/priority (B12,
+// design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6) sit directly after
+// status -- the bean's own wording ("paletteActions(), im focused-bean-Block,
+// nach 'status':").
 func TestPaletteActionsBeanContextFirst(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2") // task bean -- focusedBean() != nil
@@ -32,7 +35,7 @@ func TestPaletteActionsBeanContextFirst(t *testing.T) {
 		t.Fatalf("items[0].actionID = %q, want %q (first node action)", items[0].actionID, "status")
 	}
 
-	wantNodeIDs := []string{"status", "tags", "parent", "blocking", "edit_title", "delete"}
+	wantNodeIDs := []string{"status", "type", "priority", "tags", "parent", "blocking", "edit_title", "delete"}
 	for i, want := range wantNodeIDs {
 		if items[i].actionID != want {
 			t.Fatalf("items[%d].actionID = %q, want %q", i, items[i].actionID, want)
@@ -54,9 +57,82 @@ func TestPaletteActionsBeanContextFirst(t *testing.T) {
 	}
 }
 
+// TestPaletteActionsIncludesSetTypeAndSetPriority guards B12's Palette
+// addition (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6): the
+// Command-Center gains "set type"/"set priority" labels alongside the
+// pre-existing "set status" -- NOT a new keybinding (design decision a3
+// still reserves exactly ONE key, `s`, for the whole cluster; these are
+// additional Palette-only entry points to the SAME m.openValueMenu(group)
+// handler).
+func TestPaletteActionsIncludesSetTypeAndSetPriority(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+
+	items := paletteActions(m)
+	wantLabels := map[string]string{"status": "set status", "type": "set type", "priority": "set priority"}
+	for actionID, label := range wantLabels {
+		found := false
+		for _, it := range items {
+			if it.actionID == actionID {
+				found = true
+				if it.label != label {
+					t.Fatalf("action %q label = %q, want %q", actionID, it.label, label)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("paletteActions missing action %q (%q)", actionID, label)
+		}
+	}
+}
+
+// TestDispatchPaletteTypeAndPriorityOpenSeededValueMenu guards
+// dispatchPalette's new "type"/"priority" cases (B12): each opens the value
+// menu filtered AND seeded on that group, exactly mirroring the pre-existing
+// "status" case (m.openValueMenu("status")) -- a genuine second entry point
+// to the SAME handler, never a parallel implementation (dispatchPalette's own
+// doc-stamp).
+func TestDispatchPaletteTypeAndPriorityOpenSeededValueMenu(t *testing.T) {
+	cases := []struct {
+		actionID string
+		want     string
+	}{
+		{"type", "task"},       // tk-2's Type (fixtureBeans)
+		{"priority", "normal"}, // tk-2's Priority (fixtureBeans)
+	}
+	for _, tc := range cases {
+		t.Run(tc.actionID, func(t *testing.T) {
+			m := fixtureModel(t, fixtureBeans())
+			m = focusBean(m, "tk-2")
+			m.paletteOpen = true
+
+			nm, _ := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: tc.actionID, label: "set " + tc.actionID})
+			mm, ok := nm.(model)
+			if !ok {
+				t.Fatalf("dispatchPalette did not return a model, got %T", nm)
+			}
+			if mm.overlay != overlayValueMenu {
+				t.Fatalf("overlay = %v, want overlayValueMenu", mm.overlay)
+			}
+			if len(mm.menuItems) != 5 {
+				t.Fatalf("menuItems len = %d, want 5 (%s group only, B11/B12)", len(mm.menuItems), tc.actionID)
+			}
+			for _, it := range mm.menuItems {
+				if it.group != tc.actionID {
+					t.Fatalf("menuItems leaked group %q, want only %q", it.group, tc.actionID)
+				}
+			}
+			got := mm.menuItems[mm.menu.cursor]
+			if got.value != tc.want {
+				t.Fatalf("cursored value = %q, want %q (tk-2's current %s)", got.value, tc.want, tc.actionID)
+			}
+		})
+	}
+}
+
 // TestPaletteActionsNoFocusedBeanOmitsNodeActions guards that the orphan
 // root (focusedBean() == nil) yields ONLY global actions -- no node action
-// IDs (status/tags/parent/blocking/edit_title/delete) leak in.
+// IDs (status/type/priority/tags/parent/blocking/edit_title/delete) leak in.
 func TestPaletteActionsNoFocusedBeanOmitsNodeActions(t *testing.T) {
 	beans := append(fixtureBeans(), fixtureOrphanBean())
 	m := fixtureModel(t, beans)
@@ -68,7 +144,7 @@ func TestPaletteActionsNoFocusedBeanOmitsNodeActions(t *testing.T) {
 
 	items := paletteActions(m)
 	nodeActionIDs := map[string]bool{
-		"status": true, "tags": true, "parent": true,
+		"status": true, "type": true, "priority": true, "tags": true, "parent": true,
 		"blocking": true, "edit_title": true, "delete": true,
 	}
 	for _, it := range items {

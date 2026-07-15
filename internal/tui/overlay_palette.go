@@ -61,6 +61,17 @@ func paletteActions(m model) []paletteItem {
 	if b := m.focusedBean(); b != nil {
 		items = append(items,
 			paletteItem{kind: paletteKindAction, actionID: "status", label: "set status"},
+			// B12 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6): the
+			// combined value menu split into three single-group overlays --
+			// "set type"/"set priority" are the Palette's new second entry
+			// points to the SAME m.openValueMenu(group) handler `s` and the
+			// PF-5 Meta field-level enter cascade already use. This is NOT a
+			// new keybinding (design-spec §7/decision a3 still reserves
+			// exactly ONE key, `s`, for the whole cluster -- explicit
+			// clarification per the bean's own ERRATUM note, in case a future
+			// reader is tempted to add a dedicated Type/Priority key).
+			paletteItem{kind: paletteKindAction, actionID: "type", label: "set type"},
+			paletteItem{kind: paletteKindAction, actionID: "priority", label: "set priority"},
 			paletteItem{kind: paletteKindAction, actionID: "tags", label: "set tags"},
 			paletteItem{kind: paletteKindAction, actionID: "parent", label: "set parent"},
 			paletteItem{kind: paletteKindAction, actionID: "blocking", label: "set blocking"},
@@ -245,6 +256,10 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 		switch it.actionID {
 		case "status":
 			return m.openValueMenu("status"), nil
+		case "type":
+			return m.openValueMenu("type"), nil
+		case "priority":
+			return m.openValueMenu("priority"), nil
 		case "tags":
 			return m.openTagPicker(), nil
 		case "parent":
