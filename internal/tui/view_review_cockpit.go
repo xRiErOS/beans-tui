@@ -542,7 +542,7 @@ func (m model) viewReviewCockpit() string {
 	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
 	// clickPaneGeometry helper reviewClickRow (below) uses -- single source
 	// for the numeric pane geometry (Golden-Rule-Drift-Schutz).
-	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys)
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	// ONE derivation for this whole render (I01) -- flat/summaryLine/
 	// reviewQueueRows below all read off this SAME rs instead of each
 	// independently re-walking idx.WithTag/EpicAncestor.
@@ -663,7 +663,7 @@ func reviewClickRow(m model, rs reviewState, msg tea.MouseMsg) (flatIdx int, ok 
 	innerW := w - 2
 	head, localKeys := m.reviewCockpitChrome(innerW)
 
-	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys)
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false

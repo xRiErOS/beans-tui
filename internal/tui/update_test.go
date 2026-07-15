@@ -883,3 +883,37 @@ func TestTabReentryResetsStaleDetailFocusState(t *testing.T) {
 			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor)
 	}
 }
+
+// TestRepoSwitchClearsToast is the T6-Review Prelude I01 regression guard
+// (T6b, bean bt-pd22): a Toast surfaced against the OLD repo -- sticky or
+// not -- must not linger visible after a successful repo switch.
+// applyRepoSwitched clears it UNCONDITIONALLY (update.go), unlike
+// applyLoaded's clearToastUnlessSticky (which protects a sticky toast
+// across a SAME-repo background reload) -- a repo switch is a bigger
+// session discontinuity, so even the one sticky ErrConflict toast kind must
+// not survive it. sticky=true here is the worst case (the ONE toast kind
+// that otherwise survives every OTHER reload path, showToast's own doc
+// comment).
+func TestRepoSwitchClearsToast(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // applyRepoSwitched's best-effort config.SetLastRepo must not touch the real $HOME
+
+	m := fixtureModel(t, fixtureBeans())
+	m, _ = m.showToast(toastError, "Konflikt: Bean extern geändert", "", nil, true)
+	if m.toast == nil {
+		t.Fatal("setup: showToast did not set m.toast")
+	}
+
+	newRepo := t.TempDir()
+	tm, _ := m.applyRepoSwitched(repoSwitchedMsg{
+		client:  &data.Client{RepoDir: newRepo},
+		repoDir: newRepo,
+		beans:   []data.Bean{},
+	})
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("applyRepoSwitched did not return a model, got %T", tm)
+	}
+	if m2.toast != nil {
+		t.Fatalf("m.toast = %+v after a successful repo switch, want nil (even a sticky toast from the OLD repo must clear)", m2.toast)
+	}
+}

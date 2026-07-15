@@ -32,6 +32,44 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// minTreeWidthFloor/maxTreeWidthFloor mirror config.minTreeWidth/
+// config.maxTreeWidth (internal/config/settings.go) -- unexported there, so
+// duplicated here as literal values rather than imported (T6b, bean
+// bt-pd22, T5-Review I01): the two packages' clamp ranges must agree, but
+// there is no shared exported constant to single-source them from without
+// widening config's public surface for two int literals.
+const (
+	minTreeWidthFloor = 24
+	maxTreeWidthFloor = 60
+)
+
+// treeWidthFloor resolves configured (the caller's m.settings.Layout.
+// TreeWidth, clickPaneGeometry's own treeWidth param below) into the
+// numeric floor masterDetailWidths (view.go) receives. 0/unset -- every
+// existing golden fixture/test model built via newModel/fixtureModel, whose
+// m.settings is the config.Settings{} zero value until app.go's Run() (or a
+// Settings-Form submit) populates it (types.go's own "settings" field
+// doc-stamp) -- falls back to 24, the SAME value this file hardcoded before
+// T6b, so the seven Golden snapshot tests (tree/chrome/backlog/
+// review_cockpit) stay byte-identical. A configured value is additionally
+// clamped into [minTreeWidthFloor,maxTreeWidthFloor] -- consistent with
+// config.validateSettings' own [24,60] clamp range: belt-and-braces here,
+// since a LIVE model's m.settings already arrives pre-clamped via
+// config.LoadSettings (app.go Run()) / the settings-Submit's own re-read
+// (config.LoadSettings, box_confirm_create.go submitForm "settings" case).
+func treeWidthFloor(configured int) int {
+	if configured <= 0 {
+		return minTreeWidthFloor
+	}
+	if configured < minTreeWidthFloor {
+		return minTreeWidthFloor
+	}
+	if configured > maxTreeWidthFloor {
+		return maxTreeWidthFloor
+	}
+	return configured
+}
+
 // clickPaneGeometry recomputes the numeric frame geometry every one of the
 // three View functions (viewBrowseRepo/viewBacklog/viewReviewCockpit,
 // view_browse_repo.go/view_browse_backlog.go/view_review_cockpit.go) build
@@ -45,8 +83,16 @@ import (
 // head/localKeys are the caller's own EXACT breadcrumb()/footer() strings
 // (browseRepoChrome/backlogChrome/reviewCockpitChrome), so headH always
 // matches that view's real head height (narrow-terminal 2-line breadcrumb
-// wrap included).
-func clickPaneGeometry(w, h int, head, localKeys string) (bodyH, lw, rw, originX, originY int) {
+// wrap included). treeWidth is the caller's OWN m.settings.Layout.TreeWidth
+// (T6b, bean bt-pd22, T5-Review I01 -- BEFORE this task, every caller
+// passed a hardcoded "24" straight into masterDetailWidths below, a silent
+// no-op for the Settings-Form's own tree_width field) -- resolved via
+// treeWidthFloor just above before reaching masterDetailWidths, so every
+// one of this function's three View-function callers AND its three
+// *ClickRow callers picks up a configured Baumbreite consistently, the same
+// Single-Source guarantee this doc comment's opening paragraph already
+// establishes for bodyH/lw/rw/originX/originY themselves.
+func clickPaneGeometry(w, h int, head, localKeys string, treeWidth int) (bodyH, lw, rw, originX, originY int) {
 	if w <= 0 {
 		w = 80
 	}
@@ -64,7 +110,7 @@ func clickPaneGeometry(w, h int, head, localKeys string) (bodyH, lw, rw, originX
 	if bodyH < 1 {
 		bodyH = 1
 	}
-	lw, rw = masterDetailWidths(innerW, 24)
+	lw, rw = masterDetailWidths(innerW, treeWidthFloor(treeWidth))
 	// originY: outer top border(1) + head line(s) + divider(1) + the pane's
 	// OWN top border(1) + its title line(1) + its separator line(1) -- the
 	// row after this is row 0 of the caller's own windowed-content index

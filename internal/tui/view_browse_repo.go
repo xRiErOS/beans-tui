@@ -716,7 +716,7 @@ func (m model) viewBrowseRepo() string {
 	// clickPaneGeometry helper treeClickRow (below) uses to map a click back
 	// to a row -- single source for the numeric pane geometry, not just the
 	// head/localKeys strings above (Golden-Rule-Drift-Schutz).
-	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys)
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	nodes := m.visibleNodes()
 	// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
 	// pane's rows, costing 1 line of its bodyH-2 content budget -- the actual
@@ -760,7 +760,7 @@ func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool
 	innerW := w - 2
 	head, localKeys := m.browseRepoChrome(innerW)
 
-	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys)
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false // right Detail pane, or off-screen -- no Tree target

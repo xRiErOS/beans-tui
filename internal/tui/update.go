@@ -198,6 +198,18 @@ func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
 	m.view = viewBrowseRepo
 	m.err = ""
 
+	// T6-Review Prelude I01 (T6b, bean bt-pd22): a Toast from the OLD repo
+	// (e.g. a sticky ErrConflict warning, applyMutationResult) must not
+	// survive a repo switch -- unlike applyLoaded's clearToastUnlessSticky
+	// (which protects a sticky toast across a SAME-repo background reload),
+	// a repo switch is a full session discontinuity, so this clears
+	// UNCONDITIONALLY, sticky or not (Port devd selectProject's own full
+	// reset breadth, same rationale as every other field reset below). nil
+	// is the whole toastState -- there is no separate generation/sticky
+	// field elsewhere on model to also reset (toastState's own seq/sticky
+	// live INSIDE the struct this pointer addresses, overlay_show_toast.go).
+	m.toast = nil
+
 	// Port devd selectProject's reset-on-switch breadth (view_home.go).
 	m.expanded = map[string]bool{}
 	m.cursorID = ""

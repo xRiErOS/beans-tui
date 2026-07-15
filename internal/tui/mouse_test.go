@@ -45,7 +45,7 @@ func screenLines(m model) []string {
 // reviewCockpitChrome), so the boundary matches the real render exactly.
 func leftPaneClickAt(t *testing.T, m model, head, localKeys, substr string) tea.MouseMsg {
 	t.Helper()
-	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys)
+	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
 	boundary := originX + lw
 	for y, l := range screenLines(m) {
 		i := strings.Index(l, substr)
@@ -295,5 +295,43 @@ func TestToastClickDismissesEvenWithFormOpen(t *testing.T) {
 	}
 	if m2.form == nil {
 		t.Error("the form must stay open -- only the toast is dismissed by this click")
+	}
+}
+
+// --- TreeWidth wiring (T6b, bean bt-pd22, T5-Review I01): clickPaneGeometry
+// resolves treeWidth (the caller's m.settings.Layout.TreeWidth) into
+// masterDetailWidths' floor via treeWidthFloor (mouse.go) instead of the
+// hardcoded "24" every caller passed before this task. w=72/h=30 is chosen
+// so innerW=70's own w/3=23 floor-1fr sits BELOW both 24 (the fallback) and
+// 28 (the configured value below) while w*2/5=28's cap does NOT clip 28 --
+// i.e. a width where the floor's own value is what determines lw, not the
+// unrelated 1fr/cap arithmetic masterDetailWidths (view.go) also applies.
+
+// TestTreeWidthZeroFallsBackToDefault guards the 0/unset fallback: every
+// existing golden fixture/test model's m.settings is the config.Settings{}
+// zero value (TreeWidth 0) until app.go's Run() or a Settings-Form submit
+// populates it -- clickPaneGeometry(treeWidth=0) must still resolve to 24,
+// the SAME value this file hardcoded before T6b, so the seven Golden
+// snapshot tests stay byte-identical.
+func TestTreeWidthZeroFallsBackToDefault(t *testing.T) {
+	_, lw, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", 0)
+	if lw != 24 {
+		t.Fatalf("clickPaneGeometry(treeWidth=0): lw = %d, want 24 (fallback, byte-identical to the pre-T6b hardcoded floor)", lw)
+	}
+}
+
+// TestTreeWidthFromSettingsAffectsGeometry guards the actual wiring: a
+// configured m.settings.Layout.TreeWidth must widen the left pane beyond
+// the 0/unset fallback -- the whole point of T6b (T5-Review I01: before
+// this task, the Settings-Form's tree_width field was persisted/validated
+// but had NO effect on the render, a silent no-op for the PO).
+func TestTreeWidthFromSettingsAffectsGeometry(t *testing.T) {
+	_, lwDefault, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", 0)
+	_, lwConfigured, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", 28)
+	if lwConfigured != 28 {
+		t.Fatalf("clickPaneGeometry(treeWidth=28): lw = %d, want 28", lwConfigured)
+	}
+	if lwConfigured <= lwDefault {
+		t.Fatalf("configured treeWidth (28) did not widen the left pane vs. the default fallback (lw=%d): got lw=%d", lwDefault, lwConfigured)
 	}
 }

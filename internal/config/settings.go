@@ -58,12 +58,13 @@ type ThemeSettings struct {
 }
 
 // LayoutSettings carries the tree-column width floor (design-spec §9
-// "Baumbreite"). NOT wired into the live render yet (clickPaneGeometry,
-// mouse.go, still hardcodes the "24" floor every View function shares) --
-// this task only persists/validates the value; wiring it into
-// masterDetailWidths' treeWidthFloor parameter is a follow-up, deliberately
-// out of scope here (not in this task's Modify-file list, epic-E5-plan.md
-// »Task 5«).
+// "Baumbreite"). Wired into the live render since T6b (bean bt-pd22,
+// T5-Review I01): clickPaneGeometry (mouse.go) resolves the model's
+// m.settings.Layout.TreeWidth into masterDetailWidths' treeWidthFloor
+// parameter (via mouse.go's own treeWidthFloor helper -- 0/unset falls back
+// to 24, the value every View function hardcoded before T6b). E5 Task 5
+// (bean bt-0l8c) originally only persisted/validated this field; the render
+// wiring was its own deliberately-scoped-out follow-up, closed here.
 type LayoutSettings struct {
 	TreeWidth int `yaml:"tree_width"`
 }
@@ -133,9 +134,16 @@ func LoadSettings() (Settings, error) {
 // SaveUserSettings writes repos/editor/theme.accent/layout.tree_width into
 // the user config (design decision c: ONE path, no CWD-override layer).
 // Read-modify-write (Port devd SaveUserSettings's own rationale): an
-// existing file is read first so a config.yaml field this task's form does
-// not cover (future schema growth) survives the write instead of being
-// clobbered back to its zero value. Directory created if missing.
+// existing file is read first and unmarshalled into the SAME Settings
+// struct this function writes back out -- this preserves a FUTURE Settings
+// struct field this task's form does not cover yet (schema growth this repo
+// has not shipped), NOT arbitrary foreign config.yaml keys (T6b, bean
+// bt-pd22, T5-Review I02 -- an unknown YAML key does not survive this
+// typed Unmarshal/Marshal roundtrip; empirically verified against both this
+// port and the devd original it mirrors). A yaml.Node-based roundtrip that
+// WOULD preserve arbitrary foreign keys is deliberately out of scope (YAGNI
+// -- no known caller writes config.yaml by hand today). Directory created
+// if missing.
 func SaveUserSettings(repos []string, editor, accent string, treeWidth int) error {
 	path, err := settingsPath()
 	if err != nil {

@@ -237,7 +237,7 @@ func (m model) viewBacklog() string {
 	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
 	// clickPaneGeometry helper backlogClickRow (below) uses -- single source
 	// for the numeric pane geometry (Golden-Rule-Drift-Schutz).
-	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys)
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	vis := m.backlogVisible()
 	// Same 1-header-row budget trade as the Tree's search head (Task 3):
 	// the search/filter summary line costs 1 line of the list pane's
@@ -352,7 +352,7 @@ func backlogClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok b
 	innerW := w - 2
 	head, localKeys := m.backlogChrome(innerW)
 
-	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys)
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false
