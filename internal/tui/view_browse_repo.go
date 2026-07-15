@@ -484,6 +484,22 @@ func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string
 // is not needed yet: exclusive-open sections keep the open section's content
 // near the top, and digit-jump/1-4 always re-opens from row 0.
 func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) string {
+	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, focused)
+}
+
+// renderAccordionPane (I02, E4-T3-Review PFLICHT carried into E4 Task 4,
+// bean bt-yy6w) is the shared body renderBeanAccordionPane (above) and
+// renderReviewDetailPane (Review-Cockpit, view_review_cockpit.go) both used
+// to hand-duplicate (~15 lines: bodyW/accW clamps, beanSections,
+// renderAccordion, renderPane). open/secCursor/fieldCursor/focused are
+// PARAMETERS rather than read off the model, so this stays decoupled from
+// BOTH call sites' own state shape: the Tree/Backlog's shared m.accOpen/
+// m.secCursor/m.fieldCursor two-level detailFocus machine vs. the Cockpit's
+// own single reviewAccOpen digit-jump cursor (design decision i) -- WHICH
+// state backs the accordion stays entirely at each call site, mirroring
+// I01's copy-on-write doctrine applied to "shared render body, independent
+// state" instead of maps.
+func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor int, focused bool) string {
 	var rows []string
 	if b != nil {
 		bodyW := w - 4
@@ -494,8 +510,8 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 		if accW < 1 {
 			accW = 1
 		}
-		secs := beanSections(m.idx, b, bodyW)
-		acc := renderAccordion(secs, m.accOpen, accW, focused, m.secCursor, m.fieldCursor)
+		secs := beanSections(idx, b, bodyW)
+		acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
 		rows = strings.Split(acc, "\n")
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))

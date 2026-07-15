@@ -7,10 +7,14 @@ package tui
 // section (idx.WithTag("rework")) for PO awareness of already-rejected beans
 // awaiting agent nacharbeit. Master-Detail layout mirrors viewBrowseRepo/
 // viewBacklog's algebra exactly (masterDetailWidths/renderPane/outerBorder/
-// composeOverlays, E1/E2) -- NO new pane math. Verdikt-actions (a/x/o) land
-// in Task 4 (bean bt-yy6w); this task ships navigation + the read-only
-// detail preview only (design decision i: OWN reviewAccOpen, no Tree/
-// Backlog focus-machine reuse).
+// composeOverlays, E1/E2) -- NO new pane math. E4 Task 4 (bean bt-yy6w) wires
+// the Verdikt-actions (a pass / x reject / o reopen, design-spec.md §5) into
+// keyReviewCockpit below, plus two E4-T3-Review PFLICHT carry-overs: I01
+// (reviewState, a single per-render/per-keypress idx.WithTag/EpicAncestor
+// derivation instead of the 3-4x re-walk T3 left behind) and I02
+// (renderReviewDetailPane now delegates to the SHARED renderAccordionPane,
+// view_browse_repo.go, instead of hand-duplicating renderBeanAccordionPane's
+// body).
 //
 // Port references: EpicAncestor's cycle-guarded walk mirrors
 // expandAncestorsOf (update.go) / CollectDescendants (data/hierarchy.go) --
@@ -20,7 +24,13 @@ package tui
 // viewReviewSprint/reviewMasterPane/reviewDetailPane -- LAYOUT PATTERN ONLY,
 // no Sprint-entity coupling (beans-tui has none, design-spec.md §4). The
 // "(keine offenen Reviews)" empty-state placeholder mirrors devd
-// view_navigate_reviews.go:20's own text pattern.
+// view_navigate_reviews.go:20's own text pattern. keyReviewCockpit's a/x/o
+// dispatch structurally mirrors devd keys_review.go's Verdikt-Dispatch
+// pattern (a switch over the focused item's current tag state) -- devd
+// itself has 3 verdict states (Grün/Rot/Peach) against a Sprint-scoped
+// review_status enum; beans-tui has 2 (to-review/rework, design decision c/j
+// -- no "passed" state to render, a passed bean simply leaves every visible
+// section).
 
 import (
 	"fmt"
@@ -109,14 +119,12 @@ func reviewRework(idx *data.Index) []*data.Bean {
 // doc-stamp): every to-review bean in reviewQueue's group order, THEN every
 // reviewRework bean. Group headers are a render-time-only concern
 // (reviewQueueRows below) -- never part of this index space, so up/down can
-// never land on a non-actionable header row.
+// never land on a non-actionable header row. Thin idx-taking wrapper over
+// newReviewState/flat (I01, below) for callers (tests, keyReviewCockpit's
+// own single per-keypress derivation) that only have an *data.Index at
+// hand, not an already-built reviewState.
 func reviewFlat(idx *data.Index) []*data.Bean {
-	var flat []*data.Bean
-	for _, g := range reviewQueue(idx) {
-		flat = append(flat, g.beans...)
-	}
-	flat = append(flat, reviewRework(idx)...)
-	return flat
+	return newReviewState(idx).flat()
 }
 
 // reviewSummaryLine renders the Cockpit's Summary-Zeile (design-spec.md §6
@@ -128,16 +136,64 @@ func reviewFlat(idx *data.Index) []*data.Bean {
 // n" for the awareness-only section). idx is read directly on every call
 // (LIVE derivation, no cached n): an agent tagging more beans to-review while
 // the PO is mid-review simply grows n on the next render, never a stale
-// count.
+// count. Thin idx-taking wrapper over reviewState.summaryLine (I01, below)
+// for standalone callers (tests) -- viewReviewCockpit itself calls
+// rs.summaryLine directly on its own already-derived reviewState instead of
+// going through this wrapper, so a single render only walks idx once.
 func reviewSummaryLine(idx *data.Index, cursor int) string {
-	toReviewCount := 0
-	for _, g := range reviewQueue(idx) {
-		toReviewCount += len(g.beans)
+	return newReviewState(idx).summaryLine(cursor)
+}
+
+// reviewState (I01, E4-T3-Review PFLICHT carried into E4 Task 4, bean
+// bt-yy6w): the Cockpit's queue shape, derived ONCE per render or per
+// keypress and threaded through as a plain value instead of re-walked.
+// Before this task, reviewQueue/reviewRework were independently re-invoked
+// 3-4x by a SINGLE viewReviewCockpit render (reviewFlat's own reviewQueue+
+// reviewRework calls, reviewSummaryLine's own reviewQueue call,
+// reviewQueueRows' own reviewQueue+reviewRework calls) -- Task 4 adds a/x/o,
+// three MORE call sites that all need the same to-review/rework boundary
+// (reviewFocused/reviewIsRework below), so the redundant idx.WithTag/
+// EpicAncestor re-walk is fixed here rather than grown further.
+// reviewQueue/reviewRework themselves stay untouched (pure, independently
+// unit-tested primitives, unchanged signatures) -- reviewState is a thin
+// bundle over their output, not a replacement.
+type reviewState struct {
+	groups   []reviewGroup // reviewQueue's own grouped result
+	toReview []*data.Bean  // groups flattened, in order -- cursor space [0, len(toReview))
+	rework   []*data.Bean  // reviewRework's own result -- cursor space [len(toReview), len(flat()))
+}
+
+// newReviewState is the ONE idx.WithTag/EpicAncestor derivation callers
+// should perform per render or per keypress (I01) -- viewReviewCockpit and
+// keyReviewCockpit each call this exactly once at their own top and thread
+// the result through every helper below that used to re-derive it.
+func newReviewState(idx *data.Index) reviewState {
+	groups := reviewQueue(idx)
+	var toReview []*data.Bean
+	for _, g := range groups {
+		toReview = append(toReview, g.beans...)
 	}
-	if cursor < toReviewCount {
-		return fmt.Sprintf("%d of %d", cursor+1, toReviewCount)
+	return reviewState{groups: groups, toReview: toReview, rework: reviewRework(idx)}
+}
+
+// flat concatenates rs's to-review and rework halves -- the SAME
+// to-review-then-rework cursor index space reviewFlat's own doc comment
+// establishes, just read off an already-computed reviewState instead of
+// re-walking idx.
+func (rs reviewState) flat() []*data.Bean {
+	flat := make([]*data.Bean, 0, len(rs.toReview)+len(rs.rework))
+	flat = append(flat, rs.toReview...)
+	flat = append(flat, rs.rework...)
+	return flat
+}
+
+// summaryLine is reviewSummaryLine's logic (design decision j), scoped to an
+// already-derived reviewState.
+func (rs reviewState) summaryLine(cursor int) string {
+	if cursor < len(rs.toReview) {
+		return fmt.Sprintf("%d of %d", cursor+1, len(rs.toReview))
 	}
-	return fmt.Sprintf("Rework: %d offen", len(reviewRework(idx)))
+	return fmt.Sprintf("Rework: %d offen", len(rs.rework))
 }
 
 // reviewDot renders the Verdikt-Dot: Peach = pending (to-review, unverdikted
@@ -162,7 +218,11 @@ func reviewDot(inRework bool) string {
 // header/separator rows are render-only and never receive the cursor
 // treatment). Windowed around the CURSOR ROW (not cursorFlat directly, since
 // headers shift row indices) via the existing windowAround (E1 Task 8).
-func reviewQueueRows(idx *data.Index, cursorFlat int, focused bool, bodyH int) []string {
+// Takes an already-derived reviewState (I01) instead of an *data.Index --
+// the caller (viewReviewCockpit) computes it ONCE per render and reuses it
+// here and for the summary line, rather than this function re-walking
+// idx.WithTag/EpicAncestor on its own.
+func reviewQueueRows(rs reviewState, cursorFlat int, focused bool, bodyH int) []string {
 	var rows []string
 	flatIdx := 0
 	cursorRow := 0
@@ -183,7 +243,7 @@ func reviewQueueRows(idx *data.Index, cursorFlat int, focused bool, bodyH int) [
 		flatIdx++
 	}
 
-	for _, g := range reviewQueue(idx) {
+	for _, g := range rs.groups {
 		if g.epic != nil {
 			rows = append(rows, theme.Muted.Render(relationRow(g.epic)))
 		} else {
@@ -194,9 +254,9 @@ func reviewQueueRows(idx *data.Index, cursorFlat int, focused bool, bodyH int) [
 		}
 	}
 
-	if rework := reviewRework(idx); len(rework) > 0 {
+	if len(rs.rework) > 0 {
 		rows = append(rows, theme.Dim.Render("── Rework ──"))
-		for _, b := range rework {
+		for _, b := range rs.rework {
 			appendBeanRow(b, true)
 		}
 	}
@@ -206,37 +266,24 @@ func reviewQueueRows(idx *data.Index, cursorFlat int, focused bool, bodyH int) [
 
 // renderReviewDetailPane renders the read-only Detail-Accordion preview for
 // the Cockpit's cursored bean, using the Cockpit's OWN reviewAccOpen digit-
-// jump cursor (design decision i) -- deliberately NOT the shared
-// renderBeanAccordionPane (view_browse_repo.go), which hard-reads
-// m.accOpen/m.secCursor/m.fieldCursor: those belong to the Tree/Backlog's
-// two-level detailFocus machine, which the always-read-only Cockpit preview
-// does not have (no field-level relation-jump here). Reuses the same
-// underlying primitives (beanSections/renderAccordion/renderPane, E1/E2) --
-// only the field-coupling is deliberately NOT shared, per design decision i's
-// own rationale (mirrors I01's copy-on-write doctrine, applied to shared vs.
-// own fields instead of maps).
+// jump cursor (design decision i) -- deliberately NOT the Tree/Backlog's
+// m.accOpen/m.secCursor/m.fieldCursor two-level detailFocus machine, which
+// the always-read-only Cockpit preview does not have (no field-level
+// relation-jump here). Delegates the actual bodyW/accW/beanSections/
+// renderAccordion/renderPane body to the SHARED renderAccordionPane (I02,
+// E4-T3-Review PFLICHT carried into this task, view_browse_repo.go) --
+// before this task, this function and renderBeanAccordionPane
+// hand-duplicated that ~15-line body; only the STATE feeding it (this
+// function's own reviewAccOpen-derived activeIdx vs. the Tree/Backlog's
+// shared fields) stays deliberately un-shared, per design decision i's own
+// rationale (mirrors I01's copy-on-write doctrine, applied to shared render
+// body vs. independent state instead of maps).
 func (m model) renderReviewDetailPane(b *data.Bean, w, h int) string {
-	var rows []string
-	if b != nil {
-		bodyW := w - 4
-		if bodyW < 1 {
-			bodyW = 1
-		}
-		accW := w - 2
-		if accW < 1 {
-			accW = 1
-		}
-		secs := beanSections(m.idx, b, bodyW)
-		activeIdx := m.reviewAccOpen - 1
-		if activeIdx < 0 {
-			activeIdx = 0
-		}
-		acc := renderAccordion(secs, m.reviewAccOpen, accW, true, activeIdx, 0)
-		rows = strings.Split(acc, "\n")
-	} else {
-		rows = append(rows, theme.Dim.Render("(no selection)"))
+	activeIdx := m.reviewAccOpen - 1
+	if activeIdx < 0 {
+		activeIdx = 0
 	}
-	return renderPane(pane{title: "Detail", rows: rows}, w, h, true)
+	return renderAccordionPane(m.idx, b, w, h, m.reviewAccOpen, activeIdx, 0, true)
 }
 
 // openReviewCockpit enters the Cockpit (`R`, keyTree/keyBacklog below):
@@ -251,15 +298,50 @@ func (m model) openReviewCockpit() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// keyReviewCockpit fully captures the Review-Cockpit (design decision h) --
-// a/x/o land in Task 4 (bean bt-yy6w); this task wires navigation only
-// (up/down, n/p aliases, digit accordion-jump, esc/q back to Browse).
-// Unmatched keys (including a/x/o for now) are a silent no-op -- the SAME
-// "handled-but-stub" convention as E3 Task 1's stub keys, not a "coming
-// soon" text (throwaway work, Task 4 follows immediately in the epic
-// sequence).
+// reviewFocused bounds-checks cursor against flat (the Cockpit's own
+// to-review+rework cursor index space, reviewFlat's own doc comment) and
+// returns the bean there, or nil when out of range -- the ONE guard
+// keyReviewCockpit's a/x/o cases (below) and focusedBean's Cockpit case
+// (update.go) share instead of independent index checks.
+func reviewFocused(flat []*data.Bean, cursor int) *data.Bean {
+	if cursor < 0 || cursor >= len(flat) {
+		return nil
+	}
+	return flat[cursor]
+}
+
+// reviewIsRework reports whether b currently carries the "rework" tag --
+// the single source of truth Pass/Reject (must NOT fire on an
+// already-rejected bean) and Reopen (must ONLY fire on one) share below.
+// ERRATUM vs. the plan's own pseudocode (epic-E4-plan.md »Task 4« Step 11,
+// which sketches `reviewIsRework(idx, b)`): verified against the actual
+// data shape instead of implemented as written -- ANY bean pulled out of
+// reviewFlat already reflects the live idx it came from (reviewRework is a
+// thin idx.WithTag("rework") pass-through), so a direct tag check on b is
+// both correct and doesn't need an idx argument or a second WithTag walk
+// (I01 precedent: avoid a redundant re-derivation, not just move it here).
+func reviewIsRework(b *data.Bean) bool {
+	for _, t := range b.Tags {
+		if t == "rework" {
+			return true
+		}
+	}
+	return false
+}
+
+// keyReviewCockpit fully captures the Review-Cockpit (design decision h):
+// up/down, n/p aliases, digit accordion-jump, esc/q back to Browse
+// (Task 3), plus a/x/o Verdikt-actions (Task 4, bean bt-yy6w,
+// design-spec.md §5/§7): `a` Pass (PassReview, design decision d) and `x`
+// Reject (opens the Reject-Kommentar-Form, design decision e) both act on a
+// to-review item and are a no-op on a Rework item (already verdicted once,
+// re-verdicting would double-process it); `o` Reopen (SetTags,
+// design decision f) is the mirror -- acts ONLY on a Rework item, a no-op on
+// a to-review item (already in its target state). flat is derived ONCE at
+// the top (I01) and reused by every case below via reviewFocused, instead
+// of each case re-deriving reviewFlat/reviewIsRework's own idx.WithTag walk.
 func (m model) keyReviewCockpit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	flat := reviewFlat(m.idx)
+	flat := reviewFlat(m.idx) // ONE derivation for this whole keypress (I01)
 
 	switch {
 	case keybind.Matches(msg, keys.Back), msg.String() == "q":
@@ -299,8 +381,34 @@ func (m model) keyReviewCockpit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.reviewCursor > 0 {
 			m.reviewCursor--
 		}
+	case "a": // pass (design-spec §5's Pass row: status -> completed, tag removed)
+		if b := reviewFocused(flat, m.reviewCursor); b != nil && !reviewIsRework(b) {
+			etag, ok := m.beanETag(b.ID)
+			if !ok {
+				m.err = "Bean nicht mehr vorhanden — Verdikt verworfen"
+				return m, nil
+			}
+			id, client := b.ID, m.client
+			return m, mutateCmd(func() error { return client.PassReview(id, etag) })
+		}
+	case "x": // reject -> opens the Reject-Kommentar-Form (design decision e)
+		if b := reviewFocused(flat, m.reviewCursor); b != nil && !reviewIsRework(b) {
+			return m.openRejectForm(b)
+		}
+	case "o": // reopen -- design decision f: only meaningful on a Rework item
+		if b := reviewFocused(flat, m.reviewCursor); b != nil && reviewIsRework(b) {
+			etag, ok := m.beanETag(b.ID)
+			if !ok {
+				m.err = "Bean nicht mehr vorhanden"
+				return m, nil
+			}
+			id, client := b.ID, m.client
+			return m, mutateCmd(func() error {
+				return client.SetTags(id, []string{"to-review"}, []string{"rework"}, etag)
+			})
+		}
 	}
-	return m, nil // a/x/o -- Task 4 (bean bt-yy6w)
+	return m, nil
 }
 
 // viewReviewCockpit renders the two-pane master-detail Review-Cockpit --
@@ -344,7 +452,11 @@ func (m model) viewReviewCockpit() string {
 	}
 
 	lw, rw := masterDetailWidths(innerW, 24)
-	flat := reviewFlat(m.idx)
+	// ONE derivation for this whole render (I01) -- flat/summaryLine/
+	// reviewQueueRows below all read off this SAME rs instead of each
+	// independently re-walking idx.WithTag/EpicAncestor.
+	rs := newReviewState(m.idx)
+	flat := rs.flat()
 
 	var listBox, detailBox string
 	if len(flat) == 0 {
@@ -367,8 +479,8 @@ func (m model) viewReviewCockpit() string {
 		// Same 1-header-row budget trade as the Tree's search head / Backlog
 		// (E2 Task 3/5): the summary line costs 1 line of the list pane's
 		// bodyH-2 content budget, so the actual rows window to bodyH-3.
-		summaryLine := truncate(reviewSummaryLine(m.idx, cursor), lw-2)
-		rows := append([]string{summaryLine}, reviewQueueRows(m.idx, cursor, true, bodyH-3)...)
+		summaryLine := truncate(rs.summaryLine(cursor), lw-2)
+		rows := append([]string{summaryLine}, reviewQueueRows(rs, cursor, true, bodyH-3)...)
 		listBox = renderPane(pane{title: "Review-Queue", rows: rows}, lw, bodyH, true)
 		detailBox = m.renderReviewDetailPane(flat[cursor], rw, bodyH)
 	}

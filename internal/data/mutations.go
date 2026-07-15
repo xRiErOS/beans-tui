@@ -305,6 +305,32 @@ func (c *Client) SetBody(id, body, etag string) error {
 	return c.update(id, etag, "--body", body)
 }
 
+// PassReview marks a to-review bean accepted in ONE beans-update call
+// (E4 Task 4, bean bt-yy6w, design decision d, design-spec.md §5's Pass
+// row): status -> completed AND the "to-review" tag removed, atomically
+// against a single etag -- the SAME combined-call rationale SetTags/
+// SetBlocking (E3 Task 2/3) already established: N sequential calls against
+// the SAME etag would be a conflict cascade, since the first call rotates
+// the etag on disk and every subsequent call then sees a stale one. No body
+// change on Pass, unlike Reject below.
+func (c *Client) PassReview(id, etag string) error {
+	return c.update(id, etag, "--status", "completed", "--remove-tag", "to-review")
+}
+
+// RejectReview swaps "to-review" -> "rework" AND appends a dated "## Review
+// <date>" body section, in ONE beans-update call (E4 Task 4, bean bt-yy6w,
+// design decision d, design-spec.md §5's Reject row) -- combining
+// --remove-tag/--tag/--body-append avoids the same etag-cascade risk
+// PassReview above documents. date is caller-supplied
+// (internal/tui/view_review_cockpit.go's Reject-Form submit path passes
+// time.Now().Format("2006-01-02")) rather than computed here, purely for
+// deterministic tests (client_mut_test.go pins the exact section text
+// without touching the clock).
+func (c *Client) RejectReview(id, comment, date, etag string) error {
+	section := "\n## Review " + date + "\n\n" + comment + "\n"
+	return c.update(id, etag, "--remove-tag", "to-review", "--tag", "rework", "--body-append", section)
+}
+
 // Delete deletes a bean outright. `beans delete` normally prompts for
 // confirmation on the CLI; --json skips that prompt (and any
 // reference/child warnings) since bt drives this non-interactively --

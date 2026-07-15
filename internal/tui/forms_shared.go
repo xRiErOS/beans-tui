@@ -138,6 +138,8 @@ func (m model) formTitle() string {
 		return "New bean"
 	case "editTitle":
 		return "Edit title"
+	case "reject":
+		return "Review ablehnen"
 	}
 	return ""
 }

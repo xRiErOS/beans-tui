@@ -287,6 +287,289 @@ func TestKeyReviewCockpitAssignDoesNotOpenParentPicker(t *testing.T) {
 	}
 }
 
+// --- Verdikt-Aktionen a/x/o (E4 Task 4, bean bt-yy6w) ---
+
+// TestKeyReviewCockpitPassFiresPassReview guards "a" on a to-review item
+// (reviewCursor == 0 by construction, openReviewCockpit's own reset): fires
+// data.Client.PassReview against the CURSORED bean's fresh etag. Drives
+// keyReviewCockpit directly (not step/Update) so the returned Cmd can be
+// inspected BEFORE it fires -- mirrors form_edit_title_test.go's
+// TestEditTitleSubmitFiresSetTitleDirectlyNoConfirm dispatch-proof pattern:
+// fixtureModel's client points at a non-repo dir, so cmd() yields a REAL
+// "beans update" CLI error, proving PassReview actually dispatched rather
+// than a mocked stand-in.
+func TestKeyReviewCockpitPassFiresPassReview(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	m.client = &data.Client{RepoDir: "/nonexistent-bt-e4-t4-scratch-dir"}
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+
+	_, cmd := m.keyReviewCockpit(runeMsg('a'))
+	if cmd == nil {
+		t.Fatal("'a' on a to-review bean must fire a Cmd (PassReview)")
+	}
+	msg := cmd()
+	mdm, ok := msg.(mutationDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want mutationDoneMsg", msg)
+	}
+	if mdm.err == nil || !strings.Contains(mdm.err.Error(), "beans update") {
+		t.Fatalf("mutationDoneMsg.err = %v, want an error containing %q (proves PassReview dispatched)", mdm.err, "beans update")
+	}
+}
+
+// TestKeyReviewCockpitPassOnReworkIsNoop guards the reviewIsRework guard on
+// "a": a Rework item has already been verdicted once (rejected) -- Pass must
+// not fire against it (design decision f's own "already verdicted" logic,
+// mirrored onto Pass/Reject, not just Reopen).
+func TestKeyReviewCockpitPassOnReworkIsNoop(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	flat := reviewFlat(m.idx)
+	m.reviewCursor = len(flat) - 1 // the single rework bean (tk-rw), always last
+
+	nm2, cmd := m.keyReviewCockpit(runeMsg('a'))
+	if cmd != nil {
+		t.Fatal("'a' on a Rework item must be a no-op -- must not fire PassReview")
+	}
+	mm, ok := nm2.(model)
+	if !ok {
+		t.Fatalf("keyReviewCockpit did not return a model, got %T", nm2)
+	}
+	if mm.err != "" {
+		t.Fatalf("err = %q, want empty (no-op, not a surfaced error)", mm.err)
+	}
+}
+
+// TestKeyReviewCockpitRejectOpensCommentForm guards "x" on a to-review item:
+// opens the Reject-Kommentar-Form (m.formKind == "reject"), captures the
+// CURSORED bean's ID on m.mutTarget (same convention as openEditTitleForm).
+func TestKeyReviewCockpitRejectOpensCommentForm(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	want := reviewFlat(m.idx)[0].ID
+
+	nm2, _ := m.keyReviewCockpit(runeMsg('x'))
+	mm, ok := nm2.(model)
+	if !ok {
+		t.Fatalf("keyReviewCockpit did not return a model, got %T", nm2)
+	}
+	if mm.form == nil || mm.formKind != "reject" {
+		t.Fatalf("'x' did not open the reject form (form=%v formKind=%q)", mm.form, mm.formKind)
+	}
+	if mm.mutTarget != want {
+		t.Fatalf("mutTarget = %q, want %q", mm.mutTarget, want)
+	}
+}
+
+// TestKeyReviewCockpitRejectOnReworkIsNoop mirrors
+// TestKeyReviewCockpitPassOnReworkIsNoop for "x".
+func TestKeyReviewCockpitRejectOnReworkIsNoop(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	flat := reviewFlat(m.idx)
+	m.reviewCursor = len(flat) - 1
+
+	nm2, _ := m.keyReviewCockpit(runeMsg('x'))
+	mm, ok := nm2.(model)
+	if !ok {
+		t.Fatalf("keyReviewCockpit did not return a model, got %T", nm2)
+	}
+	if mm.form != nil {
+		t.Fatal("'x' on a Rework item must not open the Reject-Form")
+	}
+}
+
+// TestKeyReviewCockpitReopenOnReworkFiresSetTags guards "o" on a Rework item
+// (design decision f): fires data.Client.SetTags(id, [to-review], [rework],
+// etag) -- the exact E3-Task-2 combined-diff wrapper, reused unchanged.
+func TestKeyReviewCockpitReopenOnReworkFiresSetTags(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	m.client = &data.Client{RepoDir: "/nonexistent-bt-e4-t4-scratch-dir"}
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	flat := reviewFlat(m.idx)
+	m.reviewCursor = len(flat) - 1 // the single rework bean (tk-rw), always last
+
+	_, cmd := m.keyReviewCockpit(runeMsg('o'))
+	if cmd == nil {
+		t.Fatal("'o' on a Rework item must fire a Cmd (SetTags reopen)")
+	}
+	msg := cmd()
+	mdm, ok := msg.(mutationDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want mutationDoneMsg", msg)
+	}
+	if mdm.err == nil || !strings.Contains(mdm.err.Error(), "beans update") {
+		t.Fatalf("mutationDoneMsg.err = %v, want an error containing %q (proves SetTags dispatched)", mdm.err, "beans update")
+	}
+}
+
+// TestKeyReviewCockpitReopenOnToReviewIsNoop guards "o" on a to-review item
+// (design decision f: "bereits im Zielzustand" -- already unverdicted, there
+// is nothing to reopen).
+func TestKeyReviewCockpitReopenOnToReviewIsNoop(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model) // reviewCursor == 0 (openReviewCockpit's own reset) -> a to-review item
+
+	nm2, cmd := m.keyReviewCockpit(runeMsg('o'))
+	if cmd != nil {
+		t.Fatal("'o' on a to-review item must be a no-op (design decision f: already in target state)")
+	}
+	mm, ok := nm2.(model)
+	if !ok {
+		t.Fatalf("keyReviewCockpit did not return a model, got %T", nm2)
+	}
+	if mm.reviewCursor != 0 {
+		t.Fatalf("reviewCursor changed = %d, want unchanged 0", mm.reviewCursor)
+	}
+}
+
+// --- focusedBean() Cockpit case (E4 Task 4, T3-Review "I (kein Bug)" note) ---
+
+// TestFocusedBeanReviewCockpitCase guards that focusedBean() resolves the
+// Cockpit's OWN reviewFlat/reviewCursor while m.view == viewReviewCockpit,
+// not the (possibly stale/irrelevant) Tree cursor -- otherwise ctrl+k's
+// Palette-Node-Actions inside the Cockpit would act on the wrong bean
+// (bt-hxyo's own carried-forward observation).
+func TestFocusedBeanReviewCockpitCase(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	flat := reviewFlat(m.idx)
+	m.reviewCursor = 1
+
+	got := m.focusedBean()
+	if got == nil || got.ID != flat[1].ID {
+		t.Fatalf("focusedBean() in Review-Cockpit = %v, want %s (reviewFlat[reviewCursor])", got, flat[1].ID)
+	}
+}
+
+// TestFocusedBeanReviewCockpitOutOfRangeReturnsNil is the defensive
+// counterpart: an out-of-range reviewCursor (e.g. a render landing between
+// two keystrokes against a since-shrunk queue) must not panic or return a
+// stale bean.
+func TestFocusedBeanReviewCockpitOutOfRangeReturnsNil(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	m.reviewCursor = 999
+
+	if got := m.focusedBean(); got != nil {
+		t.Fatalf("focusedBean() with out-of-range reviewCursor = %v, want nil", got)
+	}
+}
+
+// --- Inherited T3-Review PFLICHT test gaps (bt-hxyo's own Akzeptanz list, carried into this task) ---
+
+// TestReviewQueueEpicItselfTaggedAppearsInKeinEpicBucket closes gap (a): a
+// to-review-tagged EPIC bean is its OWN group's header (relationRow(g.epic),
+// reviewQueueRows) for its to-review CHILDREN, but EpicAncestor(idx, b)
+// looks at b's OWN Parent chain, never at b itself -- so the epic's own
+// to-review tag places IT in the "(kein Epic)" bucket as an ordinary row
+// entry (its parent is the milestone, not another epic), separate from its
+// role as a group header. Guards that reviewQueue handles a bean being both
+// "a group's header" and "a member of a DIFFERENT group" without crashing or
+// misplacing it.
+func TestReviewQueueEpicItselfTaggedAppearsInKeinEpicBucket(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "ms-1", Title: "Milestone", Status: "todo", Type: "milestone", Priority: "normal"},
+		{ID: "ep-a", Title: "Epic Alpha", Status: "in-progress", Type: "epic", Priority: "normal", Parent: "ms-1", Tags: []string{"to-review"}},
+		{ID: "tk-a1", Title: "Alpha Task One", Status: "in-progress", Type: "task", Priority: "normal", Parent: "ep-a", Tags: []string{"to-review"}},
+	}
+	idx := data.NewIndex(beans)
+	groups := reviewQueue(idx)
+
+	if len(groups) != 2 {
+		t.Fatalf("len(reviewQueue) = %d, want 2 (ep-a's own child-group + (kein Epic) containing ep-a itself)", len(groups))
+	}
+	var epicGroup, noEpicGroup *reviewGroup
+	for i := range groups {
+		if groups[i].epic != nil {
+			epicGroup = &groups[i]
+		} else {
+			noEpicGroup = &groups[i]
+		}
+	}
+	if epicGroup == nil || epicGroup.epic.ID != "ep-a" {
+		t.Fatalf("expected an ep-a-headed group, got %+v", groups)
+	}
+	if len(epicGroup.beans) != 1 || epicGroup.beans[0].ID != "tk-a1" {
+		t.Fatalf("ep-a group beans = %v, want [tk-a1]", epicGroup.beans)
+	}
+	if noEpicGroup == nil || len(noEpicGroup.beans) != 1 || noEpicGroup.beans[0].ID != "ep-a" {
+		t.Fatalf("(kein Epic) bucket = %v, want [ep-a] (the epic itself, tagged to-review, has no epic ANCESTOR of its own)", noEpicGroup)
+	}
+}
+
+// TestReviewCockpitViewClampsCursorWhenQueueShrinksExternally closes gap
+// (b): m.reviewCursor set from a PREVIOUS render against a longer flat, then
+// the live idx shrinks (simulating a watch-reload landing between
+// keystrokes) WITHOUT reviewCursor being resynced -- View() must clamp
+// rather than index out of range (viewReviewCockpit's own documented
+// defensive-clamp comment, previously never exercised by a test).
+func TestReviewCockpitViewClampsCursorWhenQueueShrinksExternally(t *testing.T) {
+	m := fixtureModel(t, reviewFixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	m.reviewCursor = 4 // valid against reviewFixtureBeans' 5-bean flat
+
+	shrunk := []data.Bean{
+		{ID: "ms-1", Title: "Milestone", Status: "todo", Type: "milestone", Priority: "normal"},
+		{ID: "tk-solo", Title: "Solo Review Task", Status: "in-progress", Type: "task", Priority: "normal", Tags: []string{"to-review"}},
+	}
+	m.idx = data.NewIndex(shrunk)
+
+	out := m.View() // must not panic (index out of range)
+	// "tk-solo" (the ID), not the full title -- the narrow list pane
+	// truncates the title row ("Solo Review Ta…"), same truncate() budget
+	// every other row in this pane already has.
+	if !strings.Contains(out, "tk-solo") || !strings.Contains(out, "1 of 1") {
+		t.Errorf("clamped render does not show the surviving bean at a clamped \"1 of 1\" summary, got:\n%s", out)
+	}
+}
+
+// TestReviewCockpitReworkOnlyQueueNoToReviewGroups closes gap (c): zero
+// to-review beans, one Rework bean -- reviewQueue must be empty (no epic
+// groups at all), reviewFlat must be rework-only, the summary line must
+// read "Rework: n offen" even at cursor 0 (no to-review beans exist to
+// count), and the render must show the "── Rework ──" section with no epic
+// group headers above it.
+func TestReviewCockpitReworkOnlyQueueNoToReviewGroups(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "ms-1", Title: "Milestone", Status: "todo", Type: "milestone", Priority: "normal"},
+		{ID: "ep-a", Title: "Epic Alpha", Status: "todo", Type: "epic", Priority: "normal", Parent: "ms-1"},
+		{ID: "tk-rw1", Title: "Rework Only Task", Status: "in-progress", Type: "task", Priority: "normal", Parent: "ep-a", Tags: []string{"rework"}},
+	}
+	idx := data.NewIndex(beans)
+
+	if groups := reviewQueue(idx); len(groups) != 0 {
+		t.Fatalf("reviewQueue(idx) with no to-review beans = %v, want empty", groups)
+	}
+	flat := reviewFlat(idx)
+	if len(flat) != 1 || flat[0].ID != "tk-rw1" {
+		t.Fatalf("reviewFlat(idx) rework-only = %v, want [tk-rw1]", flat)
+	}
+	got := reviewSummaryLine(idx, 0)
+	if !strings.Contains(got, "Rework:") || strings.Contains(got, " of ") {
+		t.Fatalf("reviewSummaryLine(idx, 0) rework-only = %q, want Rework-context wording (no to-review beans exist at all)", got)
+	}
+
+	m := fixtureModel(t, beans)
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	nm, _ := m.openReviewCockpit()
+	m = nm.(model)
+	out := m.View()
+	if !strings.Contains(out, "── Rework ──") || !strings.Contains(out, "Rework Only Task") {
+		t.Errorf("rework-only render missing the Rework section, got:\n%s", out)
+	}
+}
+
 // goldenReviewCockpitModel builds the deterministic fixture for
 // TestReviewCockpitGolden: 2 Epic groups + 1 (kein Epic) bean + 1 Rework
 // bean -- every row kind the Cockpit renders is on screen at once.

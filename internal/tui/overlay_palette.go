@@ -7,9 +7,10 @@ package tui
 // BELOW the actions (palFilteredBeans, design decision b), palette-scoped
 // Bleve staleness guard (palBleveIDs/palBleveFor/palBleveLoading, types.go;
 // paletteBleveResultMsg/paletteSearchCmd, messages.go). Task 4 (bean
-// bt-yy6w) appends the Review-Cockpit jump action once that view exists
-// (devd overlay_palette.go's own "Reviews (T17)/Memory (T18) werden hier
-// ergänzt" precedent, port reference at the top of epic-E4-plan.md).
+// bt-yy6w) appends the "go to: review cockpit" jump action now that the
+// Review-Cockpit view exists (devd overlay_palette.go's own "Reviews
+// (T17)/Memory (T18) werden hier ergänzt" precedent, port reference at the
+// top of epic-E4-plan.md).
 //
 // Port references: fuzzyMatch is a verbatim port (fuzzy.go, design decision
 // a). paletteActions' "verb: label" wording convention and dispatchPalette's
@@ -71,10 +72,10 @@ func paletteActions(m model) []paletteItem {
 		paletteItem{kind: paletteKindAction, actionID: "create", label: "create: bean"},
 		paletteItem{kind: paletteKindAction, actionID: "go_backlog", label: "go to: backlog"},
 		paletteItem{kind: paletteKindAction, actionID: "go_browse", label: "go to: browse"},
+		paletteItem{kind: paletteKindAction, actionID: "go_review", label: "go to: review cockpit"},
 		paletteItem{kind: paletteKindAction, actionID: "filter", label: "filter: facetten"},
 		paletteItem{kind: paletteKindAction, actionID: "search", label: "search: beans"},
 		paletteItem{kind: paletteKindAction, actionID: "reload", label: "reload: daten"},
-		// T4 appends "go_review" ("go to: review cockpit") here.
 	)
 	return items
 }
@@ -272,13 +273,18 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 		case "go_browse":
 			m.view = viewBrowseRepo
 			return m, nil
+		case "go_review":
+			// E4 Task 4 (bean bt-yy6w): reuses openReviewCockpit verbatim
+			// (view_review_cockpit.go) -- same reviewCursor/reviewAccOpen
+			// reset `R` already performs, so a Palette-driven jump into the
+			// Cockpit behaves identically to the direct keybinding.
+			return m.openReviewCockpit()
 		case "filter":
 			return m.openFilterMenu()
 		case "search":
 			return m.openSearchInput()
 		case "reload":
 			return m, loadCmd(m.client)
-			// "go_review" -- T4
 		}
 	}
 	return m, nil

@@ -12,6 +12,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -66,6 +67,22 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 		}
 		client := m.client
 		return m, mutateCmd(func() error { return client.SetTitle(id, title, etag) })
+	case "reject":
+		// E4 Task 4 (bean bt-yy6w, design decision e): mirrors "editTitle"s
+		// direct-fire shape exactly -- no Confirm-Gate, ETag re-read fresh
+		// at submit time (design decision d).
+		comment := m.form.GetString("comment")
+		id := m.mutTarget
+		m.form = nil
+		m.formKind = ""
+		etag, ok := m.beanETag(id)
+		if !ok {
+			m.err = "Bean nicht mehr vorhanden — Ablehnung verworfen"
+			return m, nil
+		}
+		client := m.client
+		date := time.Now().Format("2006-01-02")
+		return m, mutateCmd(func() error { return client.RejectReview(id, comment, date, etag) })
 	}
 	m.form = nil
 	m.formKind = ""

@@ -611,10 +611,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // independent of which view is active (devd port focusedIssue,
 // view_detail_issue.go:20-35) -- view-agnostic so Task 5's Backlog view
 // (viewBacklog case below, bean bt-gzu6) reuses keyDetailFocus verbatim.
+// viewReviewCockpit case added E4 Task 4 (bean bt-yy6w, T3-Review "I (kein
+// Bug)" note carried forward, bt-hxyo): before this, the Cockpit fell
+// through to the default branch's Tree-cursorID lookup, so ctrl+k's
+// Palette-Node-Actions inside the Cockpit acted on whatever bean was last
+// focused in the Tree, not the bean actually cursored in the Review-Queue.
 func (m model) focusedBean() *data.Bean {
 	switch m.view {
 	case viewBacklog: // E2 Task 5: the Backlog list's own selection, NOT the (possibly stale/irrelevant) tree cursor
 		return m.backlogSelected()
+	case viewReviewCockpit: // E4 Task 4: the Cockpit's own reviewFlat/reviewCursor, not the Tree cursor
+		return reviewFocused(reviewFlat(m.idx), m.reviewCursor)
 	default: // viewBrowseRepo (T8)
 		nodes := m.visibleNodes()
 		pos := m.cursorPos(nodes)

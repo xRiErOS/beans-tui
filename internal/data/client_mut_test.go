@@ -527,6 +527,186 @@ func TestDeleteClearsOtherBeansBlockingReference(t *testing.T) {
 	}
 }
 
+// TestPassReviewSetsCompletedAndRemovesTag guards the E4 Task 4 design
+// decision (bean bt-yy6w, design decision d, design-spec.md §5's Pass row):
+// a SINGLE PassReview call combining --status/--remove-tag sets Status to
+// "completed" AND removes the "to-review" tag against ONE etag.
+//
+// Seeds "to-review" via AddTag first, then re-Lists for a fresh ETag before
+// calling PassReview -- same divergent-tags-ETag workaround
+// TestSetTagsAddsAndRemovesInOneCall documents (newTestRepo's own doc
+// comment): a bean whose on-disk frontmatter carries a hand-authored "tags:"
+// block reports an ETag from list/show that diverges from update
+// --if-match's internal conflict check until beans itself has rewritten the
+// file once.
+func TestPassReviewSetsCompletedAndRemovesTag(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	if err := client.AddTag(task.ID, "to-review", task.ETag); err != nil {
+		t.Fatalf("seed AddTag() error = %v", err)
+	}
+
+	beans, err = client.List()
+	if err != nil {
+		t.Fatalf("List() after seed error = %v", err)
+	}
+	task = findBean(t, beans, "tt-task")
+
+	if err := client.PassReview(task.ID, task.ETag); err != nil {
+		t.Fatalf("PassReview() error = %v", err)
+	}
+
+	after, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after PassReview error = %v", err)
+	}
+	updated := findBean(t, after, "tt-task")
+	if updated.Status != "completed" {
+		t.Errorf("Status = %q, want %q", updated.Status, "completed")
+	}
+	for _, tg := range updated.Tags {
+		if tg == "to-review" {
+			t.Fatalf("PassReview() left the \"to-review\" tag in place: %v", updated.Tags)
+		}
+	}
+}
+
+// TestRejectReviewSwapsTagAndAppendsSection guards the E4 Task 4 design
+// decision (bean bt-yy6w, design decision d, design-spec.md §5's Reject
+// row): a SINGLE RejectReview call combining --remove-tag/--tag/
+// --body-append swaps "to-review" -> "rework" AND appends a dated "##
+// Review <date>" section to the body, against ONE etag.
+func TestRejectReviewSwapsTagAndAppendsSection(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	if err := client.AddTag(task.ID, "to-review", task.ETag); err != nil {
+		t.Fatalf("seed AddTag() error = %v", err)
+	}
+
+	beans, err = client.List()
+	if err != nil {
+		t.Fatalf("List() after seed error = %v", err)
+	}
+	task = findBean(t, beans, "tt-task")
+
+	const comment = "bitte X korrigieren"
+	if err := client.RejectReview(task.ID, comment, "2026-07-15", task.ETag); err != nil {
+		t.Fatalf("RejectReview() error = %v", err)
+	}
+
+	after, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after RejectReview error = %v", err)
+	}
+	updated := findBean(t, after, "tt-task")
+
+	foundRework, foundToReview := false, false
+	for _, tg := range updated.Tags {
+		if tg == "rework" {
+			foundRework = true
+		}
+		if tg == "to-review" {
+			foundToReview = true
+		}
+	}
+	if !foundRework {
+		t.Errorf("Tags = %v, want it to contain %q", updated.Tags, "rework")
+	}
+	if foundToReview {
+		t.Errorf("Tags = %v, still contains \"to-review\" -- RejectReview must swap, not just add", updated.Tags)
+	}
+
+	// List() already carries --full (client.go), so updated.Body is
+	// populated -- no separate Show() round-trip needed. ERRATUM vs. the
+	// plan's literal assumption (epic-E4-plan.md »Task 4« Step 1): the real
+	// beans 0.4.2 CLI trims exactly ONE trailing newline off the on-disk
+	// body when serializing it back via `list --json --full` (empirically
+	// observed -- the appended section's own trailing "\n" collapses into
+	// the file's EOF normalization), so the section text itself is asserted
+	// via Contains, not a "...\n"-suffixed string -- same convention
+	// TestAppendBodyAddsSection above already uses for the identical
+	// reason.
+	wantSection := "## Review 2026-07-15\n\n" + comment
+	if !strings.Contains(updated.Body, wantSection) {
+		t.Errorf("Body = %q, want it to contain %q", updated.Body, wantSection)
+	}
+}
+
+// TestPassReviewConflictOnStaleEtag mirrors TestConflictOnStaleETag: a
+// PassReview call against an etag already rotated out from under it by an
+// earlier successful update must fail errors.Is(err, ErrConflict).
+func TestPassReviewConflictOnStaleEtag(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+	staleETag := task.ETag
+
+	if err := client.SetStatus(task.ID, "in-progress", staleETag); err != nil {
+		t.Fatalf("first SetStatus() error = %v", err)
+	}
+
+	err = client.PassReview(task.ID, staleETag)
+	if err == nil {
+		t.Fatal("PassReview() with stale ETag: error = nil, want ErrConflict")
+	}
+	if !errors.Is(err, ErrConflict) {
+		t.Errorf("PassReview() error = %v, want errors.Is(err, ErrConflict)", err)
+	}
+}
+
+// TestRejectReviewConflictOnStaleEtag is TestPassReviewConflictOnStaleEtag's
+// RejectReview counterpart.
+func TestRejectReviewConflictOnStaleEtag(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+	staleETag := task.ETag
+
+	if err := client.SetStatus(task.ID, "in-progress", staleETag); err != nil {
+		t.Fatalf("first SetStatus() error = %v", err)
+	}
+
+	err = client.RejectReview(task.ID, "bitte X korrigieren", "2026-07-15", staleETag)
+	if err == nil {
+		t.Fatal("RejectReview() with stale ETag: error = nil, want ErrConflict")
+	}
+	if !errors.Is(err, ErrConflict) {
+		t.Errorf("RejectReview() error = %v, want errors.Is(err, ErrConflict)", err)
+	}
+}
+
 func TestDeleteRemovesBean(t *testing.T) {
 	requireBeansBinary(t)
 
