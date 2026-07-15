@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T20:40:31Z
+updated_at: 2026-07-15T20:44:05Z
 parent: bt-apmy
 ---
 
@@ -62,3 +62,17 @@ Offene Präzisierung Q06: 'r Blocking' — Umbelegung B→r oder Tippfehler? / u
 
 
 **D03 ENTSCHIEDEN:** esc ist UNIVERSELL 'back' — auch in der Detail-Kaskade: Feld-Ebene → Sektions-Ebene → Fokus verlassen → (Grundzustand). PO-Begründung: die globalen Keybindings deklarierten 'esc:back' bereits — Verhalten muss dem Versprechen folgen. Konsistent mit B08-Quit-Kaskade (stufiges Verlassen). Schließt E7-T6-Review-I01. Prüfauftrag Planner: alle esc-Sites auf Einheitlichkeit (Suche, Filter, Picker, Lobby, Kaskade, Quit) — EIN mentales Modell: esc geht immer genau eine Ebene zurück.
+
+
+## Grilling-Abschluss (2026-07-15, ALLE D entschieden + PO-Freigabe)
+
+- **D05 ENTSCHIEDEN:** Overlay-Footer zeigen enter/esc — Sign-off (durch D04-Header-Kürzung keine Dopplung mehr).
+- **D07 ENTSCHIEDEN:** Upstream-ETag-Issue (beans 0.4.2, Drift bei frischen Creates) NACH v1-Abnahme bei hmans/beans einreichen — Entwurf durch Agent, POST NUR MIT PO-FREIGABE (extern!). Minimal-Repro aus internal/data-Tests ableitbar.
+- **D08 ENTSCHIEDEN:** Tag-Management-Page (bt-6oyy) → v1.1. B14 (create tag via Palette + t-Picker sichtbar) ist die v1-Minimal-Lösung.
+
+**PO-Freigabe erteilt (Confirmation Gate passiert):** E8-Kette starten nach Kontext-Kompaktierung des Supervisors. Auftrag an Folge-Session/Supervisor:
+1. T01: E8-Planner (Sonnet, frisch) — design-spec §15 um PF-15 (D01-Tags-Zeile) + PF-16 (B01-B14 + D02/D03/D04/D06-Revisionen) erweitern, Task-Schnitt, Task-beans; danach bewährte Implementer→Review-Kette (Muster: E7).
+2. T02: validation.md §5 — D01-D08 auf 🟢/entschieden setzen, E8 als Umsetzungs-Verweis (kann der E8-Planner oder -Abschluss-Task miterledigen).
+3. T04: bt-6oyy-Body um v1.1-Scope-Entscheid ergänzen.
+4. T03 (NACH v1-Abnahme, nicht jetzt): Upstream-Issue-Entwurf, Post nur mit PO-Freigabe.
+Prozess-Konventionen: Sonnet-Subagents, Fable nur Supervisor; Findings via body-append; Epics nie completed durch Agents (to-review).
