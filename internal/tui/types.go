@@ -261,11 +261,14 @@ type model struct {
 	// firing the parked Cmd (a deviation from the field's original "parked,
 	// not yet dispatched" meaning); it stays non-nil for the WHOLE async gap
 	// until createDoneMsg resolves (applyCreateDone below clears it on
-	// EITHER outcome). keyNodeAction's Create case and submitForm's "create"
-	// case both check `pendingCreate != nil` and refuse to start a SECOND
-	// create while one is still in flight -- without this, the gap between
-	// the Confirm-Gate's enter (overlay -> None, form -> nil) and
-	// createDoneMsg arriving is a window where a second `c` would cross-
+	// EITHER outcome). keyNodeAction's Create case, submitForm's "create"
+	// case AND dispatchPalette's "create" case (overlay_palette.go, E4 Task
+	// 1, bean bt-jpgn -- the Command-Center is a genuine second entry point
+	// to the SAME handlers) -- exactly THREE guarded call sites -- all check
+	// `pendingCreate != nil` and refuse to start a SECOND create while one
+	// is still in flight -- without this, the gap between the Confirm-Gate's
+	// enter (overlay -> None, form -> nil) and createDoneMsg arriving is a
+	// window where a second `c` (or a palette "create: bean") would cross-
 	// contaminate these very same single-slot fields.
 	//
 	// ERRATUM vs. epic-E3-plan.md's epic-level "Geteilte Infrastruktur"

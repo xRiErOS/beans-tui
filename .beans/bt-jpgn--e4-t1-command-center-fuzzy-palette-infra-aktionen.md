@@ -154,4 +154,18 @@ keyPalette's Rune-/Backspace-Zweige brauchen laut Plan zusätzlich einen
 maybePaletteBleveCmd()-Dispatch (Analog zu maybeBleveCmd) -- aktuell noch
 nicht vorhanden, da T1 keinen Bleve-Bedarf hat.
 
+## Korrektur (I01/I02, E4-T1-Review)
+
+- **I01 (paletteItem.bean existiert NICHT):** "Notes für T2" oben behauptet
+  fälschlich, "paletteKindBean/paletteItem.bean sind bereits im
+  Enum/Struct deklariert". Korrekt: NUR der Enum-Wert `paletteKindBean`
+  (paletteItemKind) ist deklariert. `paletteItem` selbst hat aktuell GENAU
+  drei Felder (`kind`/`actionID`/`label`, overlay_palette.go) -- KEIN
+  `bean`-Feld. T2 muss dieses Feld selbst NEU hinzufügen, nicht bloß
+  befüllen.
+- **I02 (Testzahl):** Summary oben nennt "overlay_palette_test.go (15
+  Tests: ...)" -- tatsächlich waren es 12 Test-Funktionen bei T1s
+  Abschluss (verifiziert per `grep -c "^func Test"` gegen den damaligen
+  Commit-Stand), nicht 15.
+
 Commit: siehe `Refs: bt-jpgn` (feat(tui)).

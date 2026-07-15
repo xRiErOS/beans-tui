@@ -525,6 +525,18 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 func (m model) paletteBox() string
 ```
 
+  **ERRATUM (B01, E4-T1-Review, bean bt-jpgn):** das `"create"`-Snippet oben
+  (`case "create": return m.openCreateForm()`) fehlt der F1-Async-Gap-Guard
+  (`m.pendingCreate != nil` → `createInFlightNote`, kein Form-Open) — der
+  identische Guard, den `keyNodeAction`s Create-Case (`update.go`) und
+  `submitForm`s `"create"`-Case (`box_confirm_create.go`) bereits tragen
+  (types.go-Doc-Stamp). Ohne den Guard öffnet `ctrl+k` → „create: bean"
+  während eines laufenden Creates ein ZWEITES Create-Form und
+  kontaminiert die Single-Slot-Felder `createDraft`/`pendingCreate`. Die
+  Implementierung (`overlay_palette.go`) trägt den Guard bereits als
+  DRITTE gültige Stelle — dieser Plan-Snippet bleibt als historisches
+  Artefakt unkorrigiert stehen, siehe stattdessen die Implementierung.
+
   Capture-Order (Design-Entscheidung h), `update.go` `handleKey`, eingefügt
   UNMITTELBAR nach dem bestehenden `if m.overlay != overlayNone { return
   m.keyOverlay(msg) }`-Block:

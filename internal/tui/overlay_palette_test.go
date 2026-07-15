@@ -250,3 +250,40 @@ func TestHandleKeyCtrlKOpensPaletteEvenWithOverlayOpen(t *testing.T) {
 		t.Fatal("ctrl+k opened the palette while an overlay was open -- capture order violated")
 	}
 }
+
+// --- F1 in-flight guard (Review-Runde 2, Async-Gap-Clobbering, Finding 1b) ---
+
+// TestDispatchPaletteCreateIgnoredWhileCreateInFlight guards dispatchPalette's
+// "create" case OWN copy of the F1 in-flight guard -- a THIRD call site of
+// the same single-create invariant keyNodeAction's Create case (update.go)
+// and submitForm's "create" case (box_confirm_create.go) already enforce
+// (types.go doc-stamp). The Command-Center is a genuine second entry point
+// to the SAME handlers (dispatchPalette's own doc-stamp), so its "create"
+// case must refuse a second Create-Form exactly like the `c` key does while
+// m.pendingCreate != nil -- otherwise ctrl+k -> "create: bean" would
+// cross-contaminate the single createDraft/pendingCreate slots the same way
+// Finding 1b originally closed for the `c` key.
+func TestDispatchPaletteCreateIgnoredWhileCreateInFlight(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.pendingCreate = func() tea.Msg { return nil } // simulate an earlier create already in flight
+	m.paletteOpen = true
+
+	nm, cmd := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: "create", label: "create: bean"})
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("dispatchPalette did not return a model, got %T", nm)
+	}
+	_ = cmd
+	if mm.form != nil {
+		t.Fatal("palette create while a create is in flight must not open a second Create-Form")
+	}
+	if mm.overlay == overlayCreateConfirm {
+		t.Fatal("palette create while a create is in flight must not open a second Confirm-Gate")
+	}
+	if mm.err != createInFlightNote {
+		t.Fatalf("err = %q, want createInFlightNote %q", mm.err, createInFlightNote)
+	}
+	if mm.pendingCreate == nil {
+		t.Fatal("pendingCreate must remain set -- the original in-flight create must not be forgotten")
+	}
+}

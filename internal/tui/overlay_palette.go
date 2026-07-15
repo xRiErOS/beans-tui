@@ -161,6 +161,18 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 		case "delete":
 			return m.openDeleteConfirm(), nil
 		case "create":
+			// F1 (Review-Runde 2, Async-Gap-Clobbering, Finding 1b): the
+			// Command-Center is a genuine second entry point to the SAME
+			// handlers (dispatchPalette's doc-stamp) -- it needs its OWN copy
+			// of the same single-create guard keyNodeAction's Create case
+			// (update.go) and submitForm's "create" case (box_confirm_
+			// create.go) already enforce, since neither of those call sites
+			// runs on this path (types.go doc-stamp: THREE guarded call
+			// sites now, not two).
+			if m.pendingCreate != nil {
+				m.err = createInFlightNote
+				return m, nil
+			}
 			return m.openCreateForm()
 		case "go_backlog":
 			m.view = viewBacklog
