@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:03:50Z
+updated_at: 2026-07-15T14:08:09Z
 parent: bt-apmy
 ---
 
@@ -63,3 +63,15 @@ type: xxxx    status: xxxx    prio: xxxx
 - **D01:** enter = Detail-View betreten — bestätigt.
 - **D02:** Leitprinzip: Elemente möglichst schnell/einfach wählbar (Ziffern 1-9 + flüssige enter-Kaskade).
 - **D03:** E6 nach E7 — bestätigt (blocked_by gesetzt: bt-wm4w/bt-9yvh ← bt-heg9).
+
+
+## PO-Nachtrag 2 (2026-07-15): Sprache + Command-Center-Schema
+
+**PF-7 — UI-Sprache durchgängig ENGLISCH.** Aktuell gemischt (deutsch: 'Archivierte einblenden', 'status: setzen', 'titel: bearbeiten', 'bean: löschen', 'Kopiert: …', 'Review-Stand kopiert', 'keine offenen Reviews', Accordion 'Beziehungen'/'Historie', Lobby 'Repo filtern (Pfad)', …). ALLE nutzerseitigen Strings → Englisch (Accordion: META/BODY/RELATIONS/HISTORY — deckt sich mit PF-4-Layout). Betrifft auch Toasts, Filter-Menü, Cockpit-Leerzustand, Fehlertexte, Footer-Hints.
+
+**PF-8 — Command-Center-Einträge nach Schema 'verb entity', OHNE Doppelpunkt:**
+- set tags · set status · set priority · set title · set parent · set blocking
+- go to backlog · go to browse · go to review cockpit · go to settings
+- reload data · create bean · delete bean · search beans · filter facets (analog: 'filter beans'? — Planner: konsistentes verb entity wählen) · switch repo (bzw. 'go to repo picker' — Planner entscheidet konsistent, PO-Beispiele sind maßgeblich)
+
+PO-Beispiele verbatim: 'set tags', 'set status', 'go to backlog', 'reload data', 'go to settings', 'set title'.
