@@ -1,10 +1,11 @@
 ---
 # bt-ggt2
 title: E5 T7 — Archiv-Sicht (completed/scrapped ein-/ausblendbar)
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-15T09:04:38Z
-updated_at: 2026-07-15T09:04:38Z
+updated_at: 2026-07-15T12:53:26Z
 parent: bt-5h4d
 ---
 
@@ -62,3 +63,10 @@ Plan: docs/plans/v1-port/epic-E5-plan.md »Task 7«.
       Goldens 2x grün (Default-aus-Zustand identisch zu heute, da alle
       bestehenden Fixture-Beans NICHT archiviert sind)
 - [ ] Commit `feat(tui): Archiv-Sicht (completed/scrapped Default-aus, togglebar)`
+
+
+## Prelude aus T6b-Review (PFLICHT zuerst, Reviewer 2026-07-15)
+
+**I01 (low, vorbestehend seit T1):** Toast-seq ist nicht global monoton — showToast (overlay_show_toast.go:106-109) berechnet seq nur relativ zu m.toast; nach nil-Reset (dismissToast ODER applyRepoSwitched) startet der nächste Toast wieder bei seq=1. Ein noch laufender, nicht-cancelbarer toastTimeout-Tick des alten Toasts liefert toastExpiredMsg{seq:1} aus und killt den NEUEN seq=1-Toast vorzeitig (auch sticky — handleToastExpired prüft nur msg.seq==m.toast.seq). Fix: seq aus modellweitem, NIE zurückgesetztem Zähler (model-Feld toastSeqCounter o.ä.) statt m.toast.seq+1. RED-Test: stale toastExpiredMsg nach Reset+neuem Toast darf NICHT dismissen.
+
+**I02 (low):** types.go:400-404-Doc behauptet 'ONLY ever written by showToast/dismissToast/handleToastExpired' — seit T6b schreibt applyRepoSwitched ebenfalls m.toast=nil. Kommentar um vierte sanktionierte Schreibstelle ergänzen (bzw. nach I01-Fix konsolidieren).
