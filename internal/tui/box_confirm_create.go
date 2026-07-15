@@ -31,6 +31,21 @@ import (
 func (m model) submitForm() (tea.Model, tea.Cmd) {
 	switch m.formKind {
 	case "create":
+		// F1 (Review-Runde 2, Async-Gap-Clobbering, Finding 1b): a SECOND
+		// layer of the same single-create guard keyNodeAction's Create case
+		// already enforces (update.go) -- under normal UI flow that guard
+		// prevents a second Create-Form from ever opening while pendingCreate
+		// is parked-or-in-flight, so this branch should be unreachable in
+		// practice; kept anyway as belt-and-braces against the SAME
+		// createDraft/pendingCreate slots getting cross-contaminated by a
+		// second submit, cheap to keep in sync since both sites gate on the
+		// same field.
+		if m.pendingCreate != nil {
+			m.form = nil
+			m.formKind = ""
+			m.err = createInFlightNote
+			return m, nil
+		}
 		d := draftFromForm(m.form)
 		m.createDraft = &d
 		m.createLabel = createConfirmLabel(d)
@@ -77,7 +92,14 @@ func (m model) keyCreateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.Enter):
 		cmd := m.pendingCreate
 		m.overlay = overlayNone
-		m.pendingCreate = nil
+		// F1 (Review-Runde 2, Async-Gap-Clobbering, Finding 1b): pendingCreate
+		// is deliberately NOT nulled here anymore (a behavior change vs. the
+		// original T4 version) -- it now doubles as the "a create is in
+		// flight" guard for the WHOLE async gap between this enter and
+		// createDoneMsg actually arriving (types.go doc-stamp), so
+		// keyNodeAction's Create case / submitForm's "create" case can
+		// refuse a second `c` during that window. Only applyCreateDone
+		// (update.go) clears it, once createDoneMsg resolves either outcome.
 		m.createLabel = ""
 		// B01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45):
 		// createDraft is deliberately NOT nulled here anymore -- a

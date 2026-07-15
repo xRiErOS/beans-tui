@@ -132,10 +132,18 @@ func TestSubmitFormParksCmdAndOpensConfirm(t *testing.T) {
 }
 
 // TestCreateConfirmEnterFiresPendingCmd guards the enter branch of
-// keyCreateConfirm: closes the overlay, clears the parked state, and returns
-// the createCmd that actually dispatches `beans create` (verified via a real
-// data.Client pointed at a nonexistent repo dir -- same no-binary-required
-// pattern box_picker_parent_test.go/box_picker_tag_test.go already use).
+// keyCreateConfirm: closes the overlay and returns the createCmd that
+// actually dispatches `beans create` (verified via a real data.Client
+// pointed at a nonexistent repo dir -- same no-binary-required pattern
+// box_picker_parent_test.go/box_picker_tag_test.go already use).
+//
+// F1 (Review-Runde 2, Async-Gap-Clobbering): pendingCreate is deliberately
+// NOT cleared here anymore (a behavior change vs. the original T4 version of
+// this test) -- it now doubles as the in-flight guard for the WHOLE async
+// gap between this enter and createDoneMsg arriving (types.go doc-stamp),
+// so keyNodeAction's Create case can refuse a second `c` during that window
+// (TestKeyNodeActionCIgnoredWhileCreateInFlight below). Only applyCreateDone
+// (update.go) clears it, once createDoneMsg actually resolves.
 func TestCreateConfirmEnterFiresPendingCmd(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t4-scratch-dir"}
@@ -149,8 +157,8 @@ func TestCreateConfirmEnterFiresPendingCmd(t *testing.T) {
 	if nm.overlay != overlayNone {
 		t.Fatalf("overlay after enter = %v, want overlayNone", nm.overlay)
 	}
-	if nm.pendingCreate != nil {
-		t.Fatal("pendingCreate not cleared after enter")
+	if nm.pendingCreate == nil {
+		t.Fatal("pendingCreate must stay non-nil after enter (F1 in-flight guard) -- only createDoneMsg clears it")
 	}
 	// B01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45): createDraft
 	// must SURVIVE the Confirm-Gate's own enter now -- only createDoneMsg
@@ -170,6 +178,13 @@ func TestCreateConfirmEnterFiresPendingCmd(t *testing.T) {
 	}
 	if cdm.err == nil || !strings.Contains(cdm.err.Error(), "beans create") {
 		t.Fatalf("createDoneMsg.err = %v, want an error containing %q (proves Create dispatched)", cdm.err, "beans create")
+	}
+
+	// F1: once createDoneMsg resolves (error path here), pendingCreate must
+	// finally clear -- the in-flight window is over.
+	fm := step(t, nm, cdm)
+	if fm.pendingCreate != nil {
+		t.Fatal("pendingCreate must be cleared once createDoneMsg resolves")
 	}
 }
 
@@ -224,6 +239,135 @@ func TestCreateConfirmEnterErrorPreservesDraftAndReopensForm(t *testing.T) {
 	fm = advanceFieldsModel(t, fm, 7)
 	if !strings.Contains(fm.createLabel, "New Task") {
 		t.Fatalf("createLabel after reopen+resubmit = %q, want it to still mention %q (B01: draft survived a REJECTED create too)", fm.createLabel, "New Task")
+	}
+}
+
+// TestCreateDoneErrorWhileBusyRoutesToStatusLineFormUntouched guards F1
+// (Review-Runde 2, Async-Gap-Clobbering, Finding 1): between the Confirm-
+// Gate's enter (overlay -> None, form -> nil) and createDoneMsg actually
+// arriving, overlay/form are back to their "nothing open" state -- the PO
+// can open something ELSE in that window (here: the Status/Type/Priority
+// value menu via `s` on a DIFFERENT bean than the one being created). A
+// createDoneMsg carrying an error must NOT clobber whatever the PO is now
+// doing by unconditionally reopening the stale Create-Form on top of it
+// (applyCreateDone's OLD behavior) -- it must route through the draft-
+// agnostic applyMutationResult tail instead (status line + reload), leaving
+// the currently open overlay exactly as the PO left it.
+func TestCreateDoneErrorWhileBusyRoutesToStatusLineFormUntouched(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t5-scratch-dir"}
+	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter)) // fires the createCmd, now in flight
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(enter) did not return a model, got %T", tm)
+	}
+	if nm.pendingCreate == nil {
+		t.Fatal("setup: pendingCreate must stay non-nil while the create is in flight (F1)")
+	}
+
+	// PO opens something else during the async gap.
+	nm = focusBean(nm, "tk-2")
+	nm = step(t, nm, runeMsg('s'))
+	if nm.overlay != overlayValueMenu {
+		t.Fatalf("setup: overlay = %v, want overlayValueMenu ('s' must open it)", nm.overlay)
+	}
+
+	msg := cmd()
+	cdm, ok := msg.(createDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want createDoneMsg", msg)
+	}
+	if cdm.err == nil {
+		t.Fatal("setup: expected the bogus RepoDir to fail the create")
+	}
+
+	tm2, _ := nm.Update(cdm)
+	fm, ok := tm2.(model)
+	if !ok {
+		t.Fatalf("Update(createDoneMsg) did not return a model, got %T", tm2)
+	}
+	if fm.form != nil {
+		t.Fatal("a busy PO's state must not be clobbered by a Create-Form reopen (F1)")
+	}
+	if fm.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu (untouched by the failed create)", fm.overlay)
+	}
+	if fm.err == "" {
+		t.Fatal("the failed create's error must still surface in the status line")
+	}
+	if fm.createDraft != nil {
+		t.Fatal("createDraft must be dropped once busy (F1: PO abandoned the failed create by starting something new)")
+	}
+	if fm.pendingCreate != nil {
+		t.Fatal("pendingCreate must be cleared once createDoneMsg resolves, in flight or not")
+	}
+}
+
+// TestKeyNodeActionCIgnoredWhileCreateInFlight guards F1's in-flight guard
+// (Finding 1b): pressing `c` again while an earlier create is still in
+// flight (the same async gap as above, m.pendingCreate != nil) must NOT open
+// a second Create-Form -- cross-contaminating the single createDraft/
+// pendingCreate slots with a second create's state is exactly the
+// clobbering F1 closes.
+func TestKeyNodeActionCIgnoredWhileCreateInFlight(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t5-scratch-dir"}
+	m = openFilledCreateConfirm(t, m, "ep-1", "New Task")
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(enter) did not return a model, got %T", tm)
+	}
+	if nm.pendingCreate == nil {
+		t.Fatal("setup: pendingCreate must stay non-nil while the create is in flight")
+	}
+	_ = cmd // the in-flight createCmd itself, not exercised by this test
+
+	nm2 := step(t, nm, runeMsg('c'))
+	if nm2.form != nil {
+		t.Fatal("c while a create is in flight must not open a second Create-Form")
+	}
+	if nm2.overlay != overlayNone {
+		t.Fatalf("overlay = %v, want overlayNone (c while busy must not open anything either)", nm2.overlay)
+	}
+	if nm2.err == "" {
+		t.Fatal("c while a create is in flight should surface a brief status note")
+	}
+	if nm2.pendingCreate == nil {
+		t.Fatal("pendingCreate must remain set -- the original in-flight create must not be forgotten")
+	}
+}
+
+// TestSubmitFormCreateIgnoredWhilePendingCreateInFlight guards submitForm's
+// OWN copy of the F1 in-flight guard (Finding 1b) -- a second layer of the
+// SAME single-create invariant keyNodeAction's Create case already enforces
+// above. Under normal UI flow keyNodeAction's guard prevents a second
+// Create-Form from ever opening in the first place, so this test drives the
+// scenario directly (form already open, pendingCreate set out-of-band) to
+// exercise submitForm's own check rather than relying on it staying
+// unreachable.
+func TestSubmitFormCreateIgnoredWhilePendingCreateInFlight(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('c'))
+	if m.form == nil || m.formKind != "create" {
+		t.Fatalf("setup: c did not open the create form (form=%v formKind=%q)", m.form, m.formKind)
+	}
+	m.pendingCreate = func() tea.Msg { return nil } // simulate an earlier create already in flight
+
+	m = typeIntoModel(t, m, "New Task")
+	m = advanceFieldsModel(t, m, 7) // title, type, priority, status, parent, tags, body -> submit
+
+	if m.form != nil {
+		t.Fatal("submitForm must discard the second form while a create is in flight")
+	}
+	if m.overlay == overlayCreateConfirm {
+		t.Fatal("submitForm must NOT open a second Confirm-Gate while a create is in flight")
+	}
+	if m.err == "" {
+		t.Fatal("submitForm should surface a brief status note when it drops the second create")
 	}
 }
 

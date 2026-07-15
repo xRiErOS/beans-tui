@@ -239,6 +239,19 @@ type model struct {
 	// bounce so the Create-Form reopens FILLED instead of losing the PO's
 	// work (Draft-Erhalt, port DD2-190, box_confirm_create.go).
 	//
+	// F1 (Review-Runde 2, Async-Gap-Clobbering): pendingCreate ALSO now
+	// doubles as the "a create is in flight" guard -- keyCreateConfirm's
+	// enter (box_confirm_create.go) deliberately no longer nulls it when
+	// firing the parked Cmd (a deviation from the field's original "parked,
+	// not yet dispatched" meaning); it stays non-nil for the WHOLE async gap
+	// until createDoneMsg resolves (applyCreateDone below clears it on
+	// EITHER outcome). keyNodeAction's Create case and submitForm's "create"
+	// case both check `pendingCreate != nil` and refuse to start a SECOND
+	// create while one is still in flight -- without this, the gap between
+	// the Confirm-Gate's enter (overlay -> None, form -> nil) and
+	// createDoneMsg arriving is a window where a second `c` would cross-
+	// contaminate these very same single-slot fields.
+	//
 	// ERRATUM vs. epic-E3-plan.md's epic-level "Geteilte Infrastruktur"
 	// sketch (which additionally lists a `createConfirm bool` field
 	// alongside these): design decision a2 is unambiguous that the E3
@@ -264,7 +277,23 @@ type model struct {
 	// node-action target at a time) -- forms and the editor suspend are
 	// mutually exclusive capture states (m.form != nil vs. a fired
 	// editInEditor Cmd), so there is no collision between the two fields.
+	//
+	// editorETag (F2, Review-Runde 2 fix): the target bean's ETag, captured
+	// in the SAME keyNodeAction branch as editorTarget, at $EDITOR-OPEN time
+	// -- a deliberate DEVIATION from design decision d's "always read fresh
+	// at submit" rule (m.beanETag(id), update.go). That rule is correct for
+	// every other E3 overlay (open<->submit is a single keystroke), but
+	// wrong for a potentially long-lived $EDITOR session: a watch-reload
+	// landing WHILE the PO is still typing would silently rotate m.idx's
+	// in-memory ETag out from under them, and a fresh re-read at submit
+	// would then let SetBody sail through against a DIFFERENT bean state
+	// than the one the PO's edit is actually based on -- a silent lost
+	// update, no conflict ever raised. Freezing the etag at open instead
+	// means that same external change now surfaces as a genuine, visible
+	// ErrConflict (applyEditorFinished, update.go) -- optimistic-lock
+	// semantics over the WHOLE session, not just the Submit<->Disk instant.
 	editorTarget string
+	editorETag   string
 
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works

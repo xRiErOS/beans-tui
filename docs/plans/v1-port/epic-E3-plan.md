@@ -998,6 +998,16 @@ case keybind.Matches(msg, keys.Editor):
 
   editorFinishedMsg-Case (update.go): err → m.err; !changed → no-op; sonst
   `beanETag(m.editorTarget)` → `mutateCmd(SetBody)` (ok=false → m.err, kein Cmd).
+  KORRIGIERT (Review-Runde 2, F2, bean bt-sl45): dieser ursprüngliche Plan-Satz
+  war falsch für den `ctrl+e`-Pfad — ein `$EDITOR`-Suspend kann lange dauern,
+  ein Watch-Reload währenddessen rotiert `m.idx`s ETag unter der Hand, und ein
+  frischer `beanETag`-Read bei Submit hätte den externen Edit dann still
+  überschrieben (Lost-Update, kein Konflikt ausgelöst). Tatsächlich
+  implementiert: der etag wird in `keyNodeAction`s `ctrl+e`-Zweig BEIM ÖFFNEN
+  eingefroren (`m.editorETag = b.ETag`), `applyEditorFinished` liest bei
+  Submit NUR NOCH `beanETag`s `ok`-Bool (Bean-Präsenz), nicht mehr dessen
+  etag-Wert. `submitForm("editTitle")` bleibt unverändert bei "frisch bei
+  Submit" (Design-Entscheidung d gilt dort unverändert weiter).
   form_edit_title.go: formKind "editTitle", submitForm-Zweig feuert
   `mutateCmd(func() error { return m.client.SetTitle(id, title, etag) })` DIREKT
   (kein Confirm — isCreateKind-Analogon: nur "create" gated).
@@ -1073,10 +1083,23 @@ func TestDeleteCursorClampsViaApplyLoadedOldPos(t *testing.T) {
 // tag-picker SetTags / parent-picker SetParent / parent-picker RemoveParent /
 // blocking-picker SetBlocking / edit-title SetTitle / editor SetBody.
 // (Create braucht keinen: kein ETag; Delete: CLI-delete hat kein --if-match.)
+// KORRIGIERT (Review-Runde 2, F2, bean bt-sl45): "editor SetBody" folgt NICHT
+// mehr Design-Entscheidung d wie die übrigen Sites -- applyEditorFinished
+// nutzt den bei ctrl+e-Open eingefrorenen m.editorETag, nicht mehr einen bei
+// Submit frisch gelesenen beanETag-Wert. Der Sweep-Subtest für "editor
+// SetBody" muss das etag also beim SIMULIERTEN OPEN veralten lassen, nicht
+// erst beim Submit -- ein Regressionstest für genau dieses Verhalten
+// existiert bereits (editor_test.go,
+// TestEditorFinishedUsesEtagCapturedAtOpenNotFreshIndexRead); T6 kann ihn als
+// Vorlage für den Sweep-Subtest nehmen statt das generische Site-Pattern
+// unverändert zu portieren.
 func TestEtagConflictSweep(t *testing.T) { /* je Site ein t.Run */ }
 func TestConflictAfterWatchReloadUsesFreshETagNoConflict(t *testing.T) {
     // Positiv-Gegenprobe zu Design d: Reload zwischen Öffnen und Submit ->
     // beanETag liefert den NEUEN ETag, gar kein Konflikt erst entsteht.
+    // KORRIGIERT (Review-Runde 2, F2): gilt NICHT für die editor-Site -- dort
+    // ist ein Reload zwischen ctrl+e-Open und Submit jetzt GENAU der Fall,
+    // der einen (gewollten, sichtbaren) Konflikt auslösen soll (siehe oben).
 }
 ```
 

@@ -7,6 +7,7 @@ package tui
 
 import (
 	"errors"
+	"os"
 	"strings"
 
 	"beans-tui/internal/data"
@@ -88,11 +89,62 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 	if err != nil {
 		if errors.Is(err, data.ErrConflict) {
 			m.err = "Konflikt: Bean extern geändert — neu geladen"
+			// F2 (Review-Runde 2) nicety: applyEditorFinished's mutateCmd
+			// closure wraps a genuine conflict in *conflictWithRecovery when
+			// it managed to persist the PO's just-edited body to a kept
+			// tempfile first (otherwise this reload would silently discard
+			// it) -- surface that path alongside the generic conflict text
+			// so the PO can recover it manually. Every OTHER mutation site's
+			// plain ErrConflict-wrapped error simply doesn't match here
+			// (errors.As returns false), leaving this branch's existing
+			// behavior untouched for them.
+			var cr *conflictWithRecovery
+			if errors.As(err, &cr) {
+				m.err += " — deine Fassung: " + cr.path
+			}
 		} else {
 			m.err = err.Error()
 		}
 	}
 	return m, loadCmd(m.client)
+}
+
+// conflictWithRecovery wraps an ErrConflict-classified mutation error with
+// the path of a KEPT tempfile holding content the mutation was about to
+// silently lose to applyMutationResult's unconditional reload (F2, Review-
+// Runde 2, applyEditorFinished's $EDITOR-conflict nicety below). Unwrap
+// preserves errors.Is(_, data.ErrConflict) so applyMutationResult's existing
+// conflict branch still fires unmodified; errors.As there additionally
+// recovers path to append to the status-line text.
+type conflictWithRecovery struct {
+	err  error
+	path string
+}
+
+func (c *conflictWithRecovery) Error() string { return c.err.Error() }
+func (c *conflictWithRecovery) Unwrap() error { return c.err }
+
+// writeConflictTempFile persists body to a NEW, deliberately KEPT tempfile
+// (unlike readEditorResult's own scratch file, editor.go, which os.Remove's
+// itself once read) -- a PO who just lost an ErrConflict race against
+// SetBody can recover the edited content manually instead of losing the
+// whole $EDITOR session to applyMutationResult's unconditional reload.
+// Best-effort: any failure here must not mask the underlying conflict, so
+// the caller (applyEditorFinished) falls back to the bare conflict error.
+func writeConflictTempFile(body string) (path string, err error) {
+	f, err := os.CreateTemp("", "beans-tui-conflict-*.md")
+	if err != nil {
+		return "", err
+	}
+	path = f.Name()
+	if _, err = f.WriteString(body); err != nil {
+		f.Close()
+		return "", err
+	}
+	if err = f.Close(); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // applyCreateDone handles a completed Create (E3 Task 4, bean bt-y4ly): a
@@ -110,25 +162,44 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 // msg.bean.ID unchanged after the beansLoadedMsg arrives (US-10-parity, no
 // new cursor logic). A parentless new bean (msg.bean.Parent == "") needs no
 // expansion at all -- idx.Roots() already surfaces every parentless bean.
+//
+// F1 (Review-Runde 2, Async-Gap-Clobbering, Finding 1): between the Confirm-
+// Gate's enter (keyCreateConfirm, box_confirm_create.go: overlay -> None,
+// form -> nil) and THIS createDoneMsg arriving, the PO can open something
+// else entirely (a new form, a picker/menu overlay) during that async gap --
+// pendingCreate's in-flight guard (types.go doc-stamp) stops a SECOND `c`
+// from starting a second create, but does nothing to stop the PO from
+// opening a DIFFERENT overlay/form in the meantime. Reopening the stale
+// Create-Form here unconditionally (the original T4/T5 behavior) would
+// clobber whatever the PO is now doing and/or cross-contaminate the single
+// createDraft slot with an unrelated form's state. The busy guard below
+// treats that as the PO having actively abandoned the failed create by
+// starting something new: drop the stale draft, route the error through the
+// draft-agnostic tail instead (status line + reload), and leave the
+// currently open form/overlay untouched. pendingCreate always clears here --
+// the in-flight window is over either way, success or failure.
 func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		// B01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45): a
-		// CLI-rejected create (e.g. VALIDATION_ERROR) must not lose the
-		// PO's filled-in draft. createDraft is no longer nulled at the
-		// Confirm-Gate's own enter (keyCreateConfirm, box_confirm_create.go)
-		// -- it survives until HERE, so a failure can reopen the Create-Form
-		// FILLED from it instead of routing through the draft-agnostic
-		// applyMutationResult tail (which would just show the error and
-		// reload, discarding the work).
-		if m.createDraft != nil {
+		m.pendingCreate = nil // in-flight window over (F1), regardless of outcome
+		busy := m.form != nil || m.overlay != overlayNone
+		if m.createDraft != nil && !busy {
+			// B01 (E3-T4-Review PFLICHT, closed in T5, bean bt-sl45): a
+			// CLI-rejected create (e.g. VALIDATION_ERROR) must not lose the
+			// PO's filled-in draft -- reopen the Create-Form FILLED from it
+			// instead of routing through the draft-agnostic
+			// applyMutationResult tail (which would just show the error and
+			// reload, discarding the work). Only reachable when the PO is
+			// NOT busy with something else (F1 above).
 			d := *m.createDraft
 			m.createDraft = nil
 			m.err = msg.err.Error()
 			return m.openCreateFormWithDraft(d)
 		}
+		m.createDraft = nil // busy (F1) or no draft to reopen from -- drop it either way
 		return m.applyMutationResult(msg.err)
 	}
-	m.createDraft = nil // success: draft consumed, no reopen needed (B01's other half)
+	m.createDraft = nil   // success: draft consumed, no reopen needed (B01's other half)
+	m.pendingCreate = nil // in-flight window over (F1)
 	if msg.bean.Parent != "" {
 		m.expanded = expandAncestorsOf(m.idx, m.expanded, msg.bean.Parent)
 		exp := cloneBoolMap(m.expanded) // I01: copy-on-write
@@ -141,16 +212,35 @@ func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 // applyEditorFinished handles the ctrl+e $EDITOR-Suspend's result (E3 Task
-// 5, bean bt-sl45, keyNodeAction's Editor branch below): a process-level err
+// 5, bean bt-sl45, keyNodeAction's Editor branch above): a process-level err
 // surfaces in the status line with no mutation; unchanged content is a
 // silent no-op (no CLI call for a no-op edit, mirrors the plan's own
-// Akzeptanz wording); otherwise SetBody fires against a FRESH etag (design
-// decision d, m.beanETag) -- a vanished target (ok==false, the bean was
-// deleted during the suspend) surfaces a status-line note instead of firing
-// a doomed mutation, same guard shape as applyValueMenuSelection.
+// Akzeptanz wording); otherwise SetBody fires against the etag CAPTURED AT
+// $EDITOR-OPEN TIME (m.editorETag, F2 Review-Runde 2 fix) -- NOT a fresh
+// m.beanETag(id) read here. Design decision d's "always read fresh at
+// submit" is correct for every OTHER E3 overlay, whose open<->submit window
+// is a single keystroke, but wrong for a potentially long-lived $EDITOR
+// session: re-reading fresh at submit would let a watch-reload that landed
+// WHILE the PO was still typing in $EDITOR silently win, discarding their
+// edit with no conflict ever raised (a genuine lost update -- see epic-E3-
+// plan.md's Task 5 section and bean bt-sl45's own now-corrected "Notes für
+// T6" for the earlier, wrong assumption this closes). Freezing the etag at
+// open turns that same race into a genuine, surfaced ErrConflict instead --
+// correct optimistic-lock semantics over the WHOLE session. m.beanETag(id)
+// is still consulted here, but ONLY for its ok bool (bean presence) -- the
+// etag VALUE it would return is discarded in favor of the captured one; a
+// vanished target (deleted during the suspend) still surfaces a status-line
+// note instead of firing a doomed mutation, same guard shape as
+// applyValueMenuSelection. On a genuine ErrConflict, the PO's just-edited
+// content would otherwise be silently lost to applyMutationResult's
+// unconditional reload -- writeConflictTempFile persists it to a kept
+// tempfile first, wrapped as *conflictWithRecovery so its path rides along
+// in the surfaced status-line text (applyMutationResult above).
 func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	id := m.editorTarget
+	etag := m.editorETag
 	m.editorTarget = ""
+	m.editorETag = ""
 	if msg.err != nil {
 		m.err = msg.err.Error()
 		return m, nil
@@ -158,14 +248,21 @@ func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	if !msg.changed {
 		return m, nil
 	}
-	etag, ok := m.beanETag(id)
-	if !ok {
+	if _, ok := m.beanETag(id); !ok {
 		m.err = "Bean nicht mehr vorhanden — Editor-Änderung verworfen"
 		return m, nil
 	}
 	client := m.client
 	body := msg.content
-	return m, mutateCmd(func() error { return client.SetBody(id, body, etag) })
+	return m, mutateCmd(func() error {
+		err := client.SetBody(id, body, etag)
+		if err != nil && errors.Is(err, data.ErrConflict) {
+			if path, werr := writeConflictTempFile(body); werr == nil {
+				return &conflictWithRecovery{err: err, path: path}
+			}
+		}
+		return err
+	})
 }
 
 // beanETag reads id's CURRENT etag straight from the live index (design
@@ -187,6 +284,12 @@ func (m model) beanETag(id string) (etag string, ok bool) {
 	return b.ETag, true
 }
 
+// createInFlightNote is the brief status-line note shown when the PO tries
+// to start a SECOND create while one is still parked-or-in-flight (F1,
+// Review-Runde 2, Finding 1b) -- one shared string so keyNodeAction's Create
+// case and submitForm's "create" case (box_confirm_create.go) can't drift.
+const createInFlightNote = "Erstellung läuft bereits — bitte warten"
+
 // keyNodeAction routes the node-focused mutation keys (design-spec §7:
 // s/t/a/B/c/d/e -- Status/TagAssign/Assign/Blocking/Create/Delete/Editor).
 // Placed in handleKey directly after the Refresh check and BEFORE the
@@ -205,6 +308,20 @@ func (m model) beanETag(id string) (etag string, ok bool) {
 func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	switch {
 	case keybind.Matches(msg, keys.Create):
+		// F1 (Review-Runde 2, Async-Gap-Clobbering, Finding 1b): a create is
+		// already parked-or-in-flight (pendingCreate's dual meaning, types.go
+		// doc-stamp) -- refuse to open a SECOND Create-Form on top of it
+		// rather than clobbering the single createDraft/pendingCreate slots.
+		// handleKey's capture order (m.form != nil / m.overlay != overlayNone
+		// checked BEFORE keyNodeAction is ever reached) already rules out
+		// "form or Confirm-Gate currently open"; this guard closes the
+		// remaining gap -- the async window AFTER the Confirm-Gate's enter
+		// fires the createCmd but BEFORE createDoneMsg resolves it, where
+		// overlay/form are both back to their "nothing open" state.
+		if m.pendingCreate != nil {
+			m.err = createInFlightNote
+			return true, m, nil
+		}
 		// E3 Task 4 (bean bt-y4ly): Create works WITHOUT a focused bean (an
 		// empty repo can still be seeded) -- the ONLY key here that skips
 		// the focusedBean() guard below.
@@ -239,6 +356,13 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			// "e" opens the Title-Edit-Form.
 			if msg.String() == "ctrl+e" {
 				m.editorTarget = b.ID
+				// F2 (Review-Runde 2, Finding 2, ETag-Lost-Update): capture
+				// the etag HERE, at open time -- not a fresh m.beanETag(id)
+				// read in applyEditorFinished at submit time (see that
+				// func's doc-stamp, update.go, for the full lost-update
+				// rationale this deliberately deviates from design decision
+				// d for).
+				m.editorETag = b.ETag
 				return true, m, editInEditor(b.Body, ".md")
 			}
 			nm, cmd := m.openEditTitleForm(b)

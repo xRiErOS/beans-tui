@@ -173,3 +173,59 @@ Sonderbehandlung nötig. B01-Präzedenz (Draft-Erhalt bei CLI-Fehler) gilt
 NUR für Create (hat einen Draft-Begriff) -- editTitle/SetBody haben keinen
 Draft zu erhalten (Single-Field- bzw. Editor-Inhalt ist bereits weg/im
 Editor-Prozess beendet), das ist kein Präzedenzfall für T6s Delete-Confirm.
+
+## Korrektur (Review-Runde 2, F2)
+
+Obiger Absatz ist für den `ctrl+e`-Pfad FALSCH und wurde durch die Review-
+Runde-2-Fixes korrigiert: `applyEditorFinished` liest den etag NICHT mehr
+frisch via `m.beanETag` bei Submit -- der `ctrl+e`-Pfad HAT eine
+Sonderbehandlung. Begründung (ETag-Lost-Update): ein `$EDITOR`-Suspend kann
+lange dauern; ein Watch-Reload WÄHREND der Suspend rotiert `m.idx`s
+In-Memory-ETag unter der Hand, und ein frischer Read bei Submit hätte den
+externen Edit dann still überschrieben (kein Konflikt wird je ausgelöst).
+Fix: der etag wird jetzt in `keyNodeAction`s `ctrl+e`-Zweig (update.go) BEIM
+ÖFFNEN eingefroren (`m.editorETag = b.ETag`, neues Feld, types.go), NICHT
+beim Submit -- `m.beanETag(id)` wird in `applyEditorFinished` nur noch für
+den `ok`-Bool (Bean-Präsenz) konsultiert, der zurückgegebene etag-Wert wird
+verworfen. `submitForm("editTitle")` liest weiterhin frisch (Design-
+Entscheidung d gilt dort unverändert -- das Formular-Fenster ist ein
+einzelner Tastendruck, kein potenziell langes Suspend). T6s Sweep muss den
+`ctrl+e`-Pfad also NICHT wie jeden anderen Mutationspfad behandeln -- er hat
+jetzt einen eigenen ETag-Capture-Zeitpunkt; ein Regressionstest dafür lebt
+bereits in `editor_test.go`
+(`TestEditorFinishedUsesEtagCapturedAtOpenNotFreshIndexRead`). Nice-to-have
+mitgeliefert: ein echter `ErrConflict` auf diesem Pfad schreibt den editierten
+Body jetzt zusätzlich in ein aufbewahrtes Tempfile (`writeConflictTempFile`),
+dessen Pfad in der Statuszeile landet (`conflictWithRecovery`,
+`applyMutationResult`), statt den Edit kommentarlos zu verlieren.
+
+## Review-Fixes (Runde 2)
+
+Zwei Important-Findings aus dem E3-T5-Review geschlossen (TDD, RED vor Fix).
+
+**1. Bugs**
+
+| Bxx | Schwere | Beschreibung | Empfehlung | Status |
+|-----|---------|--------------|------------|--------|
+| B01 | high | Async-Gap-Clobbering: zwischen Confirm-Gate-Enter (`keyCreateConfirm`) und `createDoneMsg` ist `overlay=None`/`form=nil` -- ein zweites `c` oder ein anderes Overlay konnte in dieser Lücke geöffnet werden; `applyCreateDone`s Fehler-Zweig öffnete das Create-Formular dann UNBEDINGT neu, egal was der PO inzwischen tat -- Clobbering und Cross-Kontamination von `createDraft`/`pendingCreate`. | `pendingCreate` als In-Flight-Guard (bleibt bis `createDoneMsg` gesetzt, `keyNodeAction`s Create-Case + `submitForm("create")` lehnen ein zweites Create ab); Busy-Guard in `applyCreateDone` (Reopen NUR wenn `m.form==nil && m.overlay==overlayNone`, sonst Draft verwerfen + `applyMutationResult`). | 🟢 Done |
+| B02 | high | ETag-Lost-Update auf `$EDITOR`-Pfad: `applyEditorFinished` las den etag bei Submit FRISCH aus `m.idx` -- ein Watch-Reload während einer langen `$EDITOR`-Session rotierte den etag unter der Hand, ein externer Edit wurde beim Speichern still überschrieben, kein Konflikt wurde je ausgelöst. | etag wird jetzt bei `ctrl+e`-Open eingefroren (`m.editorETag`, `keyNodeAction`); `applyEditorFinished` nutzt NUR noch den eingefrorenen Wert (`m.beanETag` dient nur noch dem Präsenz-Check). Nice-to-have: `ErrConflict` schreibt den editierten Body zusätzlich in ein aufbewahrtes Tempfile, Pfad landet in der Statuszeile (`conflictWithRecovery`/`writeConflictTempFile`). | 🟢 Done |
+
+**4. Tasks**
+
+| Txx | Prio | Aufgabe | Status |
+|-----|------|---------|--------|
+| T01 | high | update.go: `applyCreateDone` Busy-Guard + `pendingCreate` In-Flight-Semantik, `keyNodeAction`-Create-Guard, `createInFlightNote`. | 🟢 Done |
+| T02 | high | box_confirm_create.go: `keyCreateConfirm`-Enter nullt `pendingCreate` nicht mehr; `submitForm("create")` eigener In-Flight-Guard. | 🟢 Done |
+| T03 | high | types.go: `editorETag`-Feld + Doc-Stamps (`pendingCreate` Dual-Bedeutung, `editorETag`). | 🟢 Done |
+| T04 | high | update.go: `keyNodeAction`s `ctrl+e`-Zweig setzt `m.editorETag = b.ETag`; `applyEditorFinished` nutzt `etag` statt frischem `m.beanETag`-Wert. | 🟢 Done |
+| T05 | medium | update.go: `conflictWithRecovery`-Typ + `writeConflictTempFile`, `applyMutationResult` hängt Tempfile-Pfad an die Konflikt-Statuszeile. | 🟢 Done |
+| T06 | high | Tests (RED zuerst): box_confirm_create_test.go 3 neue + 1 angepasst (Busy-Guard, In-Flight-Guard ×2, `pendingCreate`-Semantik); editor_test.go 2 neue Kern-Tests (`TestEditorFinishedUsesEtagCapturedAtOpenNotFreshIndexRead` via Fake-`beans`-Binary, `TestEditorFinishedConflictWritesRecoveryTempFileAndSurfacesPath`) + 3 bestehende angepasst. | 🟢 Done |
+| T07 | low | Notes-für-T6-Korrektur in diesem Bean + surgical edit in epic-E3-plan.md (Task-5-Sektion + Task-6-Sweep-Vorschau). | 🟢 Done |
+
+Verifikation: `command go test ./... -race -count=1 -timeout 300s` 2× grün (`beans-tui/cmd`,
+`internal/data`, `internal/theme`, `internal/tui` -- alle ok, `internal/tui`
+~124s wegen der bewusst langsamen no-binary-required-Pfade), `gofmt -l .`
+leer, `command go vet ./...` leer, Tree-Goldens (`TestTreeGolden`,
+`TestTreeGoldenDeterministic`) 2× grün.
+
+Commit: siehe `Refs: bt-sl45` (fix(tui)).
