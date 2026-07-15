@@ -179,6 +179,28 @@ type model struct {
 	menu      listState
 	menuItems []valueMenuItem
 
+	// Tag-Picker `t` (E3 Task 2, bean bt-8v69, box_picker_tag.go): tagItems
+	// is the usage-counted, deterministically sorted row list (count desc,
+	// then alpha -- collectTagCounts), built fresh at open time.
+	// tagOriginal/tagPending are two INDEPENDENT maps seeded from the
+	// focused bean's current tags (wholesale-replace convention, mirrors
+	// searchBleveIDs -- NOT the I01 cloneBoolMap-on-every-write pattern for
+	// SEEDING, since both are fresh at open). Every TOGGLE against
+	// tagPending during the picker's lifetime still goes through
+	// cloneBoolMap before writing, though (I01, same convention as
+	// toggleFacet) -- the map is long-lived for the whole overlay session,
+	// not a throwaway per-keystroke value, so the same aliasing hazard the
+	// I01 doc-stamp describes applies. tagInput/tagInputActive/tagInputErr
+	// are the free-text new-tag sub-mode (`n`), mirroring searchInput's
+	// "one persistent textinput.Model, reset+focused on open" convention
+	// (openSearchInput).
+	tagItems       []tagCount
+	tagOriginal    map[string]bool
+	tagPending     map[string]bool
+	tagInput       textinput.Model
+	tagInputActive bool
+	tagInputErr    string
+
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works
 	// (ctrl+r reloads manually), it just never reacts to on-disk changes on
@@ -194,11 +216,17 @@ func newModel(client *data.Client, repoDir string) model {
 	ti.Prompt = ""
 	ti.CharLimit = 80
 
+	tagIn := textinput.New() // E3 Task 2: Tag-Picker free-text new-tag input
+	tagIn.Placeholder = "neuer Tag (a-z0-9, Bindestrich-getrennt)"
+	tagIn.Prompt = ""
+	tagIn.CharLimit = 40
+
 	return model{
 		view:        viewBrowseRepo,
 		client:      client,
 		repoDir:     repoDir,
 		expanded:    map[string]bool{},
 		searchInput: ti,
+		tagInput:    tagIn,
 	}
 }

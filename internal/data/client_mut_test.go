@@ -189,6 +189,66 @@ func TestAppendBodyAddsSection(t *testing.T) {
 	}
 }
 
+// TestSetTagsAddsAndRemovesInOneCall guards the E3 Task 2 design decision
+// (bean bt-8v69): a SINGLE SetTags call combining --tag/--remove-tag adds
+// AND removes tags against ONE etag.
+//
+// Uses tt-task, not tt-epic: testrepo_test.go's newTestRepo doc comment
+// records a real beans 0.4.2 CLI bug where a bean with HAND-AUTHORED
+// "tags:" frontmatter reports an ETag from list/show that diverges from
+// update --if-match's internal conflict check, until the file has been
+// rewritten once by beans itself. tt-task ships with no hand-authored tags
+// (deliberately, per that same doc comment), so a first AddTag "seed" call
+// establishes a tag to remove without ever touching the divergent path --
+// the combined SetTags call below is then the thing under test.
+func TestSetTagsAddsAndRemovesInOneCall(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	if err := client.AddTag(task.ID, "seed", task.ETag); err != nil {
+		t.Fatalf("seed AddTag() error = %v", err)
+	}
+
+	beans, err = client.List()
+	if err != nil {
+		t.Fatalf("List() after seed error = %v", err)
+	}
+	task = findBean(t, beans, "tt-task")
+
+	if err := client.SetTags(task.ID, []string{"alpha", "beta"}, []string{"seed"}, task.ETag); err != nil {
+		t.Fatalf("SetTags() error = %v", err)
+	}
+
+	after, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after SetTags error = %v", err)
+	}
+	updated := findBean(t, after, "tt-task")
+
+	want := map[string]bool{"alpha": true, "beta": true}
+	for _, tg := range updated.Tags {
+		if tg == "seed" {
+			t.Fatal("SetTags() left the removed tag \"seed\" in place")
+		}
+		if !want[tg] {
+			t.Errorf("SetTags() left unexpected tag %q, want only %v", tg, want)
+			continue
+		}
+		delete(want, tg)
+	}
+	if len(want) != 0 {
+		t.Errorf("SetTags() missing tags %v, got %v", want, updated.Tags)
+	}
+}
+
 func TestDeleteRemovesBean(t *testing.T) {
 	requireBeansBinary(t)
 

@@ -188,6 +188,29 @@ func (c *Client) RemoveTag(id, tag, etag string) error {
 	return c.update(id, etag, "--remove-tag", tag)
 }
 
+// SetTags applies a combined tag diff in ONE `beans update` call (E3 Task 2,
+// bean bt-8v69, design decision recorded in epic-E3-plan.md »Task 2«):
+// `--tag`/`--remove-tag` are both `stringArray` flags (verified against
+// `beans update --help`) and combine freely in a single invocation. This
+// matters because the tag picker can toggle MULTIPLE tags in one session
+// before confirming -- N sequential AddTag/RemoveTag calls against the SAME
+// etag would be a conflict cascade (the first call wins and rotates the
+// etag on disk, every subsequent call then sees a stale etag and fails
+// ErrConflict). SetTags instead builds ONE `update` invocation carrying
+// every added tag as a repeated `--tag` and every removed tag as a repeated
+// `--remove-tag`, so the whole diff lands atomically against a single etag.
+// AddTag/RemoveTag remain for genuine single-tag callers.
+func (c *Client) SetTags(id string, add, remove []string, etag string) error {
+	var args []string
+	for _, tag := range add {
+		args = append(args, "--tag", tag)
+	}
+	for _, tag := range remove {
+		args = append(args, "--remove-tag", tag)
+	}
+	return c.update(id, etag, args...)
+}
+
 // SetParent sets a bean's parent.
 func (c *Client) SetParent(id, parent, etag string) error {
 	return c.update(id, etag, "--parent", parent)
