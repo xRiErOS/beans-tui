@@ -1,10 +1,11 @@
 ---
 # bt-7k7q
 title: E6 T3 — validation.md + README-Finalisierung
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-15T14:00:59Z
-updated_at: 2026-07-15T14:00:59Z
+updated_at: 2026-07-15T19:36:46Z
 parent: bt-zk9p
 blocked_by:
     - bt-wm4w
@@ -38,3 +39,10 @@ Plan: docs/plans/v1-port/epic-E6-plan.md »Task 3«.
 [ ] README.md Known Issues: VQA-I01/VQA-I02 ergänzt als "PO-Entscheid ausstehend, siehe
     validation.md D04/D05" (NICHT als gelöst markiert).
 [ ] Commit docs(plan): validation.md + README E6-Stand.
+
+
+## Nachträge aus Evidence-Review (2026-07-15, EVIDENCE_SOLID)
+
+- I01: In validation.md bei US-04 die Automatiktests NAMENTLICH zitieren (TestPaletteActionsBeanContextFirst, TestDispatchPaletteBeanJumpsCursorAndSwitchesToBrowse) statt nur 'grün'.
+- I02 (low-medium): US-12-Beleg-Kette dünner als Rest — 2-3 frische Post-E7-Captures ergänzen (Filter-Overlay, Palette, Settings-Form) und in validation.md referenzieren; VQA-Screenshots als 'vor E7' kennzeichnen.
+- B01/bt-gdkx (US-08 Tags-Sichtbarkeit) als eigenen D-Punkt in der Entscheidungstabelle führen (Q05 beim PO offen: Meta-Zeile / Kopfblock / Tree-Suffix / Kombination — Supervisor-Empfehlung: Meta-Zeile + Tree-Suffix). US-08 in der Matrix als PARTIAL mit Verweis.
