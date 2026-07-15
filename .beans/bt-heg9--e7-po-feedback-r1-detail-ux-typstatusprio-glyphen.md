@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T13:56:25Z
+updated_at: 2026-07-15T14:03:50Z
 parent: bt-apmy
 ---
 
@@ -47,3 +47,19 @@ type: xxxx    status: xxxx    prio: xxxx
 ## Auswirkung E6
 
 E6-Validierungs-Tasks erst nach E7 ausführen (blocked_by setzen sobald E6-Tasks existieren). US-12-Kriterium (devd-Look) wird durch dieses Feedback präzisiert, validation.md validiert gegen den NEUEN Stand.
+
+
+## PO-Antworten (2026-07-15, Q01/Q02 GELÖST)
+
+- **Q01 (Header rechts / PF-3):** Inhalt =
+```
+beans-id
+beans-title
+
+type: xxxx    status: xxxx    prio: xxxx
+```
+→ identisch mit dem Kopfblock aus PF-4 — PF-3 und PF-4-Kopf sind EIN Feature: Kopfblock oben im Detail-Panel. Kein separater App-Header-Umbau.
+- **Q02 (Farben):** bestätigt: ‼ critical=red · ! high=yellow · · normal · ↓ low=subtext · → deferred=subtext · d=draft blue.
+- **D01:** enter = Detail-View betreten — bestätigt.
+- **D02:** Leitprinzip: Elemente möglichst schnell/einfach wählbar (Ziffern 1-9 + flüssige enter-Kaskade).
+- **D03:** E6 nach E7 — bestätigt (blocked_by gesetzt: bt-wm4w/bt-9yvh ← bt-heg9).
