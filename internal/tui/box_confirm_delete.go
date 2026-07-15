@@ -35,11 +35,25 @@ package tui
 // (idx.Children[id], never data.CollectDescendants's full recursive walk).
 // Regression: internal/data/client_mut_test.go's
 // TestDeleteClearsFormerChildrensParentField.
+//
+// Q01 (E3-T6-Review PFLICHT finding, bean bt-qzwt): the SAME "beans
+// actively rewrites the referencing file, no CLI warning of its own"
+// behavior holds for `blocking`/`blocked_by` -- verified empirically the
+// same way (isolated scratch-repo probe: two fresh beans, A `--blocked-by`
+// B, delete B, `cat` A's frontmatter -- both directions, `blocked_by` and
+// `blocking`), pinned as regressions in
+// internal/data/client_mut_test.go's
+// TestDeleteClearsOtherBeansBlockedByReference/...BlockingReference.
+// delLinks/countLinkedBeans below extend the SAME open-time synchronous
+// count (delChildren's own convention) to this second link family, and
+// deleteBox's copy warns about it the same way.
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -63,11 +77,34 @@ func (m model) openDeleteConfirm() model {
 	m.mutTarget = b.ID
 	m.delTitle = b.Title
 	m.delChildren = 0
+	m.delLinks = 0
 	if m.idx != nil {
 		m.delChildren = len(m.idx.Children[b.ID])
+		m.delLinks = countLinkedBeans(m.idx, b.ID)
 	}
 	m.overlay = overlayDeleteConfirm
 	return m
+}
+
+// countLinkedBeans (Q01, bean bt-qzwt) returns how many OTHER beans
+// reference id via Blocking or BlockedBy -- a bean referencing id through
+// BOTH fields still counts ONCE (distinct-bean semantics, mirroring
+// delChildren's own convention: idx.Children[id] already counts distinct
+// children, never link INSTANCES).
+func countLinkedBeans(idx *data.Index, id string) int {
+	if idx == nil {
+		return 0
+	}
+	n := 0
+	for otherID, b := range idx.ByID {
+		if otherID == id {
+			continue
+		}
+		if slices.Contains(b.Blocking, id) || slices.Contains(b.BlockedBy, id) {
+			n++
+		}
+	}
+	return n
 }
 
 // keyDeleteConfirm drives the open Delete-Confirm: enter fires
@@ -116,8 +153,28 @@ func (m model) deleteBox() string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().Foreground(theme.Red).Bold(true).Render("Delete "+typ) + "\n")
 	b.WriteString(theme.Header.Render(m.delTitle) + "\n\n")
-	if m.delChildren > 0 {
-		b.WriteString(fmt.Sprintf("%d Kind(er) verlieren den Parent — werden zu eigenen Wurzeln\n", m.delChildren))
+	// I02 (E3-T6-Review PFLICHT finding, bean bt-qzwt): singular/plural
+	// grammar branch -- the original single Sprintf read "1 Kind(er)
+	// verlieren", grammatically wrong for the count==1 case ("Kind(er)"
+	// AND the plural verb "verlieren" both need their own singular form).
+	switch m.delChildren {
+	case 0:
+		// no line -- TestDeleteBoxLeafOmitsChildrenWarning
+	case 1:
+		b.WriteString("1 Kind verliert den Parent — wird zur eigenen Wurzel\n")
+	default:
+		b.WriteString(fmt.Sprintf("%d Kinder verlieren den Parent — werden zu eigenen Wurzeln\n", m.delChildren))
+	}
+	// Q01 (E3-T6-Review PFLICHT finding, bean bt-qzwt): same singular/plural
+	// discipline applied from the start for the linked-bean warning (never
+	// introduced the I02 bug here to begin with).
+	switch m.delLinks {
+	case 0:
+		// no line -- TestDeleteBoxOmitsLinkedWarningWhenZero
+	case 1:
+		b.WriteString("1 Bean verliert die Blocking-/Blocked-by-Verknüpfung zu diesem Bean\n")
+	default:
+		b.WriteString(fmt.Sprintf("%d Beans verlieren die Blocking-/Blocked-by-Verknüpfung zu diesem Bean\n", m.delLinks))
 	}
 	b.WriteString("\n" + lipgloss.NewStyle().Foreground(theme.Red).Render("Irreversible.") + "\n")
 	b.WriteString("\n" + theme.Dim.Render("enter: delete permanently   esc/n: cancel"))

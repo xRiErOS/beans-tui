@@ -66,6 +66,95 @@ func TestOpenDeleteConfirmLeafHasZeroChildren(t *testing.T) {
 	}
 }
 
+// --- Q01 (E3-T6-Review PFLICHT finding, bean bt-qzwt): linked-bean warning ---
+//
+// Empirical finding (scratch-repo probe, two fresh beans A/B, A
+// --blocked-by B, delete B, cat A's frontmatter -- both directions,
+// mirrored in internal/data/client_mut_test.go's
+// TestDeleteClearsOtherBeansBlockedByReference/...BlockingReference):
+// `beans delete` silently clears blocking/blocked_by references OTHER
+// beans hold on the deleted bean, exactly the same "actively rewrites the
+// referencing file, no CLI warning" behavior box_confirm_delete.go's
+// existing ERRATUM doc-stamp already pins for the parent field. deleteBox
+// must warn about this too -- delLinks (computed at open time, synchronous,
+// same idx-in-memory convention as delChildren) counts the DISTINCT other
+// beans that reference the target via Blocking or BlockedBy.
+
+// fixtureBeansLinked adds a Blocking/BlockedBy relationship to
+// fixtureBeans() for Q01 coverage: tk-1 blocks tk-2 (tk-1.Blocking =
+// [tk-2], tk-2.BlockedBy = [tk-1]) -- both halves of the SAME link, so
+// deleting either end exercises countLinkedBeans from each side.
+func fixtureBeansLinked() []data.Bean {
+	beans := fixtureBeans()
+	for i := range beans {
+		switch beans[i].ID {
+		case "tk-1":
+			beans[i].Blocking = []string{"tk-2"}
+		case "tk-2":
+			beans[i].BlockedBy = []string{"tk-1"}
+		}
+	}
+	return beans
+}
+
+// TestOpenDeleteConfirmCountsLinkedBeanSingular: deleting tk-1 (referenced
+// by tk-2's BlockedBy) must count delLinks == 1.
+func TestOpenDeleteConfirmCountsLinkedBeanSingular(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansLinked())
+	m = focusBean(m, "tk-1")
+
+	m = step(t, m, runeMsg('d'))
+	if m.delLinks != 1 {
+		t.Fatalf("delLinks = %d, want 1 (tk-2 references tk-1 via BlockedBy)", m.delLinks)
+	}
+}
+
+// TestOpenDeleteConfirmCountsLinkedBeanFromBlockingSide is the mirror:
+// deleting tk-2 (referenced by tk-1's Blocking) must ALSO count
+// delLinks == 1 -- countLinkedBeans checks both link families on the OTHER
+// bean, not just one.
+func TestOpenDeleteConfirmCountsLinkedBeanFromBlockingSide(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansLinked())
+	m = focusBean(m, "tk-2")
+
+	m = step(t, m, runeMsg('d'))
+	if m.delLinks != 1 {
+		t.Fatalf("delLinks = %d, want 1 (tk-1 references tk-2 via Blocking)", m.delLinks)
+	}
+}
+
+// TestOpenDeleteConfirmCountsLinkedBeansDistinctNotDouble guards the
+// distinct-bean-count semantics (mirrors delChildren's own distinct-count
+// convention): a bean referencing the target via BOTH Blocking AND
+// BlockedBy must still count ONCE, not twice.
+func TestOpenDeleteConfirmCountsLinkedBeansDistinctNotDouble(t *testing.T) {
+	beans := fixtureBeansLinked()
+	for i := range beans {
+		if beans[i].ID == "tk-2" {
+			beans[i].Blocking = []string{"tk-1"} // tk-2 now ALSO blocks tk-1 back
+		}
+	}
+	m := fixtureModel(t, beans)
+	m = focusBean(m, "tk-1")
+
+	m = step(t, m, runeMsg('d'))
+	if m.delLinks != 1 {
+		t.Fatalf("delLinks = %d, want 1 (tk-2 references tk-1 twice -- BlockedBy AND Blocking -- but counts as ONE bean)", m.delLinks)
+	}
+}
+
+// TestOpenDeleteConfirmNoLinksLeavesDelLinksZero guards the common case:
+// fixtureBeans() (unlinked) opens with delLinks == 0.
+func TestOpenDeleteConfirmNoLinksLeavesDelLinksZero(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-1")
+
+	m = step(t, m, runeMsg('d'))
+	if m.delLinks != 0 {
+		t.Fatalf("delLinks = %d, want 0 (fixtureBeans has no blocking/blocked_by links)", m.delLinks)
+	}
+}
+
 // --- deleteBox ---
 
 // TestDeleteBoxWarnsChildrenLoseParentBecomeRoots guards the semantic
@@ -116,6 +205,93 @@ func TestDeleteBoxLeafOmitsChildrenWarning(t *testing.T) {
 	}
 	if !strings.Contains(box, "Task One") {
 		t.Fatalf("deleteBox() = %q, want the bean's title rendered", box)
+	}
+}
+
+// TestDeleteBoxSingularChildWording guards I02 (E3-T6-Review PFLICHT
+// finding, bean bt-qzwt): a delChildren == 1 case must read "1 Kind
+// verliert ... wird zur eigenen Wurzel" (singular verb/noun), not the
+// plural "Kinder verlieren ... werden zu eigenen Wurzeln" wording the
+// count>1 case uses (TestDeleteBoxWarnsChildrenLoseParentBecomeRoots
+// above). ms-1 (fixtureBeans' milestone) has exactly ONE child (ep-1).
+func TestDeleteBoxSingularChildWording(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "ms-1")
+	m = step(t, m, runeMsg('d'))
+
+	if m.delChildren != 1 {
+		t.Fatalf("setup: delChildren = %d, want 1 (ms-1 has exactly one child, ep-1)", m.delChildren)
+	}
+	// Short substrings deliberately (not the full sentence): the modal
+	// word-wraps at clampModalWidth(48, ...), so "wird zur eigenen Wurzel"
+	// itself splits across two rendered lines -- the same reason the
+	// EXISTING plural test above only checks "verlieren den Parent", not
+	// the full sentence, either.
+	box := m.deleteBox()
+	if !strings.Contains(box, "1 Kind verliert den Parent") {
+		t.Fatalf("deleteBox() = %q, want the singular \"1 Kind verliert den Parent\" wording", box)
+	}
+	if strings.Contains(box, "Kinder verlieren") {
+		t.Fatalf("deleteBox() = %q, must not use the plural \"Kinder verlieren\" wording for delChildren == 1", box)
+	}
+	if strings.Contains(box, "Wurzeln") {
+		t.Fatalf("deleteBox() = %q, must not use the plural noun \"Wurzeln\" for delChildren == 1", box)
+	}
+}
+
+// TestDeleteBoxWarnsLinkedBeanSingular guards Q01's linked-bean warning
+// line, singular branch (delLinks == 1) -- built with correct singular
+// grammar from the start (I02's lesson applied immediately, not retrofitted
+// after a bug report).
+func TestDeleteBoxWarnsLinkedBeanSingular(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansLinked())
+	m = focusBean(m, "tk-1")
+	m = step(t, m, runeMsg('d'))
+
+	// Short substring, same word-wrap reasoning as
+	// TestDeleteBoxSingularChildWording above.
+	box := m.deleteBox()
+	if !strings.Contains(box, "1 Bean verliert die Blocking") {
+		t.Fatalf("deleteBox() = %q, want the singular linked-bean warning", box)
+	}
+	if strings.Contains(box, "Beans verlieren die Blocking") {
+		t.Fatalf("deleteBox() = %q, must not use plural wording for delLinks == 1", box)
+	}
+}
+
+// TestDeleteBoxWarnsLinkedBeansPlural guards the plural branch (delLinks >
+// 1): ep-1 additionally references tk-1 via Blocking, on top of tk-2's
+// existing BlockedBy reference from fixtureBeansLinked -- two distinct
+// referencing beans.
+func TestDeleteBoxWarnsLinkedBeansPlural(t *testing.T) {
+	beans := fixtureBeansLinked()
+	for i := range beans {
+		if beans[i].ID == "ep-1" {
+			beans[i].Blocking = []string{"tk-1"}
+		}
+	}
+	m := fixtureModel(t, beans)
+	m = focusBean(m, "tk-1")
+	m = step(t, m, runeMsg('d'))
+
+	box := m.deleteBox()
+	if !strings.Contains(box, "2 Beans verlieren die Blocking") {
+		t.Fatalf("deleteBox() = %q, want the plural linked-bean warning (\"2 Beans verlieren\")", box)
+	}
+}
+
+// TestDeleteBoxOmitsLinkedWarningWhenZero guards the delLinks == 0 case
+// (the common, unlinked path): no linked-bean line renders at all, mirrors
+// TestDeleteBoxLeafOmitsChildrenWarning's own omission convention for
+// delChildren == 0.
+func TestDeleteBoxOmitsLinkedWarningWhenZero(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-1")
+	m = step(t, m, runeMsg('d'))
+
+	box := m.deleteBox()
+	if strings.Contains(box, "Verknüpfung") {
+		t.Fatalf("deleteBox() = %q, must not render the linked-bean warning when delLinks == 0", box)
 	}
 }
 
@@ -283,4 +459,46 @@ func TestKeyNodeActionDNoFocusedBeanIsSilentNoOp(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("d with no focused bean must not fire a Cmd")
 	}
+}
+
+// --- I03 (E3-T6-Review optional finding, bean bt-qzwt): delete the last bean ---
+
+// TestDeleteLastBeanInRepoClearsCursorGracefully guards the edge the
+// cursor-clamp tests above never hit: a repo with exactly ONE bean (no
+// siblings to clamp onto). applyLoaded's existing len(nodes)==0 branch
+// (update.go) already handles this -- cursorID resets to "" -- but nothing
+// drove it end-to-end through the ACTUAL delete flow before, nor proved
+// View() survives rendering a fully empty repo without panicking.
+func TestDeleteLastBeanInRepoClearsCursorGracefully(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "tk-1", Title: "Only Task", Status: "todo", Type: "task", Priority: "normal"},
+	}
+	m := fixtureModel(t, beans)
+	m.cursorID = "tk-1"
+
+	m = step(t, m, runeMsg('d'))
+	if m.overlay != overlayDeleteConfirm {
+		t.Fatal("setup: d did not open the delete confirm")
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm := tm.(model)
+	if nm.overlay != overlayNone {
+		t.Fatal("enter did not close the delete confirm")
+	}
+	if cmd == nil {
+		t.Fatal("enter must return the delete mutateCmd")
+	}
+
+	nm = step(t, nm, mutationDoneMsg{err: nil})
+	nm = step(t, nm, beansLoadedMsg{beans: nil}) // repo now completely empty
+
+	if nm.cursorID != "" {
+		t.Fatalf("cursorID after deleting the last bean = %q, want \"\" (empty repo)", nm.cursorID)
+	}
+	if nm.delChildren != 0 || nm.delLinks != 0 {
+		t.Fatalf("delChildren/delLinks after reload = %d/%d, want 0/0 (no dangling state from the closed overlay)", nm.delChildren, nm.delLinks)
+	}
+	// Rendering the view on a fully empty index must not panic.
+	_ = nm.View()
 }

@@ -463,6 +463,70 @@ func TestDeleteClearsFormerChildrensParentField(t *testing.T) {
 	}
 }
 
+// TestDeleteClearsOtherBeansBlockedByReference pins the Q01 empirical
+// finding from E3-T7's review-findings sweep (E3-T6-Review PFLICHT, bean
+// bt-qzwt): deleting a bean that OTHER beans reference via `blocked_by`
+// silently clears that reference too -- the exact same "beans actively
+// rewrites the referencing file" behavior TestDeleteClearsFormerChildrensPar
+// entField already pins for `parent`, just for a different link family.
+// Verified empirically in an isolated scratch repo (two fresh beans, A
+// `--blocked-by` B, delete B, `cat` A's frontmatter -- both directions,
+// `blocked_by` and `blocking`, mirror this test's sibling
+// TestDeleteClearsOtherBeansBlockingReference below) before this test was
+// written; `beans check` reports zero link issues afterwards, and the CLI
+// prints no warning of its own -- box_confirm_delete.go's deleteBox is the
+// ONLY place the PO ever sees this coming.
+//
+// newTestRepo's fixture already carries this exact relationship: tt-mlst
+// has `blocking: [tt-task]`, tt-task has `blocked_by: [tt-mlst]` -- no
+// fixture change needed, deleting tt-mlst is the same act
+// TestDeleteClearsFormerChildrensParentField already exercises for the
+// parent side (tt-mlst is also tt-epic's parent).
+func TestDeleteClearsOtherBeansBlockedByReference(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	if err := client.Delete("tt-mlst"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+	if len(task.BlockedBy) != 0 {
+		t.Fatalf("tt-task.BlockedBy = %v after deleting tt-mlst, want empty (Q01 ERRATUM: beans delete silently clears blocked_by references held by OTHER beans, same as parent)", task.BlockedBy)
+	}
+}
+
+// TestDeleteClearsOtherBeansBlockingReference is
+// TestDeleteClearsOtherBeansBlockedByReference's mirror for the other link
+// direction: newTestRepo's tt-mlst carries `blocking: [tt-task]` -- deleting
+// tt-task (the REFERENCED bean this time, not the referencing one) must
+// silently clear tt-mlst's `blocking` entry too.
+func TestDeleteClearsOtherBeansBlockingReference(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	if err := client.Delete("tt-task"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	milestone := findBean(t, beans, "tt-mlst")
+	if len(milestone.Blocking) != 0 {
+		t.Fatalf("tt-mlst.Blocking = %v after deleting tt-task, want empty (Q01 ERRATUM: beans delete silently clears blocking references held by OTHER beans, same as parent)", milestone.Blocking)
+	}
+}
+
 func TestDeleteRemovesBean(t *testing.T) {
 	requireBeansBinary(t)
 

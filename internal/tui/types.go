@@ -332,6 +332,19 @@ type model struct {
 	// wording either way.
 	delTitle    string
 	delChildren int
+	// delLinks (Q01, E3-T6-Review PFLICHT finding, bean bt-qzwt) is the
+	// DISTINCT count of OTHER beans that reference the delete target via
+	// Blocking or BlockedBy, captured synchronously at open time (same
+	// idx-in-memory convention as delChildren, box_confirm_delete.go's
+	// countLinkedBeans). Empirically verified (scratch-repo probe, mirrored
+	// in internal/data/client_mut_test.go's
+	// TestDeleteClearsOtherBeansBlockedByReference/...BlockingReference):
+	// `beans delete` silently clears these references in the OTHER bean's
+	// frontmatter too -- the exact same "actively rewrites the file, no CLI
+	// warning" behavior the parent-field ERRATUM above already documents,
+	// just for a different link family. deleteBox's copy warns about this
+	// the same way it warns about children losing their parent.
+	delLinks int
 
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works
