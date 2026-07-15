@@ -6,14 +6,18 @@ PO-Cockpit-TUI für beans-Repos — Port der DevDash-TUI (`dd`) auf das
 
 ## Status
 
-E1 (Foundation) und E2 (Browse & Detail) sind fertig: read-only Tree über den
-beans-Datenlayer (Milestones → Epics → Tasks) mit Live-Reload via
+E1 (Foundation), E2 (Browse & Detail) und E3 (Mutationen) sind fertig: read-only
+Tree über den beans-Datenlayer (Milestones → Epics → Tasks) mit Live-Reload via
 fsnotify-Watcher, Quit-Confirm (E1); Master-Detail-Fokus mit
 Detail-Accordion (Meta/Body/Beziehungen/Historie, Beziehungs-Sprung), lokale
 Live-Suche + Bleve ab 3 Zeichen, Facetten-Filter (Status/Type/Priority/Tag,
-geteilt über Tree UND Backlog) und die Backlog-View mit Sort-Toggle (E2).
-E3–E6 (Mutationen, Command-Center & Review-Cockpit, Polish, Validierung)
-sind offen — offener Stand: `beans list --ready`.
+geteilt über Tree UND Backlog) und die Backlog-View mit Sort-Toggle (E2);
+volle Mutations-Verdrahtung — kombiniertes Status/Type/Priority-Menü,
+Tag-/Parent-/Blocking-Picker, Create-Form (huh, Confirm-Gate), Titel-/
+Body-Edit (`$EDITOR`) und Delete-Confirm mit Kinder-/Verknüpfungs-Warnung,
+durchgehend mit ETag-Konflikt-Handling (E3). E4–E6 (Command-Center &
+Review-Cockpit, Polish, Validierung) sind offen — offener Stand:
+`beans list --ready`.
 
 ## Voraussetzungen
 
@@ -35,7 +39,7 @@ bt          # sucht .beans.yml aufwärts vom cwd
 bt <pfad>   # explizites Repo
 ```
 
-## Keybindings (Stand E2)
+## Keybindings (Stand E3)
 
 | Taste | Aktion |
 |---|---|
@@ -47,9 +51,17 @@ bt <pfad>   # explizites Repo
 | `1`–`4` | Detail-Accordion: direkter Section-Sprung (Meta/Body/Beziehungen/Historie) |
 | `/` | Suche — lokaler Live-Filter (Titel), ab 3 Zeichen zusätzlich Bleve (Titel+Body) |
 | `f` | Facetten-Filter öffnen (Status/Type/Priority/Tag) |
-| `X` | Facetten-Filter zurücksetzen (Tree — s. Bug-Hinweis in E2-Abschluss) |
+| `X` | Facetten-Filter zurücksetzen (Tree und Backlog) |
 | `b` | Backlog-View (parentlose+ready beans, geteilter Such-/Filter-Zustand) |
 | `S` | Backlog: Sort-Toggle, zyklisch status → priority → created → updated |
+| `s` | Status/Type/Priority-Menü (kombiniert, ein Key für alle drei) |
+| `t` | Tag-Picker (Toggle-Multi-Select, Zähler, Freitext-Neuanlage) |
+| `a` | Parent-Picker (Zyklen-Ausschluss + Typ-Hierarchie) |
+| `B` | Blocking-Picker (Toggle-Multi-Select) |
+| `c` | Bean anlegen (huh-Formular, Confirm-Gate) |
+| `e` | Titel bearbeiten (Formular, direkt ohne Confirm) |
+| `ctrl+e` | Body im `$EDITOR` bearbeiten (`$VISUAL` → `$EDITOR` → `vi`) |
+| `d` | Löschen (Confirm, Kinder-/Verknüpfungs-Warnung — kaskadiert nicht) |
 | `ctrl+r` | Daten neu laden |
 | `q` | Quit (mit Confirm) |
 | `ctrl+c` | Sofort-Quit |
