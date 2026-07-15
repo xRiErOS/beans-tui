@@ -1,11 +1,11 @@
 ---
 # bt-qbyq
 title: 'Detail-Focus: Pfeil-Symmetrie-Fix + esc-Rueckwaerts-Kaskade'
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T21:07:40Z
-updated_at: 2026-07-15T21:07:40Z
+updated_at: 2026-07-15T21:45:13Z
 parent: bt-ntoz
 blocked_by:
     - bt-e6q9
@@ -80,3 +80,10 @@ Ergebnis: 5 von 6 Bereichen waren bereits konform (nur verifizieren + im Audit d
 - [ ] Audit-Tabelle (Suche/Filter/Picker/Lobby/Quit) mit File:Line-Belegen im Commit-Body
 - [ ] Kein Golden aendert sich (Schritt 5 gruen ohne -update)
 - [ ] Voller Testlauf (inkl. -race) gruen, gofmt/vet leer
+
+
+## Prelude aus E8-T1-Review (2026-07-16, Quelle: bt-e6q9-Review APPROVED)
+
+- Non-blocking Finding: Section-Index-Konstanten (metaSectionIdx/bodySectionIdx/relationsSectionIdx/historySectionIdx, view_detail_bean.go) sind definiert aber noch UNGENUTZT — in diesem Task konsequent verwenden statt Magic-Numbers.
+- Neue Signaturen (siehe auch '## Notes for T3' in bt-e6q9): beanSections(idx, b, bodyW, focused, activeIdx, fieldIdx, detailLevel) · renderAccordionPane(idx, b, w, h, open, secCursor, fieldCursor, detailLevel, focused). renderBeanAccordionPane unverändert.
+- metaFields-Reihenfolge verschoben: tags an Index 4, created_at/updated_at jetzt 5/6 — Feld-Index-Annahmen prüfen.
