@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T20:39:21Z
+updated_at: 2026-07-15T20:40:31Z
 parent: bt-apmy
 ---
 
@@ -59,3 +59,6 @@ Offene Präzisierung Q06: 'r Blocking' — Umbelegung B→r oder Tippfehler? / u
 **B12:** 's' (Status menu) zeigt den gesamten Meta-Block; 't' dagegen korrekt nur Tags. Fix: Auftrennen — status, type, priority, tags bekommen je ein EIGENES Select-Overlay (das Sammel-Value-Menü zerlegen); Keys + Palette-Commands entsprechend (set status/set type/set priority/set tags je direkt ins Einzel-Overlay).
 **B13:** ctrl+k (Command-Center) durchsucht auch alle Beans — störend. Fix: Palette zeigt NUR Commands (Bean-Treffer raus; Bean-Suche gehört zu '/'). design-spec-US-04-Anpassung nötig (bewusste Revision der E4-Entscheidung).
 **B14:** Kein Weg, neue Tags zu definieren — weder Palette-Command noch (auffindbar) im t-Picker. Prüfen: box_picker_tag hat lt. Code einen 'Neuer Tag'-Modal (T3-Sweep-Fund, box_picker_tag.go:334) — kaputt oder nur nicht entdeckbar? Fix: (a) Neuanlage im t-Picker sichtbar machen (Footer-Hint!), (b) Palette-Command 'create tag'. Berührt D08/bt-6oyy (Tag-Page) — B14 ist die v1-Minimal-Lösung, Tag-Page bleibt v1.1.
+
+
+**D03 ENTSCHIEDEN:** esc ist UNIVERSELL 'back' — auch in der Detail-Kaskade: Feld-Ebene → Sektions-Ebene → Fokus verlassen → (Grundzustand). PO-Begründung: die globalen Keybindings deklarierten 'esc:back' bereits — Verhalten muss dem Versprechen folgen. Konsistent mit B08-Quit-Kaskade (stufiges Verlassen). Schließt E7-T6-Review-I01. Prüfauftrag Planner: alle esc-Sites auf Einheitlichkeit (Suche, Filter, Picker, Lobby, Kaskade, Quit) — EIN mentales Modell: esc geht immer genau eine Ebene zurück.
