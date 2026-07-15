@@ -8,72 +8,81 @@ import (
 )
 
 // TestStatusColorMapping — alle 5 beans-Status → erwartete Catppuccin-Macchiato-Hex
-// (Plan »E1 Task 6« Adaptation 2). Unbekannter Status fällt neutral auf Text zurück.
+// UND ihr Buchstaben-Icon (PF-6, design-spec.md §15, 2026-07-15). Unbekannter Status
+// fällt neutral auf Subtext + den generischen Fallback-Glyph zurück.
 func TestStatusColorMapping(t *testing.T) {
 	cases := []struct {
 		status string
 		want   lipgloss.Color
+		letter string
 	}{
-		{"draft", Blue},
-		{"todo", Text},
-		{"in-progress", Yellow},
-		{"completed", Green},
-		{"scrapped", Red},
+		{"draft", Blue, "d"},
+		{"todo", Green, "t"},
+		{"in-progress", Yellow, "i"},
+		{"completed", Subtext, "c"},
+		{"scrapped", Subtext, "s"},
 	}
 	for _, c := range cases {
 		if got := StatusColor(c.status); got != c.want {
 			t.Errorf("StatusColor(%q) = %q, want %q", c.status, got, c.want)
+		}
+		if icon := StatusIcon(c.status); !strings.Contains(icon, c.letter) {
+			t.Errorf("StatusIcon(%q) = %q, want contains letter %q", c.status, icon, c.letter)
 		}
 	}
 
 	if got := StatusColor("some-unknown-status"); got != Subtext {
 		t.Errorf("StatusColor(unknown) = %q, want fallback Subtext %q", got, Subtext)
 	}
-
-	if icon := StatusIcon("some-unknown-status"); !strings.Contains(icon, fallbackGlyphChar) || strings.Contains(icon, statusGlyph) {
-		t.Errorf("StatusIcon(unknown) = %q, want fallback glyph %q not status glyph %q", icon, fallbackGlyphChar, statusGlyph)
+	if icon := StatusIcon("some-unknown-status"); !strings.Contains(icon, fallbackGlyphChar) {
+		t.Errorf("StatusIcon(unknown) = %q, want fallback glyph %q", icon, fallbackGlyphChar)
 	}
 }
 
-// TestAsciiFallback — BT_ASCII_ICONS steuert Status- und Type-Glyphen (Adaptation 1).
-// Per-Aufruf-Read via os.Getenv, daher mit t.Setenv pro Sub-Case steuerbar (kein
-// Package-State-Caching, das Tests verunreinigen könnte).
+// TestAsciiFallback — BT_ASCII_ICONS ist seit PF-6 nur noch für Priorität relevant:
+// Status-/Type-Buchstaben sind bereits ASCII/EAW-neutral und bleiben in BEIDEN Modi
+// identisch (kein Unicode-vs-ASCII-Branch mehr). Per-Aufruf-Read via os.Getenv, daher
+// mit t.Setenv pro Sub-Case steuerbar (kein Package-State-Caching).
 func TestAsciiFallback(t *testing.T) {
 	t.Setenv("BT_ASCII_ICONS", "1")
 
-	if !strings.Contains(StatusIcon("todo"), statusGlyphASCII) {
-		t.Errorf("StatusIcon(todo) with BT_ASCII_ICONS=1 should contain ASCII glyph %q", statusGlyphASCII)
+	if !strings.Contains(Priority("critical"), "!!") {
+		t.Errorf("Priority(critical) with BT_ASCII_ICONS=1 should contain ASCII glyph %q", "!!")
 	}
-	if strings.Contains(StatusIcon("todo"), statusGlyph) {
-		t.Errorf("StatusIcon(todo) with BT_ASCII_ICONS=1 should not contain unicode glyph %q", statusGlyph)
+	if strings.Contains(Priority("critical"), "‼") {
+		t.Errorf("Priority(critical) with BT_ASCII_ICONS=1 should not contain unicode glyph %q", "‼")
 	}
-	if !strings.Contains(TypeIcon("bug"), typeIconASCII["bug"]) {
-		t.Errorf("TypeIcon(bug) with BT_ASCII_ICONS=1 should contain ASCII glyph %q", typeIconASCII["bug"])
+	if !strings.Contains(StatusIcon("todo"), "t") {
+		t.Errorf("StatusIcon(todo) with BT_ASCII_ICONS=1 should still contain letter %q (no-op for status)", "t")
+	}
+	if !strings.Contains(TypeIcon("bug"), "B") {
+		t.Errorf("TypeIcon(bug) with BT_ASCII_ICONS=1 should still contain letter %q (no-op for type)", "B")
 	}
 
 	t.Setenv("BT_ASCII_ICONS", "0")
 
-	if !strings.Contains(StatusIcon("todo"), statusGlyph) {
-		t.Errorf("StatusIcon(todo) without ascii mode should contain unicode glyph %q", statusGlyph)
+	if !strings.Contains(Priority("critical"), "‼") {
+		t.Errorf("Priority(critical) without ascii mode should contain unicode glyph %q", "‼")
 	}
-	if !strings.Contains(TypeIcon("bug"), typeIcon["bug"]) {
-		t.Errorf("TypeIcon(bug) without ascii mode should contain unicode glyph %q", typeIcon["bug"])
+	if strings.Contains(Priority("critical"), "!!") {
+		t.Errorf("Priority(critical) without ascii mode should not contain ASCII glyph %q", "!!")
 	}
 }
 
-// TestTypeIconAllTypes — alle 5 beans-Typen → erwarteter Glyph + Farbe (Adaptation 3).
-// Unbekannter Typ fällt auf den generischen Fallback-Glyph zurück (siehe fallbackGlyph).
+// TestTypeIconAllTypes — alle 5 beans-Typen → erwarteter Buchstabe + Farbe (PF-6,
+// design-spec.md §15, 2026-07-15). Unbekannter Typ fällt auf den generischen
+// Fallback-Glyph zurück (siehe fallbackGlyph).
 func TestTypeIconAllTypes(t *testing.T) {
 	cases := []struct {
 		typ   string
 		glyph string
 		color lipgloss.Color
 	}{
-		{"milestone", "⬢", Peach},
-		{"epic", "✦", Mauve},
-		{"feature", "✦", Green},
-		{"task", "⯅", Blue},
-		{"bug", "⯁", Red},
+		{"milestone", "M", Blue},
+		{"epic", "E", Mauve},
+		{"feature", "F", Mauve},
+		{"task", "T", Sky},
+		{"bug", "B", Red},
 	}
 	for _, c := range cases {
 		if got := typeGlyph(c.typ); got != c.glyph {
@@ -130,27 +139,40 @@ func TestSetAccentOverridesThenNoOpOnEmptyOrInvalid(t *testing.T) {
 	}
 }
 
-// TestPriorityColorMapping — beans-Priorität → erwartete Farbe + Bold-Flag
-// (Adaptation 4).
+// TestPriorityColorMapping — beans-Priorität → erwartete Farbe + Glyph (PF-6,
+// design-spec.md §15, 2026-07-15). Priority() liefert jetzt den Glyph statt des
+// ausgeschriebenen Worts. Unbekannte Priorität fällt auf Text-Farbe + den
+// generischen Fallback-Glyph zurück (deckt sich zufällig mit dem "normal"-Glyph).
 func TestPriorityColorMapping(t *testing.T) {
 	cases := []struct {
 		priority string
 		want     lipgloss.Color
+		glyph    string
 	}{
-		{"critical", Red},
-		{"high", Red},
-		{"normal", Text},
-		{"low", Green},
-		{"deferred", Hint},
+		{"critical", Red, "‼"},
+		{"high", Yellow, "!"},
+		{"normal", Text, "·"},
+		{"low", Subtext, "↓"},
+		{"deferred", Subtext, "→"},
 	}
 	for _, c := range cases {
 		if got := priorityColor(c.priority); got != c.want {
 			t.Errorf("priorityColor(%q) = %q, want %q", c.priority, got, c.want)
 		}
+		if rendered := Priority(c.priority); !strings.Contains(rendered, c.glyph) {
+			t.Errorf("Priority(%q) = %q, want contains glyph %q", c.priority, rendered, c.glyph)
+		}
 	}
 
 	rendered := Priority("critical")
-	if !strings.Contains(rendered, "critical") {
-		t.Errorf("Priority(critical) = %q, want contains %q", rendered, "critical")
+	if strings.Contains(rendered, "critical") {
+		t.Errorf("Priority(critical) = %q, want glyph only, not the word %q", rendered, "critical")
+	}
+
+	if got := priorityColor("unknown-priority"); got != Text {
+		t.Errorf("priorityColor(unknown) = %q, want default Text %q", got, Text)
+	}
+	if rendered := Priority("unknown-priority"); !strings.Contains(rendered, fallbackGlyphChar) {
+		t.Errorf("Priority(unknown) = %q, want contains fallback glyph %q", rendered, fallbackGlyphChar)
 	}
 }

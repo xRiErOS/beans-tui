@@ -40,6 +40,10 @@ func TestBeanSectionsAlwaysFourFixedSections(t *testing.T) {
 // TestBeanSectionsMetaRendersStatusTypePriorityTags guards the Meta section's
 // content: it must reuse render_shared.go's themed status/type/priority/tag
 // rendering (no new theme code), so the raw values show up in the body.
+// Priority is the one exception since PF-6 (design-spec.md §15, 2026-07-15,
+// bean bt-2af1): theme.Priority now renders a glyph, not the word -- asserted
+// against the glyph instead (see internal/theme/theme_test.go for the full
+// PF-6 table).
 func TestBeanSectionsMetaRendersStatusTypePriorityTags(t *testing.T) {
 	beans := []data.Bean{
 		{ID: "meta-1", Title: "Meta Bean", Status: "in-progress", Type: "bug", Priority: "critical", Tags: []string{"urgent"}},
@@ -54,8 +58,8 @@ func TestBeanSectionsMetaRendersStatusTypePriorityTags(t *testing.T) {
 	if !strings.Contains(meta, "bug") {
 		t.Errorf("Meta body missing type: %q", meta)
 	}
-	if !strings.Contains(meta, "critical") {
-		t.Errorf("Meta body missing priority: %q", meta)
+	if !strings.Contains(meta, "‼") {
+		t.Errorf("Meta body missing priority glyph (PF-6): %q", meta)
 	}
 	if !strings.Contains(meta, "urgent") {
 		t.Errorf("Meta body missing tag: %q", meta)

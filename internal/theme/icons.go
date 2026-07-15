@@ -2,49 +2,36 @@ package theme
 
 import "github.com/charmbracelet/lipgloss"
 
-// --- beans-Type Text-Icons (kein Emoji — Unicode-Geometrie, monospace-sicher) ---
+// --- beans-Type Buchstaben-Icons (PF-6, design-spec.md §15, 2026-07-15) ---
 //
-// Port-Adaptation 3 (devd internal/theme/theme.go typeIcon/typeColor): devd kannte
-// bug/feature/improvement/core; beans kennt milestone/epic/feature/task/bug — die
-// beiden Sets überlappen nur in bug/feature, die übrigen sind neu gemappt. Alle
-// Glyphen hier MÜSSEN East-Asian-Width = Neutral/Narrow sein (nie Ambiguous), sonst
-// verrutschen Spalten in Ambiguous=Wide-Terminals (tmux/CJK) — lipgloss zählt Breite
-// via clipperhouse/displaywidth, nicht go-runewidth.
+// Superseded: vormals geometrische Unicode-Icons (⬢/✦/⯅/⯁, Port-Adaptation 3
+// aus devds typeIcon/typeColor), Bedeutung nur über Farbe getrennt -- epic und
+// feature teilten sich sogar denselben Glyphen (✦). PO-Direktive: EIN
+// kapitalisierter Typ-Buchstabe je Typ + Farbe, redundante Kodierung wie bei
+// Status (theme.go statusLetter). Alle Buchstaben sind ASCII/EAW=Narrow --
+// BT_ASCII_ICONS bleibt für Typ wirkungslos, kein typeIconASCII mehr nötig.
 var typeIcon = map[string]string{
-	"milestone": "⬢", // U+2B22 BLACK HEXAGON (neutral)
-	"epic":      "✦", // U+2726 BLACK FOUR POINTED STAR (neutral)
-	"feature":   "✦", // U+2726 — gleicher Glyph wie epic, Unterscheidung über Farbe
-	"task":      "⯅", // U+2BC5 BLACK MEDIUM UP-POINTING TRIANGLE (neutral)
-	"bug":       "⯁", // U+2BC1 BLACK MEDIUM DIAMOND (neutral)
+	"milestone": "M",
+	"epic":      "E",
+	"feature":   "F",
+	"task":      "T",
+	"bug":       "B",
 }
 
 var typeColor = map[string]lipgloss.Color{
-	"milestone": Peach,
+	"milestone": Blue,
 	"epic":      Mauve,
-	"feature":   Green,
-	"task":      Blue,
+	"feature":   Mauve,
+	"task":      Sky,
 	"bug":       Red,
 }
 
-// typeIconASCII — ASCII-Ersatz je Typ (garantiert darstellbar, EAW-Neutral), aktiv via
-// BT_ASCII_ICONS. Distinkt pro Typ, damit der Typ ohne Farbe erkennbar bleibt.
-var typeIconASCII = map[string]string{
-	"milestone": "#",
-	"epic":      "*",
-	"feature":   "+",
-	"task":      "^",
-	"bug":       "!",
-}
-
-// typeGlyph wählt den Type-Glyph (ASCII-Fallback berücksichtigt). Unbekannte Typen
-// bekommen den generischen Fallback-Glyph (fallbackGlyph, siehe theme.go).
+// typeGlyph liefert den Type-Buchstaben. Unbekannte Typen bekommen den
+// generischen Fallback-Glyph (fallbackGlyph, siehe theme.go).
 func typeGlyph(t string) string {
 	ic, ok := typeIcon[t]
 	if !ok {
 		return fallbackGlyph()
-	}
-	if asciiIcons() {
-		return typeIconASCII[t]
 	}
 	return ic
 }

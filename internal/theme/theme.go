@@ -100,18 +100,22 @@ func SetAccent(hex string) {
 
 var statusColor = map[string]lipgloss.Color{
 	"draft":       Blue,
-	"todo":        Text,
+	"todo":        Green,
 	"in-progress": Yellow,
-	"completed":   Green,
-	"scrapped":    Red,
+	"completed":   Subtext,
+	"scrapped":    Subtext,
 }
 
-// StatusColor liefert die Farbe für einen beans-Status (Fallback: Subtext — Text ist
-// bereits an den echten Status "todo" vergeben, ein Text-Fallback würde also mit einem
-// realen Status kollidieren, Farbe=Bedeutung-Prinzip verletzt; siehe fallbackGlyph für
-// den zugehörigen Glyph-Fallback). Der Type-Fallback (icons.go TypeIcon/TypeStyle)
-// bleibt bewusst bei Text: kein realer Typ (Peach/Mauve/Green/Blue/Red) nutzt Text,
-// dort besteht die Kollision nicht.
+// StatusColor liefert die Farbe für einen beans-Status (Fallback: Subtext).
+// PF-6 (design-spec.md §15, 2026-07-15) hat die Farbtabelle verschoben: todo
+// war vormals Text -- der Subtext-Fallback wurde ursprünglich gewählt, um
+// nicht mit todo=Text zu kollidieren, das gilt seit PF-6 nicht mehr
+// (todo=Green). Der Fallback bleibt trotzdem bewusst Subtext (Plan-Vorgabe
+// E7 T2 Step 1: „Unknown-Status→Subtext-Fallback-Assertion bleibt") -- jetzt
+// einfach ein stabiler, neutraler Default, keine Kollisions-Sonderrolle mehr
+// nötig (completed/scrapped teilen sich ohnehin bereits Subtext). Der
+// Type-Fallback (icons.go TypeIcon/TypeStyle) bleibt bewusst bei Text: kein
+// realer Typ (Blue/Mauve/Sky/Red) nutzt Text, dort besteht keine Kollision.
 func StatusColor(status string) lipgloss.Color {
 	if col, ok := statusColor[status]; ok {
 		return col
@@ -124,24 +128,32 @@ func StatusStyle(status string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(StatusColor(status))
 }
 
-// statusGlyph — EIN gemeinsamer Glyph für ALLE Status (devd-Prinzip DD2-176): die
-// Bedeutung trägt allein die Farbe (StatusColor/StatusStyle), nicht die Form.
-const statusGlyph = "◉"      // U+25C9 FISHEYE (EAW=Neutral)
-const statusGlyphASCII = "*" // ASCII-Ersatz (garantiert darstellbar, EAW=Neutral)
-
-// statusIconGlyph wählt den Status-Glyph (ASCII-Fallback berücksichtigt). Unbekannte
-// Status bekommen den generischen Fallback-Glyph statt eines eigenen Zeichens.
-func statusIconGlyph(status string) string {
-	if _, ok := statusColor[status]; !ok {
-		return fallbackGlyph()
-	}
-	if asciiIcons() {
-		return statusGlyphASCII
-	}
-	return statusGlyph
+// Superseded (PF-6, design-spec.md §15, 2026-07-15): der bisherige
+// DD2-176-Grundsatz -- EIN gemeinsamer Glyph ("◉") für ALLE Status,
+// Bedeutung trägt ausschließlich die Farbe (StatusColor/StatusStyle) -- wird
+// per PO-Direktive EXPLIZIT aufgehoben. Status trägt Bedeutung jetzt
+// REDUNDANT über Buchstabe UND Farbe (Barrierefreiheits-Gewinn: Status war
+// zuvor nur über Farbe unterscheidbar).
+var statusLetter = map[string]string{
+	"draft":       "d",
+	"todo":        "t",
+	"in-progress": "i",
+	"completed":   "c",
+	"scrapped":    "s",
 }
 
-// StatusIcon liefert den einheitlichen, statusgefärbten Status-Glyph.
+// statusIconGlyph wählt den Status-Buchstaben. Unbekannte Status bekommen den
+// generischen Fallback-Glyph (fallbackGlyph) statt eines eigenen Zeichens.
+// BT_ASCII_ICONS bleibt für Status wirkungslos -- die Buchstaben sind bereits
+// ASCII/EAW-neutral, kein Ersatz nötig (PF-6).
+func statusIconGlyph(status string) string {
+	if letter, ok := statusLetter[status]; ok {
+		return letter
+	}
+	return fallbackGlyph()
+}
+
+// StatusIcon liefert den einheitlichen, statusgefärbten Status-Buchstaben.
 func StatusIcon(status string) string {
 	return StatusStyle(status).Render(statusIconGlyph(status))
 }
@@ -166,28 +178,68 @@ func fallbackGlyph() string {
 	return fallbackGlyphChar
 }
 
-// --- beans-Priorität: critical/high/normal/low/deferred (Port-Adaptation 4) ---
+// --- beans-Priorität: critical/high/normal/low/deferred (Port-Adaptation 4, PF-6) ---
 
-// priorityColor: critical/high dringend (Rot), normal neutral (Text), low entspannt
-// (Grün), deferred zurückgestellt (Hint). Unbekannte Werte neutral (Text).
+// priorityColor: critical dringend (Rot), high dringend aber weniger (Gelb), normal
+// neutral (Text), low/deferred zurückgestellt (Subtext). Unbekannte Werte neutral
+// (Text). PF-6 (design-spec.md §15, 2026-07-15) verschob high Rot→Gelb und
+// low/deferred Grün/Hint→Subtext gegenüber der vorherigen Tabelle.
 func priorityColor(p string) lipgloss.Color {
 	switch p {
-	case "critical", "high":
+	case "critical":
 		return Red
-	case "low":
-		return Green
-	case "deferred":
-		return Hint
+	case "high":
+		return Yellow
+	case "low", "deferred":
+		return Subtext
 	default: // "normal" und unbekannte Werte
 		return Text
 	}
 }
 
-// Priority rendert eine beans-Priorität gefärbt (critical/high fett zur Hervorhebung).
+// priorityGlyph/priorityGlyphASCII — PF-6 (design-spec.md §15, 2026-07-15):
+// Priorität wird künftig als EIN Glyph statt als ausgeschriebenes Wort
+// gerendert. Anders als bei Status/Typ bleibt BT_ASCII_ICONS hier weiterhin
+// relevant: normal/low/deferred (·/↓/→) sind laut Unicode East-Asian-Width
+// als Ambiguous klassifiziert (dieselbe Klasse wie fallbackGlyphChar oben) --
+// critical/high (‼/!) sind Neutral/Narrow und daher bereits spaltensicher.
+var priorityGlyph = map[string]string{
+	"critical": "‼", // U+203C DOUBLE EXCLAMATION MARK (EAW=Neutral)
+	"high":     "!", // U+0021 EXCLAMATION MARK (EAW=Narrow)
+	"normal":   "·", // U+00B7 MIDDLE DOT (EAW=Ambiguous)
+	"low":      "↓", // U+2193 DOWNWARDS ARROW (EAW=Ambiguous)
+	"deferred": "→", // U+2192 RIGHTWARDS ARROW (EAW=Ambiguous)
+}
+
+var priorityGlyphASCII = map[string]string{
+	"critical": "!!",
+	"high":     "!",
+	"normal":   ".",
+	"low":      "v",
+	"deferred": ">",
+}
+
+// priorityIconGlyph wählt den Priority-Glyph (ASCII-Fallback berücksichtigt).
+// Unbekannte Prioritäten bekommen den generischen Fallback-Glyph -- der
+// zufällig mit dem "normal"-Glyph (·/.) übereinstimmt, da beide denselben
+// neutralen Default-Sinn tragen (analog fallbackGlyph für Status/Typ).
+func priorityIconGlyph(p string) string {
+	glyph, ok := priorityGlyph[p]
+	if !ok {
+		return fallbackGlyph()
+	}
+	if asciiIcons() {
+		return priorityGlyphASCII[p]
+	}
+	return glyph
+}
+
+// Priority rendert eine beans-Priorität als gefärbten Glyph (PF-6; critical/high
+// bleiben fett zur Hervorhebung, wie schon in der Wort-Variante).
 func Priority(p string) string {
 	st := lipgloss.NewStyle().Foreground(priorityColor(p))
 	if p == "critical" || p == "high" {
 		st = st.Bold(true)
 	}
-	return st.Render(p)
+	return st.Render(priorityIconGlyph(p))
 }
