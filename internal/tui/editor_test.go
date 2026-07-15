@@ -369,6 +369,16 @@ func TestEditorFinishedConflictWritesRecoveryTempFileAndSurfacesPath(t *testing.
 // note instead. m.beanETag(id) is still consulted for this presence check
 // (F2: only its returned etag VALUE is now ignored in favor of
 // m.editorETag, not the ok bool itself, applyEditorFinished's doc-stamp).
+//
+// E5 Task 1 (bean bt-6dts) update: this branch now ALSO fires a (non-sticky)
+// warn Toast alongside m.err (design decision a, Dual-Write) -- so cmd is no
+// longer nil, it carries the Toast's auto-dismiss tea.Tick. That Cmd is
+// NEVER invoked here (it would really sleep toastDuration(toastWarn), 3s --
+// same rationale as devd's own overlay_show_toast_test.go doc comment): the
+// "no doomed mutation" guarantee is instead proven structurally --
+// applyEditorFinished's vanished-target branch returns before ever reaching
+// mutateCmd/client.SetBody, and m.toast's own kind/title pin down that the
+// non-nil Cmd is the Toast timer, not a mutation dispatch.
 func TestEditorFinishedTargetVanishedSurfacesError(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.editorTarget = "does-not-exist"
@@ -379,11 +389,14 @@ func TestEditorFinishedTargetVanishedSurfacesError(t *testing.T) {
 	if !ok {
 		t.Fatalf("Update(editorFinishedMsg) did not return a model, got %T", tm)
 	}
-	if cmd != nil {
-		t.Fatal("a vanished target must not fire a doomed mutation Cmd")
+	if cmd == nil {
+		t.Fatal("a vanished target must still fire the warn-Toast's auto-dismiss Cmd (E5 Task 1)")
 	}
 	if nm.err == "" {
 		t.Fatal("a vanished target must surface a status-line error")
+	}
+	if nm.toast == nil || nm.toast.kind != toastWarn || nm.toast.title != nm.err {
+		t.Fatalf("toast = %+v, want a non-nil toastWarn mirroring m.err %q (E5 Task 1 Dual-Write)", nm.toast, nm.err)
 	}
 	if nm.editorTarget != "" {
 		t.Errorf("editorTarget = %q, want cleared even on the vanished-target path", nm.editorTarget)

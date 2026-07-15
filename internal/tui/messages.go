@@ -5,10 +5,28 @@ package tui
 // view_browse_repo.go).
 
 import (
+	"time"
+
 	"beans-tui/internal/data"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// toastExpiredMsg clears the corner Toast (E5 Task 1, bean bt-6dts, Port devd
+// overlay_show_toast.go's identically-named message) after its kind-specific
+// duration elapses -- but only when seq still matches the toast's current
+// generation (otherwise a newer toast has already replaced it,
+// handleToastExpired, update.go).
+type toastExpiredMsg struct{ seq int }
+
+// toastTimeout fires a toastExpiredMsg for the given generation after
+// toastDuration(kind) (Port devd overlay_show_toast.go's toastTimeout
+// VERBATIM).
+func toastTimeout(seq int, kind toastKind) tea.Cmd {
+	return tea.Tick(toastDuration(kind), func(time.Time) tea.Msg {
+		return toastExpiredMsg{seq}
+	})
+}
 
 // beansLoadedMsg carries the result of an (initial or reload) data.Client.List
 // call. err is non-nil on failure -- Update renders it into the status line

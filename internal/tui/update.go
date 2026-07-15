@@ -24,7 +24,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case beansLoadedMsg:
-		return m.applyLoaded(msg), nil
+		return m.applyLoaded(msg)
 
 	case watchMsg:
 		// data.Watch's onChange fired -- always a full reload, never partial
@@ -39,14 +39,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case searchBleveResultMsg:
-		return m.applyBleveResult(msg), nil
+		return m.applyBleveResult(msg)
 
 	case paletteBleveResultMsg:
 		// E4 Task 2 (bean bt-yo60): the Command-Center's OWN Bleve staleness
 		// guard, analog to searchBleveResultMsg above but checked against
 		// m.palQuery instead of m.searchQuery (applyPaletteBleveResult
 		// below) -- design decision b's "never share state with `/`".
-		return m.applyPaletteBleveResult(msg), nil
+		return m.applyPaletteBleveResult(msg)
 
 	case mutationDoneMsg:
 		// E3 (bean bt-dlgk): every Set*/Add*/Remove*/Delete mutation goes
@@ -68,6 +68,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (applyEditorFinished below).
 		return m.applyEditorFinished(msg)
 
+	case toastExpiredMsg:
+		// E5 Task 1 (bean bt-6dts): the corner Toast's auto-dismiss tick
+		// (toastTimeout, messages.go) -- handleToastExpired below only
+		// clears m.toast if seq still matches the CURRENT generation (a
+		// newer showToast call may have already replaced it).
+		return m.handleToastExpired(msg)
+
+	// E5 Task 4 (Maus, bean bt-mne6) will add `case tea.MouseMsg: return
+	// m.handleMouse(msg)` HERE, ahead of tea.KeyMsg below -- handleMouse's
+	// very first check is the Toast hit-test (Port devd update.go:466,
+	// design decision a "Klick-Dismiss vs. Maus"), independent of any
+	// overlay/form guard, so a Toast click must dismiss it even while a
+	// form/overlay is open (Cross-Feature-Fix parity, devd DD2-272/273).
+	// This case has no code of its own yet (Task 1 scope is Toast only) --
+	// placement documented here so Task 4 does not need to re-derive it.
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -83,6 +99,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleToastExpired applies a toastTimeout tick (E5 Task 1, bean bt-6dts,
+// Port devd overlay_show_toast.go's own inline Update-case): clears m.toast
+// ONLY when seq still matches the CURRENT generation -- a newer showToast
+// call (design decision a's debounce/replace semantics) may have already
+// bumped m.toast.seq past this stale tick's generation, in which case the
+// tick is a no-op (the newer toast's OWN tick, or its sticky=true, is what
+// governs dismissal from here on).
+func (m model) handleToastExpired(msg toastExpiredMsg) (tea.Model, tea.Cmd) {
+	if m.toast != nil && msg.seq == m.toast.seq {
+		m.toast = nil
+	}
+	return m, nil
+}
+
 // applyMutationResult is the shared tail every E3 mutation's mutationDoneMsg
 // runs through (design decision d, bean bt-dlgk): ALWAYS reloads
 // (loadCmd), success or failure alike -- a success must show the new state,
@@ -93,6 +123,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // is the interim feedback channel.
 func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 	m.err = ""
+	var toastCmd tea.Cmd
 	if err != nil {
 		if errors.Is(err, data.ErrConflict) {
 			m.err = "Konflikt: Bean extern geändert — neu geladen"
@@ -105,15 +136,26 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 			// plain ErrConflict-wrapped error simply doesn't match here
 			// (errors.As returns false), leaving this branch's existing
 			// behavior untouched for them.
+			toastCtx := ""
 			var cr *conflictWithRecovery
 			if errors.As(err, &cr) {
 				m.err += " — deine Fassung: " + cr.path
+				toastCtx = "Fassung gesichert: " + cr.path
 			}
+			// E5 Task 1 (bean bt-6dts, E3-I01 PFLICHT): sticky=true is the
+			// ONLY sticky Toast in the whole app -- a genuine ETag conflict
+			// (+ its recovery-tempfile path, when present) must stay
+			// readable until the PO explicitly dismisses it (click) or a
+			// newer toast replaces it, surviving every reload cycle in
+			// between (applyLoaded never touches m.toast, so there is
+			// nothing here that would clobber it).
+			m, toastCmd = m.showToast(toastError, "Konflikt: Bean extern geändert", toastCtx, nil, true)
 		} else {
 			m.err = err.Error()
+			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
 		}
 	}
-	return m, loadCmd(m.client)
+	return m, tea.Batch(toastCmd, loadCmd(m.client))
 }
 
 // conflictWithRecovery wraps an ErrConflict-classified mutation error with
@@ -250,14 +292,18 @@ func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	m.editorETag = ""
 	if msg.err != nil {
 		m.err = msg.err.Error()
-		return m, nil
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+		return m, toastCmd
 	}
 	if !msg.changed {
 		return m, nil
 	}
 	if _, ok := m.beanETag(id); !ok {
 		m.err = "Bean nicht mehr vorhanden — Editor-Änderung verworfen"
-		return m, nil
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastWarn, m.err, "", nil, false)
+		return m, toastCmd
 	}
 	client := m.client
 	body := msg.content
@@ -327,7 +373,12 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		// overlay/form are both back to their "nothing open" state.
 		if m.pendingCreate != nil {
 			m.err = createInFlightNote
-			return true, m, nil
+			// E5 Task 1 (bean bt-6dts): Toast additiv neben m.err (design
+			// decision a) -- toastWarn, nicht toastError: dies ist ein
+			// Hinweis ("bitte warten"), kein harter Fehler.
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastWarn, createInFlightNote, "", nil, false)
+			return true, m, toastCmd
 		}
 		// E3 Task 4 (bean bt-y4ly): Create works WITHOUT a focused bean (an
 		// empty repo can still be seeded) -- the ONLY key here that skips
@@ -417,14 +468,16 @@ func (m model) keyOverlay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // qualifying keystroke dispatches its own beans-CLI subprocess, but only the
 // response tagged for the CURRENT searchQuery is ever applied; see
 // messages.go's searchBleveResultMsg doc comment for the full rationale).
-func (m model) applyBleveResult(msg searchBleveResultMsg) model {
+func (m model) applyBleveResult(msg searchBleveResultMsg) (tea.Model, tea.Cmd) {
 	if msg.query != m.searchQuery {
-		return m // stale -- searchQuery has moved on since this request was sent
+		return m, nil // stale -- searchQuery has moved on since this request was sent
 	}
 	m.searchBleveLoading = false
 	if msg.err != nil {
 		m.err = msg.err.Error()
-		return m
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+		return m, toastCmd
 	}
 	ids := make(map[string]bool, len(msg.ids))
 	for _, id := range msg.ids {
@@ -432,7 +485,7 @@ func (m model) applyBleveResult(msg searchBleveResultMsg) model {
 	}
 	m.searchBleveIDs = ids
 	m.searchBleveFor = msg.query
-	return m
+	return m, nil
 }
 
 // applyPaletteBleveResult mirrors applyBleveResult exactly, scoped to the
@@ -441,14 +494,16 @@ func (m model) applyBleveResult(msg searchBleveResultMsg) model {
 // search's fields -- a result tagged for a query the palette has since moved
 // on from (palQuery edited, or the palette closed and reopened with a new
 // query) is discarded exactly like a stale searchBleveResultMsg.
-func (m model) applyPaletteBleveResult(msg paletteBleveResultMsg) model {
+func (m model) applyPaletteBleveResult(msg paletteBleveResultMsg) (tea.Model, tea.Cmd) {
 	if msg.query != m.palQuery {
-		return m // stale -- palQuery has moved on since this request was sent
+		return m, nil // stale -- palQuery has moved on since this request was sent
 	}
 	m.palBleveLoading = false
 	if msg.err != nil {
 		m.err = msg.err.Error()
-		return m
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+		return m, toastCmd
 	}
 	ids := make(map[string]bool, len(msg.ids))
 	for _, id := range msg.ids {
@@ -456,7 +511,7 @@ func (m model) applyPaletteBleveResult(msg paletteBleveResultMsg) model {
 	}
 	m.palBleveIDs = ids
 	m.palBleveFor = msg.query
-	return m
+	return m, nil
 }
 
 // applyLoaded rebuilds the Index from a (initial or reload) beansLoadedMsg
@@ -464,10 +519,12 @@ func (m model) applyPaletteBleveResult(msg paletteBleveResultMsg) model {
 // a reload, so the cursor stays on it; a bean that vanished (deleted/
 // renamed) clamps to roughly where it used to sit rather than jumping back
 // to the top (US-10: reload must never lose the PO's place arbitrarily).
-func (m model) applyLoaded(msg beansLoadedMsg) model {
+func (m model) applyLoaded(msg beansLoadedMsg) (model, tea.Cmd) {
 	if msg.err != nil {
 		m.err = msg.err.Error()
-		return m
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+		return m, toastCmd
 	}
 	m.err = ""
 
@@ -515,7 +572,7 @@ func (m model) applyLoaded(msg beansLoadedMsg) model {
 	// than snap to 0" precedent, at the SAME reload boundary rather than
 	// deferred to the next keypress -- see clampReviewCursor
 	// (view_review_cockpit.go) for the Cockpit-scoped clamp itself.
-	return m.clampReviewCursor()
+	return m.clampReviewCursor(), nil
 }
 
 // handleKey is the top-level key dispatch (devd keys.go port pattern):

@@ -615,15 +615,27 @@ func (m model) composeOverlays(out string, w, h int) string {
 // View dispatches on viewID (devd port convention: enum + switch in view).
 // E2 Task 5 (bean bt-gzu6) adds the first sibling case (viewBacklog); later
 // epics grow this switch further, never branches.
+//
+// E5 Task 1 (bean bt-6dts, design decision a, point 2): every sub-view's
+// result is wrapped in m.renderToast(...) HERE, at the top level -- NOT
+// inside composeOverlays (called by each of the three sub-views above).
+// This is beans-tui's own deviation from devd's View()/viewComposite()
+// split (there is no separate viewComposite() layer here, each sub-view
+// already ends in its own `return m.composeOverlays(out, w, h)`) -- the
+// Toast must float over composeOverlays' ENTIRE stack, including
+// confirmQuit (devd's own "über ALLEM" contract, overlay_show_toast.go),
+// so it cannot be just another composeOverlays case.
 func (m model) View() string {
+	var out string
 	switch m.view {
 	case viewBacklog:
-		return m.viewBacklog()
+		out = m.viewBacklog()
 	case viewReviewCockpit:
-		return m.viewReviewCockpit()
+		out = m.viewReviewCockpit()
 	default:
-		return m.viewBrowseRepo()
+		out = m.viewBrowseRepo()
 	}
+	return m.renderToast(out)
 }
 
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors
