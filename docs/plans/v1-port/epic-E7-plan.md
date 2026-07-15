@@ -284,16 +284,16 @@ wechseln`→`go to repo picker` · `settings: öffnen`→`go to settings`.
 `update.go:870,929` (narrative Zitate), `messages.go:111` (Doc-Begriff,
 kein UI-String). Optional, kein Akzeptanzkriterium.
 
-- [ ] **Step 1: Vollständigkeits-Sweep VOR der ersten Änderung.**
+- [x] **Step 1: Vollständigkeits-Sweep VOR der ersten Änderung.**
   `grep -rnoE '"[^"]*[äöüßÄÖÜ][^"]*"' internal/tui/*.go | grep -v
   _test.go` UND `grep -rnoE '"[^"]*(gültig|löschen|zuweisen|bearbeiten|
   setzen|wechseln|öffnen|verworfen|nicht mehr|einblenden|abbrechen|keine?
   )[^"]*"' internal/tui/*.go | grep -v _test.go` — jeden Treffer gegen die
   Tabelle oben abgleichen: übersetzt, begründet ausgenommen, oder T4
   zugeordnet (Meta-Titel). Kein Treffer unbegründet übrig.
-- [ ] **Step 2: Alle Strings aus der Tabelle ersetzen** (13 Dateien).
+- [x] **Step 2: Alle Strings aus der Tabelle ersetzen** (13 Dateien).
   `overlay_palette.go` nach PF-8-Schema.
-- [ ] **Step 3: Test-Sweep.** Für jeden übersetzten String: `grep -rn
+- [x] **Step 3: Test-Sweep.** Für jeden übersetzten String: `grep -rn
   "<alter deutscher Teilstring>" internal/tui/*_test.go` — Assertionen auf
   Englisch umschreiben. Insbesondere `overlay_palette_test.go`
   (`TestPaletteActionsBeanContextFirst`,
@@ -302,15 +302,15 @@ kein UI-String). Optional, kein Akzeptanzkriterium.
   vermutlich den bereits von T1 entfernten Cockpit-Eintrag, prüfen ob T1
   ihn schon angepasst hat, sonst hier nachziehen), `box_confirm_delete_test.go`,
   `box_picker_*_test.go`.
-- [ ] **Step 4: Fuzzy-Match-Regression (PF-8, design-spec §15 explizit
+- [x] **Step 4: Fuzzy-Match-Regression (PF-8, design-spec §15 explizit
   benannt).** `TestPalFilteredActionsFuzzyFiltered` gezielt lesen: Query-
   Strings gegen die NEUEN Labels prüfen (z.B. „stat" → `set status`
   weiterhin Treffer; „go" jetzt gegen 3 statt 4 `go to ...`-Einträge, Anzahl
   in Rejevanten Tests anpassen). Matching-Logik selbst NICHT ändern.
-- [ ] **Step 5:** `command go test ./internal/tui/...` → PASS.
-- [ ] **Step 6: Golden-Regen** (s. Golden-Strategie, 3 Goldens). Vorher/
+- [x] **Step 5:** `command go test ./internal/tui/...` → PASS.
+- [x] **Step 6: Golden-Regen** (s. Golden-Strategie, 3 Goldens). Vorher/
   Nachher je tatsächlich geänderter Datei.
-- [ ] **Step 7: Manueller Vollständigkeits-Beleg (tmux-Smoke).** `bin/bt`
+- [x] **Step 7: Manueller Vollständigkeits-Beleg (tmux-Smoke).** `bin/bt`
   in tmux, Sequenz: Tree → Detail (`tab`) → esc → Backlog (`b`) →
   Filter-Menü (`f`) → esc → Command-Center (`ctrl+k`, Label-Liste lesen) →
   esc → Create-Form (`c`) → esc → Delete-Confirm (`d`, esc, NICHT
@@ -318,19 +318,19 @@ kein UI-String). Optional, kein Akzeptanzkriterium.
   Blocking-Picker (`B`) → esc → Lobby (`p`) → Settings (`ctrl+k` → „go to
   settings") → esc. Jeden Screen per `capture-pane` auf verbliebenes
   Deutsch sichten. Ergebnis (PASS je Screen) in den Commit-Body.
-- [ ] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
-- [ ] **Step 9:** Commit `feat(i18n): PF-7 UI-Sprache Englisch + PF-8
+- [x] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
+- [x] **Step 9:** Commit `feat(i18n): PF-7 UI-Sprache Englisch + PF-8
   Command-Center-Schema`.
 
 **Akzeptanz-Checkliste:**
-- [ ] Vollständigkeits-Sweep (Step 1) zeigt für JEDEN Treffer eine
+- [x] Vollständigkeits-Sweep (Step 1) zeigt für JEDEN Treffer eine
   Zuordnung
-- [ ] 14 Palette-Labels exakt nach PF-8-Tabelle (Cockpit-Eintrag bereits
+- [x] 14 Palette-Labels exakt nach PF-8-Tabelle (Cockpit-Eintrag bereits
   von T1 entfernt)
-- [ ] `TestPalFilteredActionsFuzzyFiltered` grün
-- [ ] tmux-Smoke über alle 12 verbleibenden Screens/Overlays, kein
+- [x] `TestPalFilteredActionsFuzzyFiltered` grün
+- [x] tmux-Smoke über alle 12 verbleibenden Screens/Overlays, kein
   Deutsch mehr
-- [ ] Goldens regeneriert + Vorher/Nachher je Datei
+- [x] Goldens regeneriert + Vorher/Nachher je Datei
 
 ---
 
