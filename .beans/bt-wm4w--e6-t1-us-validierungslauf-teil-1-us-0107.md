@@ -3,9 +3,12 @@
 title: E6 T1 — US-Validierungslauf Teil 1 (US-01..07)
 status: todo
 type: task
+priority: normal
 created_at: 2026-07-15T14:00:26Z
-updated_at: 2026-07-15T14:00:26Z
+updated_at: 2026-07-15T14:03:21Z
 parent: bt-zk9p
+blocked_by:
+    - bt-heg9
 ---
 
 Ziel: Für US-01..07 (design-spec.md §10) je einen dokumentierten Validierungs-Nachweis
