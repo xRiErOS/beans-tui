@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,6 +116,87 @@ Task fixture body.
 		if err := os.WriteFile(filepath.Join(beansDir, name), []byte(content), 0o644); err != nil {
 			t.Fatalf("write fixture %s: %v", name, err)
 		}
+	}
+
+	return dir
+}
+
+// newTestRepoN creates a temporary beans repo (same .beans.yml/frontmatter
+// schema as newTestRepo, prefix "tt-") sized for volume testing: 1 milestone
+// + 10 epics (children of the milestone) + n-11 tasks, evenly distributed
+// (round-robin) across the 10 epics via `parent`. A realistic tree depth
+// (milestone -> epic -> task) rather than a flat list, per E6 T1 design
+// decision b (epic-E6-plan.md) -- the US-01 performance smoke measures
+// Client.List() against this, the exact call `cmd/tui.go::runTUI`/loadCmd
+// issues on startup (`beans list --json --full`).
+//
+// n must be >= 11 (1 milestone + 10 epics minimum). IDs are generated
+// directly (not through the beans CLI) as "tt-0001".."tt-NNNN" to keep
+// fixture generation a pure filesystem write, matching newTestRepo's own
+// no-CLI-dependency-for-fixtures approach -- requireBeansBinary is still the
+// caller's job for the List() call itself.
+func newTestRepoN(t *testing.T, n int) string {
+	t.Helper()
+
+	if n < 11 {
+		t.Fatalf("newTestRepoN: n must be >= 11 (1 milestone + 10 epics), got %d", n)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".beans.yml"), []byte(testBeansYML), 0o644); err != nil {
+		t.Fatalf("write .beans.yml: %v", err)
+	}
+
+	beansDir := filepath.Join(dir, ".beans")
+	if err := os.MkdirAll(beansDir, 0o755); err != nil {
+		t.Fatalf("mkdir .beans: %v", err)
+	}
+
+	writeBean := func(id, title, beanType, parent string) {
+		t.Helper()
+		parentLine := ""
+		if parent != "" {
+			parentLine = fmt.Sprintf("parent: %s\n", parent)
+		}
+		content := fmt.Sprintf(`---
+# %s
+title: %s
+status: todo
+type: %s
+priority: normal
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+%s---
+
+%s fixture body.
+`, id, title, beanType, parentLine, title)
+		name := fmt.Sprintf("%s--%s.md", id, id)
+		if err := os.WriteFile(filepath.Join(beansDir, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write fixture %s: %v", id, err)
+		}
+	}
+
+	nextID := 1
+	genID := func() string {
+		id := fmt.Sprintf("tt-%04d", nextID)
+		nextID++
+		return id
+	}
+
+	milestoneID := genID()
+	writeBean(milestoneID, "Perf Milestone", "milestone", "")
+
+	epicIDs := make([]string, 10)
+	for i := 0; i < 10; i++ {
+		epicIDs[i] = genID()
+		writeBean(epicIDs[i], fmt.Sprintf("Perf Epic %d", i+1), "epic", milestoneID)
+	}
+
+	taskCount := n - 11
+	for i := 0; i < taskCount; i++ {
+		id := genID()
+		parent := epicIDs[i%10]
+		writeBean(id, fmt.Sprintf("Perf Task %d", i+1), "task", parent)
 	}
 
 	return dir

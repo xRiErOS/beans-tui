@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T00:14:48Z
+updated_at: 2026-07-15T19:08:41Z
 parent: bt-apmy
 blocked_by:
     - bt-blsy
@@ -34,4 +34,4 @@ T1-T6 completed, je Task Spec+Quality-Review (Sonnet), 3 Fix-Runden mit echten F
 |------|--------------|------------|--------|
 | I01 | esc in Detail-Fokus No-Op (nur j/tab verlassen) | belassen oder esc als 3. Exit — PO-Call | 🟡 |
 | I02 | kein Sort-Modus-Indikator im Backlog | für E5/Polish vormerken | 🟡 |
-| B01 | X (Filter-Reset) wirkt nicht in Backlog-View | Fix bei E3-Start (verankert in bt-gzcu) | 🟣 |
+| B01 | X (Filter-Reset) wirkt nicht in Backlog-View | Fix bei E3-Start (verankert in bt-gzcu) | 🟢 TestKeyBacklogFilterClearResetsFacets (E6 T1, bt-wm4w, verifiziert 2026-07-15) |
