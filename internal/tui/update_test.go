@@ -752,6 +752,75 @@ func TestDetailFocusLeftAtSectionLevelIsNoOp(t *testing.T) {
 	}
 }
 
+// --- D03 (design-spec.md §15 PF-16, bean bt-ntoz): esc as the Detail-Focus
+// cascade's ONLY multi-step back path now that B01 removed it from left/j.
+// ---
+
+// TestKeyDetailFocusEscAtFieldLevelGoesToSectionLevel guards D03's first
+// cascade rung: esc at field level (detailLevel==1) steps back to section
+// level, mirroring left's EXISTING (unchanged) field->section behavior --
+// detail focus itself stays on.
+func TestKeyDetailFocusEscAtFieldLevelGoesToSectionLevel(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3'))
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.detailLevel != 1 {
+		t.Fatal("setup: expected field level")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+	if m.detailLevel != 0 {
+		t.Fatal("esc at field level must return to section level")
+	}
+	if !m.detailFocus {
+		t.Fatal("esc at field level must NOT exit detail focus (one rung at a time, D03)")
+	}
+}
+
+// TestKeyDetailFocusEscAtSectionLevelExitsDetailFocus guards D03's second
+// cascade rung: esc at section level (detailLevel==0) exits detail focus
+// entirely -- the exact two-stage cascade B01 removed from left/j (Feld ->
+// Sektion -> Fokus verlassen), now living exclusively behind esc.
+func TestKeyDetailFocusEscAtSectionLevelExitsDetailFocus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.cursorID = "ms-1"
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("setup: expected detail focus on")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+	if m.detailFocus {
+		t.Fatal("esc at section level must exit detail focus")
+	}
+}
+
+// TestKeyDetailFocusEscNoopOutsideDetailFocus is a regression guard: esc
+// pressed while the Tree already has focus (m.detailFocus already false)
+// must NOT accidentally enter detail focus or otherwise reach
+// keyDetailFocus's new esc-handler -- handleKey only routes to
+// keyDetailFocus while m.detailFocus is true (update.go), so esc outside
+// detail focus is handled entirely by keyTree's OWN (pre-existing,
+// unchanged by this task) esc-cascade rungs (search_test.go
+// TestSearchEscWhileTypingCancelsAndClearsQuery/
+// TestSearchEscAfterCommitClearsQuery cover those already).
+func TestKeyDetailFocusEscNoopOutsideDetailFocus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	if m.detailFocus {
+		t.Fatal("setup: expected detail focus off")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+	if m.detailFocus {
+		t.Fatal("esc outside detail focus must not turn detail focus on")
+	}
+}
+
 // --- E7 T6 (PF-2/PF-5/PF-13, bean bt-t1uy): shift+tab exit + enter-cascade. ---
 
 // TestKeyShiftTabExitsDetailFocus guards PF-13's new deterministic exit:

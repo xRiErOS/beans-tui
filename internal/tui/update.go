@@ -985,6 +985,24 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// D03 (design-spec.md §15 PF-16, bean bt-ntoz): esc is the universal
+	// "back", exactly one rung per press -- the Detail-Kaskade was the one
+	// gap (E2-era no-op, validation.md D03) now that B01 removed the
+	// equivalent two-stage walk from left/j. Field level steps back to
+	// section level first; a SECOND esc (now at section level) exits detail
+	// focus entirely -- same two rungs the old left-case used to collapse
+	// into one keypress, now spread across two esc presses (one rung each,
+	// matching every other esc-site's contract, see audit table in this
+	// task's commit body).
+	if keybind.Matches(msg, keys.Back) {
+		if m.detailLevel == 1 {
+			m.detailLevel = 0
+		} else {
+			m.detailFocus = false
+		}
+		return m, nil
+	}
+
 	// PF-5 (design-spec.md §15, E7 T6, bean bt-t1uy): section-level enter is
 	// an ALIAS for right/l -- same guard (only sections that carry fields),
 	// entering field level at fieldCursor 0. tab remains the ONLY way to
