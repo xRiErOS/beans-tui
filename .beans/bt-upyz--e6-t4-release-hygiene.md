@@ -1,10 +1,11 @@
 ---
 # bt-upyz
 title: E6 T4 — Release-Hygiene
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-15T14:01:12Z
-updated_at: 2026-07-15T14:01:12Z
+updated_at: 2026-07-15T19:47:06Z
 parent: bt-zk9p
 blocked_by:
     - bt-7k7q
