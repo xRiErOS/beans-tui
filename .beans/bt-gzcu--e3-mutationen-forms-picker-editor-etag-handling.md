@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T05:29:58Z
+updated_at: 2026-07-15T19:20:56Z
 parent: bt-apmy
 blocked_by:
     - bt-aq5s
@@ -33,5 +33,5 @@ T1-T7 completed, je Task Spec+Quality-Review, 2 Fix-Runden (T4/T5-Findings: Draf
 ### PO-Hinweise
 | Code | Beschreibung | Empfehlung | Status |
 |------|--------------|------------|--------|
-| I01 | Konflikt-Statuszeile nach ErrConflict nur 1 Frame sichtbar (Reload überschreibt) | E5-Toast löst das — Entscheid dort: Flash ok vs. persistent | 🟡 |
+| I01 | Konflikt-Statuszeile nach ErrConflict nur 1 Frame sichtbar (Reload überschreibt) | E5-Toast löst das — Entscheid dort: Flash ok vs. persistent | 🟢 gelöst (Toast sticky, TestConflictToastIsStickyAndSurvivesReload PASS, E6 T2) |
 | I02 | Upstream-ETag-Drift bei frischen Creates | Upstream-Issue bei hmans/beans nach v1-Abnahme | 🟡 |
