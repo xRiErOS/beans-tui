@@ -1,11 +1,11 @@
 ---
 # bt-pd22
 title: E5 T6b — TreeWidth-Wiring + SaveUserSettings-Doku (T5-Review-Findings)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T11:49:11Z
-updated_at: 2026-07-15T11:49:19Z
+updated_at: 2026-07-15T12:34:44Z
 parent: bt-5h4d
 blocking:
     - bt-7dfj
@@ -32,3 +32,8 @@ Doc-Kommentar behauptet Erhalt fremder config.yaml-Keys; tatsächlich überlebt 
 [ ] SaveUserSettings-Doc-Kommentar präzisiert
 [ ] command go test ./... voll grün, gofmt/vet leer
 [ ] Commit fix(tui): TreeWidth-Setting wirkt im Render (T5-Review I01/I02)
+
+
+## Prelude aus T6-Review (I01, low — Reviewer 2026-07-15)
+
+applyRepoSwitched (update.go) resettet m.toast nicht — Toast aus altem Repo bleibt nach Repo-Wechsel kurz sichtbar. Fix hier miterledigen: m.toast=nil (bzw. Muster der übrigen Reset-Felder) in applyRepoSwitched + Regressionstest TestRepoSwitchClearsToast.

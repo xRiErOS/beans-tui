@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-15T09:04:38Z
-updated_at: 2026-07-15T11:15:03Z
+updated_at: 2026-07-15T12:34:44Z
 parent: bt-5h4d
 ---
 
@@ -41,3 +41,8 @@ Plan: docs/plans/v1-port/epic-E5-plan.md »Task 8«.
 ## Review-Finding aus T4 (I01, low — Reviewer 2026-07-15)
 
 reviewClickRow (mouse.go) dupliziert die Zeilenstruktur von reviewQueueRows als privaten Zähl-Walk (bewusster Trade-off: Golden-Risiko null). Walk- und Render-Reihenfolge sind nur per Kommentar gekoppelt, nicht compile-time. Empfehlung für T8: Table-Test ergänzen, der beide Walks gegen dieselbe Fixture vergleicht (Zeilenindex je Bean identisch), statt Kommentar-Vertrauen.
+
+
+## Notiz aus T6-Review (I02, low, kein v1-Handlungsbedarf)
+
+In-flight repoMetricsCmd-Aufrufe eines früheren Lobby-Open laufen bei erneutem Öffnen weiter (kein Cancel-Guard) — redundante beans-list-Subprozesse, pfadgekeyt, keine Datenverwechslung. Bewusst akzeptiert für v1; bei vielen Repos später Kontext-Cancel. Nur im Abschluss-/Known-Issues-Text erwähnen.
