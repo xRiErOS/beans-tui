@@ -1,11 +1,11 @@
 ---
 # bt-ntoz
 title: 'E8 — PO-Feedback R2: Tags-Zeile + Detail-UX-Feinschliff'
-status: todo
+status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T20:44:05Z
+updated_at: 2026-07-15T20:48:28Z
 parent: bt-apmy
 ---
 

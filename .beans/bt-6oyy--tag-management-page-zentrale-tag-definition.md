@@ -3,8 +3,9 @@
 title: Tag-Management-Page (zentrale Tag-Definition)
 status: todo
 type: feature
+priority: normal
 created_at: 2026-07-15T14:11:37Z
-updated_at: 2026-07-15T14:11:37Z
+updated_at: 2026-07-15T20:48:28Z
 ---
 
 PO-Wunsch (2026-07-15, im Zuge E7-Feedback): Tags behalten UND zentral definieren können über eine eigene Page in bt.
@@ -19,3 +20,11 @@ beans kennt keine Tag-Registry — Tags sind freie Frontmatter-Strings. Eine zen
 - Design-Detail (Persistenzort, strict vs. suggest) bei Task-Start klären.
 
 Status: todo, KEIN Parent (bewusst außerhalb v1-Milestone bis Q03 entschieden).
+
+
+## v1.1-Scope-Entscheid (2026-07-15, D08 aus Grilling)
+
+D08 ENTSCHIEDEN: Tag-Management-Page ist v1.1-Scope — NICHT Teil von v1/E8.
+Die v1-Minimal-Lösung für Tag-Erstellung liefert E8/B14 (bt-ntoz): 'create tag'
+als Palette-Command + Neuanlage im t-Picker sichtbar (Footer-Hint). Diese Page
+baut darauf auf: zentrale Verwaltung (CRUD, Farben, Umbenennen mit Propagation).
