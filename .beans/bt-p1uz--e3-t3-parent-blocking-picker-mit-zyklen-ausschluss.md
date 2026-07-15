@@ -1,11 +1,11 @@
 ---
 # bt-p1uz
 title: E3 T3 — Parent-/Blocking-Picker mit Zyklen-Ausschluss
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T00:26:21Z
-updated_at: 2026-07-15T00:39:49Z
+updated_at: 2026-07-15T01:40:30Z
 parent: bt-gzcu
 blocked_by:
     - bt-8v69
@@ -47,3 +47,9 @@ Plan: docs/plans/v1-port/epic-E3-plan.md »Task 3«.
       (Pending-State + ●/○-Indikator wie beans-src blockingpicker.go), enter
       diff't -> EIN mutateCmd(SetBlocking), esc verwirft
 - [ ] go test ./... grün, gofmt/vet leer
+
+
+## Übernommene Findings aus E3-T2-Review (PFLICHT)
+- [ ] I1a: Test esc-aus-Tag-Input → Picker bleibt offen, tagPending intakt
+- [ ] I1b: Test toggle-off-dann-on → leerer Diff → kein Cmd
+- [ ] I2: SetTags-Doc-Zeile: gleicher Tag in add+remove → remove gewinnt (Upstream-Resolver-Reihenfolge); gleiche Zeile für neues SetBlocking
