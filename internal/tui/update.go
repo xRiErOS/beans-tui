@@ -125,7 +125,13 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		if keybind.Matches(msg, keys.TagAssign) {
 			return true, m.openTagPicker(), nil
 		}
-		return true, m, nil // stub: T3 (Assign/Blocking), T5 (Editor), T6 (Delete)
+		if keybind.Matches(msg, keys.Assign) {
+			return true, m.openParentPicker(), nil
+		}
+		if keybind.Matches(msg, keys.Blocking) {
+			return true, m.openBlockingPicker(), nil
+		}
+		return true, m, nil // stub: T5 (Editor), T6 (Delete)
 	}
 	return false, m, nil
 }
@@ -143,6 +149,10 @@ func (m model) keyOverlay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyValueMenu(msg)
 	case overlayTagPicker:
 		return m.keyTagPicker(msg)
+	case overlayParentPicker:
+		return m.keyParentPicker(msg)
+	case overlayBlockingPicker:
+		return m.keyBlockingPicker(msg)
 	}
 	return m, nil
 }

@@ -232,6 +232,46 @@ func (c *Client) RemoveBlockedBy(id, target, etag string) error {
 	return c.update(id, etag, "--remove-blocked-by", target)
 }
 
+// AddBlocking adds a blocking relationship: id blocks target. Mirrors
+// AddBlockedBy's shape (E3 Task 3, bean bt-p1uz, design decision g) -- unlike
+// Blocked-By, Blocking is directly, bidirectionally mutable on the CLI
+// (verified against `beans update --help`: `--blocking`/`--remove-blocking`
+// are their own `stringArray` flags, NOT a purely server-computed reverse
+// index of blocked_by).
+func (c *Client) AddBlocking(id, target, etag string) error {
+	return c.update(id, etag, "--blocking", target)
+}
+
+// RemoveBlocking removes a blocking relationship: id no longer blocks
+// target.
+func (c *Client) RemoveBlocking(id, target, etag string) error {
+	return c.update(id, etag, "--remove-blocking", target)
+}
+
+// SetBlocking applies a combined Blocking-field diff in ONE `beans update`
+// call (E3 Task 3, bean bt-p1uz, design decision g: mirrors SetTags' E3
+// Task 2 rationale verbatim) -- the Blocking-Picker
+// (internal/tui/box_picker_blocking.go) can toggle MULTIPLE targets in one
+// session before confirming; N sequential AddBlocking/RemoveBlocking calls
+// against the SAME etag would be a conflict cascade (the first call rotates
+// the etag on disk, every subsequent call then sees a stale etag and fails
+// ErrConflict). SetBlocking instead builds ONE `update` invocation carrying
+// every added target as a repeated `--blocking` and every removed target as
+// a repeated `--remove-blocking`, so the whole diff lands atomically against
+// a single etag -- one bean, one etag, no cascade. AddBlocking/RemoveBlocking
+// remain for genuine single-target callers (symmetry with the BlockedBy
+// family).
+func (c *Client) SetBlocking(id string, add, remove []string, etag string) error {
+	var args []string
+	for _, target := range add {
+		args = append(args, "--blocking", target)
+	}
+	for _, target := range remove {
+		args = append(args, "--remove-blocking", target)
+	}
+	return c.update(id, etag, args...)
+}
+
 // AppendBody appends text to a bean's body (`--body-append`); it does not
 // replace the existing body.
 func (c *Client) AppendBody(id, text, etag string) error {

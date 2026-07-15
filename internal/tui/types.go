@@ -201,6 +201,29 @@ type model struct {
 	tagInputActive bool
 	tagInputErr    string
 
+	// Parent-Picker `a` (E3 Task 3, bean bt-p1uz, box_picker_parent.go):
+	// parentItems is the row list built fresh at open time
+	// (buildParentItems) -- index 0 is ALWAYS the "(Kein Parent)" clear row
+	// (id "", port beans-src parentpicker.go's clearParentItem), the rest is
+	// data.EligibleParents(idx, b) (self/descendants/invalid-types
+	// pre-filtered, design decision f). Single-select, immediate-apply Enter
+	// semantics (like the value menu, design decision a3) -- no
+	// pending/original diff state here, a bean has exactly one parent.
+	parentItems []pickerItem
+
+	// Blocking-Picker `B` (E3 Task 3, bean bt-p1uz, box_picker_blocking.go):
+	// blockItems lists every OTHER bean (self excluded, deliberately NO
+	// descendant/cycle exclusion -- design decision g: port-parity with
+	// beans-src blockingpicker.go, which has none either). blockOriginal/
+	// blockPending are two INDEPENDENT maps seeded from the focused bean's
+	// CURRENT Blocking field (wholesale-replace convention, mirrors
+	// tagOriginal/tagPending) -- every TOGGLE against blockPending during the
+	// picker's lifetime goes through cloneBoolMap (I01), same convention as
+	// toggleTagPending.
+	blockItems    []pickerItem
+	blockOriginal map[string]bool
+	blockPending  map[string]bool
+
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works
 	// (ctrl+r reloads manually), it just never reacts to on-disk changes on

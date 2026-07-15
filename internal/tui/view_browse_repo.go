@@ -572,6 +572,10 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.valueMenuBox(), w, h)
 	case overlayTagPicker:
 		out = placeOverlay(out, m.tagPickerBox(), w, h)
+	case overlayParentPicker:
+		out = placeOverlay(out, m.parentPickerBox(), w, h)
+	case overlayBlockingPicker:
+		out = placeOverlay(out, m.blockingPickerBox(), w, h)
 	}
 	if m.confirmQuit {
 		out = placeOverlay(out, m.quitBox(), w, h)

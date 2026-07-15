@@ -249,6 +249,115 @@ func TestSetTagsAddsAndRemovesInOneCall(t *testing.T) {
 	}
 }
 
+// TestAddRemoveBlockingRoundtrip guards the E3 Task 3 addition (bean
+// bt-p1uz): AddBlocking/RemoveBlocking directly mutate the CALLING bean's
+// OWN Blocking field (design decision g), not blocked_by on the target.
+func TestAddRemoveBlockingRoundtrip(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	if err := client.AddBlocking(task.ID, "tt-epic", task.ETag); err != nil {
+		t.Fatalf("AddBlocking() error = %v", err)
+	}
+
+	after, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after AddBlocking error = %v", err)
+	}
+	updated := findBean(t, after, "tt-task")
+	if len(updated.Blocking) != 1 || updated.Blocking[0] != "tt-epic" {
+		t.Fatalf("Blocking after AddBlocking() = %v, want [tt-epic]", updated.Blocking)
+	}
+
+	if err := client.RemoveBlocking(task.ID, "tt-epic", updated.ETag); err != nil {
+		t.Fatalf("RemoveBlocking() error = %v", err)
+	}
+
+	after2, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after RemoveBlocking error = %v", err)
+	}
+	updated2 := findBean(t, after2, "tt-task")
+	if len(updated2.Blocking) != 0 {
+		t.Fatalf("Blocking after RemoveBlocking() = %v, want empty", updated2.Blocking)
+	}
+}
+
+// TestSetBlockingAddsAndRemovesInOneCall guards the E3 Task 3 design
+// decision (bean bt-p1uz, mirrors TestSetTagsAddsAndRemovesInOneCall): a
+// SINGLE SetBlocking call combining --blocking/--remove-blocking adds AND
+// removes blocking targets against ONE etag.
+//
+// Uses a freshly-created bean as the "add" target, not the fixture's
+// tt-mlst: tt-mlst's own fixture frontmatter already carries
+// "blocking: [tt-task]" (testrepo_test.go), so tt-task additionally blocking
+// tt-mlst would close a real two-bean cycle (tt-mlst -> tt-task -> tt-mlst)
+// -- the beans 0.4.2 CLI rejects that server-side with a VALIDATION_ERROR
+// (empirically verified), independent of this task's own design decision
+// that the Blocking-Picker itself does no client-side cycle exclusion
+// (design decision g: that decision is about the TUI not PRE-filtering, not
+// about the CLI never validating).
+func TestSetBlockingAddsAndRemovesInOneCall(t *testing.T) {
+	requireBeansBinary(t)
+
+	repo := newTestRepo(t)
+	client := &Client{RepoDir: repo}
+
+	target, err := client.Create(CreateOpts{Title: "Blocking Target", Type: "task"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	beans, err := client.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	task := findBean(t, beans, "tt-task")
+
+	if err := client.AddBlocking(task.ID, "tt-epic", task.ETag); err != nil {
+		t.Fatalf("seed AddBlocking() error = %v", err)
+	}
+
+	beans, err = client.List()
+	if err != nil {
+		t.Fatalf("List() after seed error = %v", err)
+	}
+	task = findBean(t, beans, "tt-task")
+
+	if err := client.SetBlocking(task.ID, []string{target.ID}, []string{"tt-epic"}, task.ETag); err != nil {
+		t.Fatalf("SetBlocking() error = %v", err)
+	}
+
+	after, err := client.List()
+	if err != nil {
+		t.Fatalf("List() after SetBlocking error = %v", err)
+	}
+	updated := findBean(t, after, "tt-task")
+
+	want := map[string]bool{target.ID: true}
+	for _, id := range updated.Blocking {
+		if id == "tt-epic" {
+			t.Fatal("SetBlocking() left the removed blocking target \"tt-epic\" in place")
+		}
+		if !want[id] {
+			t.Errorf("SetBlocking() left unexpected blocking target %q, want only %v", id, want)
+			continue
+		}
+		delete(want, id)
+	}
+	if len(want) != 0 {
+		t.Errorf("SetBlocking() missing blocking targets %v, got %v", want, updated.Blocking)
+	}
+}
+
 func TestDeleteRemovesBean(t *testing.T) {
 	requireBeansBinary(t)
 
