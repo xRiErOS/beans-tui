@@ -1,11 +1,11 @@
 ---
 # bt-duz7
 title: Maus im Detail-Pane (Sektionen + Meta-Felder klickbar)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T21:09:20Z
-updated_at: 2026-07-15T21:09:20Z
+updated_at: 2026-07-15T22:58:49Z
 parent: bt-ntoz
 blocked_by:
     - bt-e6q9

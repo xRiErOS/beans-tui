@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T20:48:28Z
+updated_at: 2026-07-15T22:58:49Z
 parent: bt-apmy
 ---
 
@@ -76,3 +76,12 @@ Offene Präzisierung Q06: 'r Blocking' — Umbelegung B→r oder Tippfehler? / u
 3. T04: bt-6oyy-Body um v1.1-Scope-Entscheid ergänzen.
 4. T03 (NACH v1-Abnahme, nicht jetzt): Upstream-Issue-Entwurf, Post nur mit PO-Freigabe.
 Prozess-Konventionen: Sonnet-Subagents, Fable nur Supervisor; Findings via body-append; Epics nie completed durch Agents (to-review).
+
+
+## D07-Repro-Beleg (2026-07-16, Quelle: bt-y2iw-Review I01)
+
+Reviewer reproduzierte den Upstream-ETag-Drift minimal: zwei `beans show` auf
+UNVERÄNDERTE Datei liefern verschiedene ETags (947a8f6d… vs b554f0f6…) →
+`update --if-match` schlägt fehl. beans-tui verhält sich korrekt (Conflict-Toast +
+Recovery-File via writeConflictTempFile). Beleg für den T03-Issue-Entwurf
+(NACH v1-Abnahme, Post nur mit PO-Freigabe).

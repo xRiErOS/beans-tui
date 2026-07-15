@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-15T21:10:37Z
-updated_at: 2026-07-15T22:17:18Z
+updated_at: 2026-07-15T22:58:49Z
 parent: bt-ntoz
 blocked_by:
     - bt-czpf
@@ -65,3 +65,8 @@ box_confirm_delete.go:123 (Abbruch) · forms_shared.go:164 (Form verwerfen, doku
 Design-Entscheidung) · overlay_shortcuts.go:63 (Help schließen).
 Auftrag Doku-Finalisierung: Audit-Tabelle im Epic-bean bt-ntoz (oder design-spec-Anhang)
 um diese 5 Sites ergänzen — reine Nachvollziehbarkeit.
+
+
+## Prelude aus E8-T6-Review (2026-07-16, non-blocking, Quelle: bt-y2iw-Review)
+
+- I02: bt-y2iw-TDD-Schritt forderte dokumentierte Prüfung 'stat'-Fuzzy vs. 'set type'/'set priority' — Prüfung fehlte im bean-Body. Reviewer-Analyse: kein 'a' in beiden → Subsequence matcht nie, Ergebnis korrekt. Bei Doku-Finalisierung als Satz in bt-y2iw nachtragen.
