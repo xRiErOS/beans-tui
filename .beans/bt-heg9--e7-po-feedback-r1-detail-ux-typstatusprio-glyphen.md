@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:12:34Z
+updated_at: 2026-07-15T14:14:59Z
 parent: bt-apmy
 ---
 
@@ -89,3 +89,10 @@ PO-Beispiele verbatim: 'set tags', 'set status', 'go to backlog', 'reload data',
 **PF-10 — Redundante Pane-Titel entfernen.** Breadcrumb '> repo-b: Browse' bzw. '> repo-b: Backlog' trägt die View-Info bereits — der Pane-Titel ('Tree' / 'Backlog' + Unterstreichung) im linken Pane ist Dopplung und entfällt. Erste Zeile im Pane ist dann direkt die Suchzeile ('⌕ / search'). PO wörtlich: 'Es genügt, wenn es in den Breadcrumbs > repo-b: backlog angezeigt wird. Dann die Suche - sonst ist es obsolet.'
 
 Konsistenz-Prüfauftrag an Planner: gleiche Logik für Review-Cockpit ('Review-Queue'-Titel vs. Breadcrumb 'Review-Cockpit') und Detail-Pane ('Detail'-Titel wird durch PF-3/PF-4-Kopfblock ohnehin ersetzt) — einheitlich entscheiden und in design-spec festhalten. Screenshots-Referenz: PO-Anhang (Browse vs. Backlog, repo-b).
+
+
+## PO-Nachtrag 5 (2026-07-15): Keybinding-Split Header/Footer
+
+**PF-11 — Keine Keybinding-Dopplung.** Header oben rechts zeigt die GLOBALEN Bindings: 'ctrl+r:Reload · ?:help · q:quit · esc:back · enter:open/confirm'. Footer zeigt AUSSCHLIESSLICH die view-lokalen Bindings der aktiven View — globale dort nicht duplizieren. (Nebeneffekt: entschärft VQA-I01 Footer-Umbruch, da Footer kürzer wird.)
+
+**Q04 (offen, PO):** 'Leertaste für das Auswählen (fehlt noch m.E.)' — Semantik unklar: (a) Multi-Select von Beans im Tree/Backlog (Markieren für Bulk-Aktionen — wäre NEUES Feature), oder (b) die bestehende space/x-Toggle-Auswahl in Filter-Menü/Pickern (existiert — dann nur Footer-Sichtbarkeit herstellen)? Nicht raten — bis PO-Antwort nur PF-11 umsetzen.
