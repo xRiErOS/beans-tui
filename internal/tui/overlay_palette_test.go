@@ -403,6 +403,45 @@ func TestDispatchPaletteBeanJumpsCursorAndSwitchesToBrowse(t *testing.T) {
 	}
 }
 
+// TestDispatchPaletteBeanJumpResetsDetailFocus guards B01 (E4 Task 2 review):
+// a bean-jump from Detail-Focus must reset BOTH detailFocus AND the
+// Detail-Accordion focus machine ints (secCursor/accOpen/detailLevel/
+// fieldCursor) -- same reset shape as tab-into-detail-focus (types.go's own
+// "All four reset on every tab-into-detail-focus transition" doc-stamp) --
+// otherwise arrow keys on the NEW bean manipulate a stale accordion position
+// left over from whatever bean the palette was opened FROM, instead of
+// driving the tree (empirically confirmed by reviewer, precedent:
+// keyDetailFocus's own relation-jump, update.go:702, resets detailFocus on
+// the same jump-and-leave-detail-focus shape).
+func TestDispatchPaletteBeanJumpResetsDetailFocus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.detailFocus = true
+	m.secCursor = 2
+	m.detailLevel = 1
+	m.fieldCursor = 3
+
+	target := m.idx.ByID["tk-2"]
+	nm, _ := m.dispatchPalette(paletteItem{kind: paletteKindBean, bean: target, label: relationRow(target)})
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("dispatchPalette did not return a model, got %T", nm)
+	}
+
+	if mm.detailFocus {
+		t.Fatal("dispatchPalette bean-jump did not reset detailFocus -- arrow keys would still drive the accordion, not the tree")
+	}
+	if mm.secCursor != 0 || mm.accOpen != 1 || mm.detailLevel != 0 || mm.fieldCursor != 0 {
+		t.Fatalf("focus-machine ints not reset: secCursor=%d accOpen=%d detailLevel=%d fieldCursor=%d, want 0,1,0,0",
+			mm.secCursor, mm.accOpen, mm.detailLevel, mm.fieldCursor)
+	}
+	if mm.view != viewBrowseRepo {
+		t.Fatalf("view = %v, want viewBrowseRepo", mm.view)
+	}
+	if mm.cursorID != "tk-2" {
+		t.Fatalf("cursorID = %q, want tk-2", mm.cursorID)
+	}
+}
+
 // --- Palette-scoped Bleve half (palBleveIDs/palBleveFor/palBleveLoading) ---
 
 // TestKeyPaletteDispatchesBleveOnQueryGrowth guards that keyPalette's

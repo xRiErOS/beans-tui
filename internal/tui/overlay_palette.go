@@ -222,6 +222,18 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 		m.expanded = expandAncestorsOf(m.idx, m.expanded, it.bean.ID)
 		m.cursorID = it.bean.ID
 		m.view = viewBrowseRepo
+		// B01 (E4 Task 2 review, bean bt-yo60): a bean-jump must leave
+		// Detail-Focus, exactly like keyDetailFocus's own relation-jump
+		// (update.go:702) -- otherwise arrow keys on the NEW bean still
+		// drive the OLD bean's accordion instead of the tree. The
+		// Detail-Accordion focus machine ints get the SAME reset
+		// tab-into-detail-focus uses (handleKey, types.go's "All four
+		// reset on every tab-into-detail-focus transition" doc-stamp),
+		// not just a defensive clamp -- a stale secCursor/fieldCursor
+		// pointing past the NEW bean's section/field shape must never
+		// leak into the next detail-focus visit.
+		m.detailFocus = false
+		m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
 		return m, nil
 	case paletteKindAction:
 		switch it.actionID {
