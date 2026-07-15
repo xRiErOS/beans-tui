@@ -1,11 +1,11 @@
 ---
 # bt-9yvh
 title: E6 T2 — US-Validierungslauf Teil 2 (US-08..14)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T14:00:45Z
-updated_at: 2026-07-15T14:03:21Z
+updated_at: 2026-07-15T19:14:28Z
 parent: bt-zk9p
 blocked_by:
     - bt-heg9
