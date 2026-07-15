@@ -46,8 +46,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// status-line + unconditional-reload tail (design decision d).
 		return m.applyMutationResult(msg.err)
 
+	case createDoneMsg:
+		// E3 Task 4 (bean bt-y4ly): the ONE exception to mutationDoneMsg --
+		// a success additionally jumps the cursor (applyCreateDone below), a
+		// failure routes through the same applyMutationResult tail as every
+		// other mutation.
+		return m.applyCreateDone(msg)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+	}
+	// E3 Task 4 (bean bt-y4ly): huh-internal Msgs (cursor blink, viewport
+	// ticks, its own nextField/nextGroup chain) that matched none of the
+	// cases above -- the form's own Init()/Update() Cmds keep firing these
+	// for as long as it's open. Key-Msgs never reach here: tea.KeyMsg has
+	// its own case above, routed through handleKey -> keyForm when
+	// m.form != nil (capture order doc-stamp, handleKey below).
+	if m.form != nil {
+		return m.updateForm(msg)
 	}
 	return m, nil
 }
@@ -69,6 +85,36 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 			m.err = err.Error()
 		}
 	}
+	return m, loadCmd(m.client)
+}
+
+// applyCreateDone handles a completed Create (E3 Task 4, bean bt-y4ly): a
+// failure routes through the shared applyMutationResult tail exactly like
+// every other mutation (status line + reload). A success additionally jumps
+// the cursor onto the freshly minted bean and expands its parent's ancestor
+// path BEFORE the reload fires: m.idx here is still the OLD index (the new
+// bean does not exist in it yet), so expandAncestorsOf must walk UP FROM
+// msg.bean.Parent (an EXISTING bean) rather than from msg.bean.ID itself (a
+// lookup that would silently no-op against the old index) -- and since
+// expandAncestorsOf only marks an id's ANCESTORS, not the id itself, the
+// immediate parent needs its own explicit exp[...]=true so the new bean
+// (its child) is revealed once flattenTree runs against it. applyLoaded's
+// existing "exact bean still present" cursor-restore path (above) then finds
+// msg.bean.ID unchanged after the beansLoadedMsg arrives (US-10-parity, no
+// new cursor logic). A parentless new bean (msg.bean.Parent == "") needs no
+// expansion at all -- idx.Roots() already surfaces every parentless bean.
+func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		return m.applyMutationResult(msg.err)
+	}
+	if msg.bean.Parent != "" {
+		m.expanded = expandAncestorsOf(m.idx, m.expanded, msg.bean.Parent)
+		exp := cloneBoolMap(m.expanded) // I01: copy-on-write
+		exp[msg.bean.Parent] = true     // expandAncestorsOf expands ancestors OF id, not id itself
+		m.expanded = exp
+	}
+	m.cursorID = msg.bean.ID
+	m.err = ""
 	return m, loadCmd(m.client)
 }
 
@@ -109,7 +155,11 @@ func (m model) beanETag(id string) (etag string, ok bool) {
 func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	switch {
 	case keybind.Matches(msg, keys.Create):
-		return true, m, nil // T4: Create works without a focused bean; stub here
+		// E3 Task 4 (bean bt-y4ly): Create works WITHOUT a focused bean (an
+		// empty repo can still be seeded) -- the ONLY key here that skips
+		// the focusedBean() guard below.
+		nm, cmd := m.openCreateForm()
+		return true, nm, cmd
 	case keybind.Matches(msg, keys.Status),
 		keybind.Matches(msg, keys.TagAssign),
 		keybind.Matches(msg, keys.Assign),
@@ -153,6 +203,8 @@ func (m model) keyOverlay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyParentPicker(msg)
 	case overlayBlockingPicker:
 		return m.keyBlockingPicker(msg)
+	case overlayCreateConfirm:
+		return m.keyCreateConfirm(msg)
 	}
 	return m, nil
 }
@@ -247,6 +299,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// while the menu is open.
 	if m.filterOpen {
 		return m.keyFilterMenu(msg)
+	}
+
+	// E3 Task 4 (bean bt-y4ly): an open huh Form fully captures input too,
+	// same precedent as filterOpen/searchActive/confirmQuit above -- checked
+	// BEFORE the node-action overlay switch below since m.form != nil is its
+	// own separate capture state, not one of the overlayID cases (design
+	// decision a2: "huh forms are not a menu overlay").
+	if m.form != nil {
+		return m.keyForm(msg)
 	}
 
 	// E3 (bean bt-dlgk): the open node-action overlay (Value-Menü T1, Tag-/

@@ -1,0 +1,196 @@
+package tui
+
+// form_create_bean_test.go — TDD coverage for the Create-Form field set
+// (`c`, E3 Task 4, bean bt-y4ly, design decision e): title/type/priority/
+// status/parent/tags/body, keyed huh v1.0.0 fields, parent existence-only
+// validation (type-hierarchy stays the CLI's own VALIDATION_ERROR path).
+
+import (
+	"strings"
+	"testing"
+
+	"beans-tui/internal/data"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+)
+
+// driveFormBudget bounds how many Cmd rounds driveForm/driveFormCmd will
+// chase per top-level call. huh's own field-advance chain (blur cmd + focus
+// cmd, plus the nextFieldMsg round-trip that commits a field's value into
+// f.results, huh form.go:565-568/615) depends on the SAME tea.BatchMsg
+// fan-out a real tea.Program performs before calling Update() again -- a
+// bare f.Update() call never does this on its own, hence driving it
+// recursively here. BUT: focusing an Input field (huh field_input.go's
+// Focus -> bubbles textinput.Focus) starts textinput's own cursor-blink
+// timer (tea.Tick-based, bubbletea commands.go), which is SELF-PERPETUATING
+// -- chasing it unbounded would hang forever (empirically confirmed: an
+// earlier unbounded version of this helper hung the test binary). The
+// legitimate field-advance chain settles in well under this budget; a blink
+// timer just burns through it harmlessly (blink touches neither f.results
+// nor field selection) and the helper returns once exhausted.
+const driveFormBudget = 6
+
+func driveForm(f *huh.Form, msg tea.Msg) *huh.Form {
+	f, _ = driveFormStep(f, msg, driveFormBudget)
+	return f
+}
+
+func driveFormStep(f *huh.Form, msg tea.Msg, budget int) (*huh.Form, int) {
+	if budget <= 0 {
+		return f, 0
+	}
+	budget--
+	m, cmd := f.Update(msg)
+	nf, ok := m.(*huh.Form)
+	if !ok {
+		return f, budget
+	}
+	return driveFormCmd(nf, cmd, budget)
+}
+
+// driveFormCmd recursively executes cmd, unwrapping tea.BatchMsg (the only
+// EXPORTED multi-cmd wrapper bubbletea produces here -- huh's own
+// nextField/prevField helpers return single, unbatched Cmds) and feeding
+// every resulting Msg back through driveFormStep, all against the SAME
+// shared budget (driveFormBudget doc comment above).
+func driveFormCmd(f *huh.Form, cmd tea.Cmd, budget int) (*huh.Form, int) {
+	if cmd == nil || budget <= 0 {
+		return f, budget
+	}
+	budget--
+	msg := cmd()
+	if msg == nil {
+		return f, budget
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if budget <= 0 {
+				break
+			}
+			f, budget = driveFormCmd(f, c, budget)
+		}
+		return f, budget
+	}
+	return driveFormStep(f, msg, budget)
+}
+
+// enterMsg advances the currently focused field -- Input/Select/Text all
+// bind their Next/Submit keymap to plain "enter" (huh v1.0.0 keymap.go
+// NewDefaultKeyMap), so one shared helper drives every field type in
+// buildCreateBeanForm's group.
+func enterMsg() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyEnter} }
+
+// advanceFields drives f forward n fields (n calls to enterMsg) -- the
+// caller counts how many of buildCreateBeanForm's 7 keyed fields
+// (title/type/priority/status/parent/tags/body, in that order) it needs to
+// walk past.
+func advanceFields(f *huh.Form, n int) *huh.Form {
+	for i := 0; i < n; i++ {
+		f = driveForm(f, enterMsg())
+	}
+	return f
+}
+
+func idxWithMS1() *data.Index {
+	return data.NewIndex([]data.Bean{
+		{ID: "ms-1", Title: "Milestone One", Status: "todo", Type: "milestone", Priority: "normal"},
+	})
+}
+
+// TestBuildCreateBeanFormPrefillsParentFromCursor guards the draft-prefill
+// contract (design decision e "vorbelegt aus Tree-Cursor-Kontext"): a
+// non-empty beanDraft.parent is bound into the Input's accessor immediately
+// at construction (huh.Input.Value(&parent), field_input.go) -- advancing
+// PAST the parent field (5 fields: title/type/priority/status/parent)
+// without ever typing anything new must leave GetString("parent") at the
+// prefill.
+func TestBuildCreateBeanFormPrefillsParentFromCursor(t *testing.T) {
+	idx := idxWithMS1()
+	f := buildCreateBeanForm(idx, beanDraft{title: "New Task", parent: "ms-1"})
+	f = advanceFields(f, 5) // title, type, priority, status, parent
+
+	if got := f.GetString("parent"); got != "ms-1" {
+		t.Fatalf("GetString(parent) = %q, want %q (prefill survived unedited)", got, "ms-1")
+	}
+}
+
+// TestParseTagsFieldSplitsAndValidates covers both the split (whitespace AND
+// comma) and the per-token data.ValidTagName validation (design decision e).
+func TestParseTagsFieldSplitsAndValidates(t *testing.T) {
+	tags, err := parseTagsField("a b,c")
+	if err != nil {
+		t.Fatalf("parseTagsField(%q) error = %v, want nil", "a b,c", err)
+	}
+	want := []string{"a", "b", "c"}
+	if len(tags) != len(want) {
+		t.Fatalf("parseTagsField(%q) = %v, want %v", "a b,c", tags, want)
+	}
+	for i, w := range want {
+		if tags[i] != w {
+			t.Fatalf("parseTagsField(%q)[%d] = %q, want %q", "a b,c", i, tags[i], w)
+		}
+	}
+
+	if _, err := parseTagsField("Ü!"); err == nil {
+		t.Fatal("parseTagsField(\"Ü!\") error = nil, want a validation error")
+	}
+}
+
+// TestParentFieldValidatorAcceptsEmptyAndExistingID guards design decision
+// e's own scope-cut: empty (no parent) and any existing ID both pass.
+func TestParentFieldValidatorAcceptsEmptyAndExistingID(t *testing.T) {
+	v := parentFieldValidator(idxWithMS1())
+	if err := v(""); err != nil {
+		t.Fatalf("parentFieldValidator(\"\") = %v, want nil (optional field)", err)
+	}
+	if err := v("ms-1"); err != nil {
+		t.Fatalf("parentFieldValidator(\"ms-1\") = %v, want nil (existing id)", err)
+	}
+}
+
+// TestParentFieldValidatorRejectsUnknownID guards the existence-only rule --
+// no type-hierarchy duplication of the CLI's own server-side rule (design
+// decision e).
+func TestParentFieldValidatorRejectsUnknownID(t *testing.T) {
+	v := parentFieldValidator(idxWithMS1())
+	if err := v("does-not-exist"); err == nil {
+		t.Fatal("parentFieldValidator(\"does-not-exist\") = nil, want an error")
+	}
+}
+
+// TestCreateOptsFromDraftMapsAllFields guards the beanDraft->CreateOpts
+// mapping submitForm relies on (box_confirm_create.go): every field lands in
+// its CreateOpts counterpart, tags parsed via parseTagsField.
+func TestCreateOptsFromDraftMapsAllFields(t *testing.T) {
+	d := beanDraft{
+		title:    "  New Task  ",
+		typ:      "task",
+		priority: "high",
+		status:   "in-progress",
+		parent:   "ms-1",
+		tags:     "a b",
+		body:     "some body",
+	}
+	opts := createOptsFromDraft(d)
+	if opts.Title != "New Task" {
+		t.Errorf("Title = %q, want %q (trimmed)", opts.Title, "New Task")
+	}
+	if opts.Type != "task" {
+		t.Errorf("Type = %q, want task", opts.Type)
+	}
+	if opts.Priority != "high" {
+		t.Errorf("Priority = %q, want high", opts.Priority)
+	}
+	if opts.Status != "in-progress" {
+		t.Errorf("Status = %q, want in-progress", opts.Status)
+	}
+	if opts.Parent != "ms-1" {
+		t.Errorf("Parent = %q, want ms-1", opts.Parent)
+	}
+	if strings.Join(opts.Tags, ",") != "a,b" {
+		t.Errorf("Tags = %v, want [a b]", opts.Tags)
+	}
+	if opts.Body != "some body" {
+		t.Errorf("Body = %q, want %q", opts.Body, "some body")
+	}
+}

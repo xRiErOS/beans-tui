@@ -10,6 +10,8 @@ import (
 	"beans-tui/internal/data"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 )
 
 // viewID enumerates the top-level screens. T8 ships exactly one (the Browse
@@ -223,6 +225,35 @@ type model struct {
 	blockItems    []pickerItem
 	blockOriginal map[string]bool
 	blockPending  map[string]bool
+
+	// huh-Form-Hosting (E3 Task 4, bean bt-y4ly, Port devd forms_shared.go):
+	// form is the embedded huh sub-model (nil when no form is open, the
+	// THIRD separate capture state alongside filterOpen/m.overlay, design
+	// decision a2 -- huh forms are not a menu overlay); formKind is "create"
+	// (T4; T5 adds "editTitle") and drives both submitForm's dispatch
+	// (box_confirm_create.go) and formTitle's label (forms_shared.go).
+	// pendingCreate/createLabel/createDraft back the Create-Form's
+	// Confirm-Gate: pendingCreate is the ALREADY-BUILT createCmd, parked by
+	// submitForm until the Confirm-Gate's enter fires it; createLabel is the
+	// modal's preview text; createDraft survives an n/esc Confirm-Gate
+	// bounce so the Create-Form reopens FILLED instead of losing the PO's
+	// work (Draft-Erhalt, port DD2-190, box_confirm_create.go).
+	//
+	// ERRATUM vs. epic-E3-plan.md's epic-level "Geteilte Infrastruktur"
+	// sketch (which additionally lists a `createConfirm bool` field
+	// alongside these): design decision a2 is unambiguous that the E3
+	// overlays -- INCLUDING Create-Confirm -- are ONE model.overlay
+	// overlayID enum, not "6 weitere Bools neben filterOpen/confirmQuit";
+	// Task 4's own Step 4 pseudocode agrees verbatim (`overlay =
+	// overlayCreateConfirm`, never `createConfirm = true`). No separate bool
+	// is added here -- the Confirm-Gate's open/closed state IS
+	// `m.overlay == overlayCreateConfirm` (overlayID enum above), the sketch
+	// mention is a stale holdover from an earlier draft.
+	form          *huh.Form
+	formKind      string
+	pendingCreate tea.Cmd
+	createLabel   string
+	createDraft   *beanDraft
 
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works

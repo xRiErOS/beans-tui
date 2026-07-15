@@ -576,6 +576,11 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.parentPickerBox(), w, h)
 	case overlayBlockingPicker:
 		out = placeOverlay(out, m.blockingPickerBox(), w, h)
+	case overlayCreateConfirm:
+		out = placeOverlay(out, m.createConfirmBox(), w, h)
+	}
+	if m.form != nil {
+		out = placeOverlay(out, m.formChrome(), w, h)
 	}
 	if m.confirmQuit {
 		out = placeOverlay(out, m.quitBox(), w, h)
