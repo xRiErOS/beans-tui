@@ -285,6 +285,10 @@ func (m model) keyBacklog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.clearFacets()
 		m.backlogList.setLen(len(m.backlogVisible()))
 		return m, nil
+	case keybind.Matches(msg, keys.Reviews):
+		// E4 Task 3 (bean bt-hxyo): `R` opens the Review-Cockpit from
+		// anywhere in the Backlog too (design-spec.md §7).
+		return m.openReviewCockpit()
 	case keybind.Matches(msg, keys.Backlog), keybind.Matches(msg, keys.Back):
 		m.view = viewBrowseRepo
 		return m, nil

@@ -559,6 +559,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openPalette()
 	}
 
+	// E4 Task 3 (bean bt-hxyo, design decision h): full capture for the
+	// Cockpit -- overrides a/t/B/c/d/e (keyNodeAction, below) with the
+	// view-local meaning design-spec §7 assigns them here (a/x land in Task
+	// 4). s/t/B/c/d/e are simply unreachable in v1 (bean field edits mid-
+	// review route through Tree/Backlog instead, a documented scope cut).
+	if m.view == viewReviewCockpit {
+		return m.keyReviewCockpit(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c": // immediate quit, no confirm (bean bt-7jr8: distinct from `q`)
 		return m, tea.Quit
@@ -777,6 +786,10 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = viewBacklog
 		m.backlogList.setLen(len(m.backlogVisible()))
 		return m, nil
+	case keybind.Matches(msg, keys.Reviews):
+		// E4 Task 3 (bean bt-hxyo): `R` opens the Review-Cockpit from
+		// anywhere in the Tree (design-spec.md §7).
+		return m.openReviewCockpit()
 	case keybind.Matches(msg, keys.FilterClear):
 		// X as a direct top-level reset even with the menu closed (design-
 		// spec.md, mirrors devd's esc-cascade also clearing filters below) --

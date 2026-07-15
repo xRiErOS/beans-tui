@@ -603,6 +603,8 @@ func (m model) View() string {
 	switch m.view {
 	case viewBacklog:
 		return m.viewBacklog()
+	case viewReviewCockpit:
+		return m.viewReviewCockpit()
 	default:
 		return m.viewBrowseRepo()
 	}

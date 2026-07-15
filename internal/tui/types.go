@@ -21,8 +21,9 @@ import (
 type viewID int
 
 const (
-	viewBrowseRepo viewID = iota
-	viewBacklog           // V3 Backlog (E2 Task 5, bean bt-gzu6, design-spec.md §6 V3)
+	viewBrowseRepo    viewID = iota
+	viewBacklog              // V3 Backlog (E2 Task 5, bean bt-gzu6, design-spec.md §6 V3)
+	viewReviewCockpit        // V6 Review-Cockpit (E4 Task 3, bean bt-hxyo, design-spec.md §6 V6)
 )
 
 // orphanRootID is the synthetic node ID for the "(verwaist)" root that
@@ -378,6 +379,19 @@ type model struct {
 	palBleveIDs     map[string]bool
 	palBleveFor     string
 	palBleveLoading bool
+
+	// Review-Cockpit (E4 Task 3, bean bt-hxyo, design-spec §6 V6, design
+	// decisions c/i): reviewCursor indexes the FLAT ordered []*data.Bean the
+	// Cockpit currently shows -- every to-review bean (group-then-canonical
+	// order) followed by every rework bean; group headers are a RENDER-time-only
+	// concern (view_review_cockpit.go), never part of this index space, so
+	// up/down can never land on a non-actionable header row. reviewAccOpen is a
+	// DEDICATED digit-jump cursor for the Cockpit's read-only detail preview --
+	// deliberately NOT the Tree/Backlog's shared accOpen/secCursor (design
+	// decision i: those are entangled with detailFocus's two-level machine,
+	// which the always-read-only Cockpit preview does not have).
+	reviewCursor  int
+	reviewAccOpen int
 }
 
 // newModel builds the initial (pre-load) App-Shell state.
