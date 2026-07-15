@@ -406,6 +406,17 @@ type model struct {
 	// string content) -- Toast is purely additive, fired alongside every
 	// existing m.err assignment in update.go (design decision a).
 	toast *toastState
+
+	// Help-Overlay (E5 Task 2, bean bt-wpn9, Port devd overlay_shortcuts.go):
+	// helpOpen is a full-capture floating-overlay state, same precedent as
+	// filterOpen/paletteOpen above -- `?` (keys.Help) opens it from ANY
+	// view (design decision h, ctrl+k/Palette precedent), esc/?/q close it,
+	// every OTHER key is swallowed as a no-op while it stays open (a
+	// deliberate deviation from devd, which closes Help on any key --
+	// overlay_shortcuts_test.go's file doc comment). No new keyMap fields:
+	// Help has existed since E1 Task 7 and is already covered by the
+	// Drift-Guard test TestHelpGroupsCoverEveryBindingExactlyOnce.
+	helpOpen bool
 }
 
 // newModel builds the initial (pre-load) App-Shell state.

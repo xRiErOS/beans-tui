@@ -606,6 +606,13 @@ func (m model) composeOverlays(out string, w, h int) string {
 	if m.paletteOpen {
 		out = placeOverlay(out, m.paletteBox(), w, h)
 	}
+	// E5 Task 2 (bean bt-wpn9): the Help-Overlay -- painted AFTER the
+	// Command-Center, BEFORE m.confirmQuit (quit stays the topmost layer
+	// under the modals, unchanged precedent, Painter's-Algorithmus-
+	// Reihenfolge: spät = oben).
+	if m.helpOpen {
+		out = placeOverlay(out, m.helpBox(), w, h)
+	}
 	if m.confirmQuit {
 		out = placeOverlay(out, m.quitBox(), w, h)
 	}

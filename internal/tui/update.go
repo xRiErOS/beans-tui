@@ -639,12 +639,35 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.paletteOpen {
 		return m.keyPalette(msg)
 	}
+	// E5 Task 2 (bean bt-wpn9, design decision h): the Help-Overlay's own
+	// open state fully captures, same precedent as m.paletteOpen just
+	// above -- checked HERE (after m.paletteOpen, before the bare
+	// keys.Palette match below) rather than the epic-plan's original
+	// "Geteilte Infrastruktur" sketch (which listed helpOpen/keys.Help
+	// BEFORE m.paletteOpen): that ordering is an ERRATUM (see bean
+	// Deviations) -- it would let `?`, typed as a literal query character
+	// into an open Command-Center filter, hijack input and open Help
+	// instead of reaching keyPalette. Keeping every full-capture STATE
+	// check (filterOpen/form/overlay/paletteOpen/helpOpen) ahead of every
+	// bare keybind MATCH check (keys.Palette/keys.Help) preserves the
+	// existing precedent this file already establishes end to end.
+	if m.helpOpen {
+		return m.keyHelp(msg)
+	}
 	// E4 Task 1 (design decision h): ctrl+k/K opens the palette from ANY
 	// view -- checked here, ABOVE the (E4 Task 3) Review-Cockpit capture
 	// block that will land below this, so it also works from inside the
 	// Cockpit (design-spec §7: "von überall").
 	if keybind.Matches(msg, keys.Palette) {
 		return m.openPalette()
+	}
+	// E5 Task 2 (bean bt-wpn9, design decision h): `?` opens Help from ANY
+	// view, same precedent as ctrl+k/keys.Palette just above -- checked
+	// ahead of the (E4 Task 3) Review-Cockpit capture block below, so it
+	// also works from inside the Cockpit.
+	if keybind.Matches(msg, keys.Help) {
+		m.helpOpen = true
+		return m, nil
 	}
 
 	// E4 Task 3 (bean bt-hxyo, design decision h): full capture for the
