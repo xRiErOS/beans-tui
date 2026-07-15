@@ -1,11 +1,11 @@
 ---
 # bt-e6q9
 title: 'Detail-Pane Kopfblock + Meta-Feldliste: Tags-Zeile + Marker-/Spalten-Fixes'
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-07-15T21:05:09Z
-updated_at: 2026-07-15T21:16:22Z
+updated_at: 2026-07-15T21:37:57Z
 parent: bt-ntoz
 ---
 
@@ -55,11 +55,93 @@ treeNodeMarker (view_browse_repo.go:401-409) prueft bereits "if !n.hasKids { ret
 
 ## Akzeptanz-Checkliste
 
-- [ ] Meta-Feldliste zeigt 7 Zeilen inkl. tags: (Hash-Swatches oder "(none)")
-- [ ] enter auf tags-Feld oeffnet Tag-Picker, m.detailFocus bleibt true
-- [ ] Kopfblock type:/status: springen NICHT mehr bei Bean-Wechsel (feste Breiten 9/11)
-- [ ] ▶ auf title: erscheint ERST nach explizitem Feld-Einstieg (enter auf Sektion), NICHT sofort nach tab
-- [ ] Inaktive ▷-Marker sind theme.Muted (subtext), nicht mehr unstilisiert
-- [ ] TestTreeNodeMarkerBlankForLeaf gruen (B03-Regressionslock, kein Verhaltensfix)
-- [ ] Alle 3 Goldens regeneriert + Vorher/Nachher je Datei im Commit-Body
-- [ ] Voller Testlauf (inkl. -race) gruen, gofmt/vet leer
+- [x] Meta-Feldliste zeigt 7 Zeilen inkl. tags: (Hash-Swatches oder "(none)")
+- [x] enter auf tags-Feld oeffnet Tag-Picker, m.detailFocus bleibt true
+- [x] Kopfblock type:/status: springen NICHT mehr bei Bean-Wechsel (feste Breiten 9/11)
+- [x] ▶ auf title: erscheint ERST nach explizitem Feld-Einstieg (enter auf Sektion), NICHT sofort nach tab
+- [x] Inaktive ▷-Marker sind theme.Muted (subtext), nicht mehr unstilisiert
+- [x] TestTreeNodeMarkerBlankForLeaf gruen (B03-Regressionslock, kein Verhaltensfix)
+- [x] Alle 3 Goldens regeneriert + Vorher/Nachher je Datei im Commit-Body
+- [x] Voller Testlauf (inkl. -race) gruen, gofmt/vet leer
+
+
+## Summary
+
+D01 (Tags als 7. Meta-Feld), B02 (Kopfblock-Spaltenbreiten), B04
+(▶-Marker-Gating auf detailLevel==1), B09 (▷-Marker-Farbe) implementiert;
+B03 verifiziert bereits korrekt + regressionsgesichert (kein Fix).
+metaFields wachst von 6 auf 7 Eintraege (tags NACH priority, VOR
+created_at), Enter-Kaskade bekommt neuen "tags"-Case ->
+m.openTagPicker(). beanSections/renderAccordionPane/
+renderBeanAccordionPane wachsen um detailLevel int. Section-Index-
+Konstanten (metaSectionIdx/bodySectionIdx/relationsSectionIdx/
+historySectionIdx) ergaenzt fuer T3 (bt-qbyq).
+
+## Test-Output
+
+RED (Compile-Fail, beanSections-Signatur):
+```
+internal/tui/view_detail_bean_test.go:40:64: too many arguments in call to beanSections
+	have (*data.Index, *data.Bean, number, bool, number, number, number)
+	want (*data.Index, *data.Bean, int, bool, int, int)
+```
+GREEN nach Implementierung: `go build -o bin/bt .` clean, `go vet ./...` leer.
+
+Voll-Lauf (ohne -short): `ok beans-tui/internal/tui 135.759s` (336 Test-
+Funktionen im tui-Paket, alle gruen; cmd/config/data/theme ebenfalls ok).
+Zwei FRISCHE Laeufe (`-count=1`, kein Cache) hintereinander: beide
+`EXIT=0`, testdata/*.golden byte-identisch zwischen beiden Laeufen
+(diff -q bestaetigt IDENTICAL fuer tree/backlog/chrome.golden).
+`-race -short`: ok (7.3s tui). `-race` VOLL (ohne -short): `ok
+beans-tui/internal/tui 139.274s`, keine DATA RACE. `gofmt -l .` leer.
+
+Eigene TDD-Iteration (Test-Bug, kein Prod-Bug): TestTreeNodeMarkerBlankForLeaf
+scheiterte initial an `len()` (Byte-Laenge) statt `lipgloss.Width()`
+(Zell-Breite) fuer den Multi-Byte-UTF-8-Marker "▾ " -- Testkorrektur,
+kein ERRATUM gegen bean/Plan (siehe unten).
+
+## Smoke
+
+Real in tmux gegen dieses Repo (`.beans/` echte Daten, `./bin/bt`),
+`tmux capture-pane -p`/`-e` als Beleg:
+- D01 nicht-leer: bt-apmy (Milestone) zeigt `▷ tags:       ● to-review`
+  (Hash-Swatch aus echten Repo-Daten).
+- D01 leer: bt-6oyy (Feature) zeigt `▷ tags:       (none)`.
+- D01 Enter-Kaskade: enter auf tags-Zeile oeffnet Tag-Picker-Overlay
+  ("Tags" / "▸ [x] to-review (8)"), esc x2 schliesst sauber zurueck.
+- B02 live an 2 echten Beans mit unterschiedlicher Wortlaenge:
+  "type: milestone    status: todo           prio: !" (bt-apmy) vs.
+  "type: feature      status: todo           prio: ·" (bt-6oyy) --
+  "status:" beginnt in BEIDEN Zeilen an identischer Spalte (Index 20).
+- B04 live: nach `tab` zeigt [1] META die Accent-Bar (Sektion aktiv),
+  title: bleibt `▷` (KEIN ▶) bis `enter` gedrueckt wird -- danach `▶`.
+- B09 live (ANSI-erhaltender Capture, `-e`): `▷`-Marker jetzt in
+  `\x1b[38;2;124;124;124m` (theme.Muted-RGB, identisch zur Label-Farbe)
+  gewrappt -- vorher unstilisiert.
+Nicht smoke-getestet (nur Unit/Golden-Ebene): B03 (kein UI-Pfad zu
+demonstrieren, da kein Verhaltensaenderung -- Regressionstest ist der
+Beleg).
+
+## Deviations/ERRATA
+
+Keine ERRATA gegen bean/Plan -- Code-Richtungen im bean stimmten exakt
+mit dem tatsaechlichen Ist-Code ueberein (Signaturen, Zeilennummern,
+Call-Sites). Einzige Abweichung: Commit-Granularitaet -- D01/B02/B04/B09
+in EINEM Commit statt vier, da B04s detailLevel-Parameter durch
+dieselbe beanSections/metaSectionBody-Signaturkette laeuft, die D01/B09
+bereits aendern (echte Code-Kopplung, kein Bequemlichkeits-Split).
+Commit-Body zaehlt die vier Codes einzeln auf. B03 blieb wie geplant
+ein eigener, unabhaengiger Commit (kein Code-Fix, nur Testdatei).
+
+## Notes for T3 (bt-qbyq)
+
+- beanSections neue Signatur: `beanSections(idx *data.Index, b *data.Bean, bodyW int, focused bool, activeIdx, fieldIdx, detailLevel int) []accordionSection`.
+- renderAccordionPane neue Signatur: `renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool) string`.
+- renderBeanAccordionPane UNVERAENDERT (b, w, h, focused) -- reicht m.detailLevel intern durch.
+- Section-Index-Konstanten jetzt in view_detail_bean.go verfuegbar:
+  metaSectionIdx=0, bodySectionIdx=1, relationsSectionIdx=2,
+  historySectionIdx=3 (statt Magic-Number 1 fuer BODY in B10).
+- metaFields()-Reihenfolge jetzt: title(0)/status(1)/type(2)/priority(3)/
+  tags(4)/created_at(5)/updated_at(6) -- jeder Code der Feld-Indizes
+  hart verdrahtet hat (z.B. Enter-Kaskade-Tests), MUSS diese Verschiebung
+  beachten (created_at/updated_at sind NICHT mehr 4/5, sondern 5/6).
