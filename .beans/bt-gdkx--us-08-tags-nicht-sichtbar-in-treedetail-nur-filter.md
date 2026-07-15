@@ -5,8 +5,8 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-15T19:21:19Z
-updated_at: 2026-07-15T19:21:19Z
-parent: bt-zk9p
+updated_at: 2026-07-15T20:18:42Z
+parent: bt-ntoz
 ---
 
 ## Befund (E6 T2, US-08-Validierung, 2026-07-15)
