@@ -76,6 +76,10 @@ func paletteActions(m model) []paletteItem {
 		paletteItem{kind: paletteKindAction, actionID: "filter", label: "filter: facetten"},
 		paletteItem{kind: paletteKindAction, actionID: "search", label: "search: beans"},
 		paletteItem{kind: paletteKindAction, actionID: "reload", label: "reload: daten"},
+		// E5 Task 6 (bean bt-zhwl): a second entry point to the SAME
+		// keys.Picker dispatch (openLobby, view_lobby.go) -- mirrors every
+		// other single-key binding's own Command-Center mirror above.
+		paletteItem{kind: paletteKindAction, actionID: "repo_picker", label: "repo: wechseln"},
 		// E5 Task 5 (bean bt-0l8c): the Settings-Form has NO dedicated
 		// keybinding (design-spec §7 knows none) -- reachable exclusively
 		// through the Command-Center, appended last.
@@ -289,6 +293,12 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 			return m.openSearchInput()
 		case "reload":
 			return m, loadCmd(m.client)
+		case "repo_picker":
+			// E5 Task 6 (bean bt-zhwl): identical to keys.Picker's own
+			// dispatch (handleKey, update.go) -- the Command-Center is a
+			// genuine second entry point to the SAME handler, never a
+			// parallel implementation (dispatchPalette's own doc-stamp).
+			return m.openLobby()
 		case "settings":
 			// E5 Task 5 (bean bt-0l8c): opens the Settings-Form
 			// (box_form_settings.go) -- same open-form shape as edit_title,

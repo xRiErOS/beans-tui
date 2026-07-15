@@ -45,6 +45,25 @@ type beansLoadedMsg struct {
 // B05 doc contract).
 type watchMsg struct{}
 
+// initialWatchMsg hands app.go Run()'s VERY FIRST data.Watch stop func to
+// the model (E5 Task 6, bean bt-zhwl) -- without this, m.watchStop would
+// start (and stay) nil until the PO's first repo switch, so THAT switch's
+// switchRepoCmd(oldStop=nil, ...) would never retire this initial watcher: a
+// live fsnotify goroutine on the abandoned first repo, leaking for the rest
+// of the process (every one of ITS file changes would still fire a reload
+// of whatever repo is CURRENT by then, via m.client -- not wrong-repo data,
+// but a real resource leak and a spurious extra reload on every old-repo
+// change). Sent ASYNCHRONOUSLY via a goroutine (go p.Send(...), never an
+// inline p.Send) for the exact reason watchUnavailableMsg below already
+// documents: p.Send blocks until p.Run()'s event loop starts reading, which
+// only happens once Run() reaches its own p.Run() call -- an inline send
+// here would deadlock Run() before it ever gets there. Delivered well before
+// any keypress can plausibly race it (human reaction time vastly exceeds an
+// in-process goroutine send), same practical-safety argument this codebase
+// already relies on elsewhere (e.g. searchBleveResultMsg's staleness guard
+// tolerates async arrival order without a hard ordering guarantee).
+type initialWatchMsg struct{ stop func() }
+
 // watchUnavailableMsg signals that data.Watch failed to start at all (app.go
 // Run) -- distinct from watchMsg (a live watcher firing). Sent exactly once,
 // asynchronously (app.go: a goroutine, since the unbuffered tea.Program.msgs
@@ -62,6 +81,156 @@ func loadCmd(c *data.Client) tea.Cmd {
 		beans, err := c.List()
 		return beansLoadedMsg{beans: beans, err: err}
 	}
+}
+
+// repoSwitchedMsg carries the outcome of switchRepoCmd below (E5 Task 6,
+// bean bt-zhwl): a repo switch triggered from the Lobby (keyLobby,
+// view_lobby.go). err != nil means the TARGET repo failed to validate
+// (client/repoDir/beans/watchStop are then zero values and must NOT be
+// applied -- applyRepoSwitched, update.go, leaves the CURRENT session
+// untouched on this path, the core "Fehlerpfad darf die laufende Session
+// NICHT zerstören" constraint, bean bt-zhwl).
+type repoSwitchedMsg struct {
+	client    *data.Client
+	repoDir   string
+	beans     []data.Bean
+	watchStop func()
+	err       error
+}
+
+// switchRepoCmd is the Kernschwierigkeit of E5 Task 6 (bean bt-zhwl): a
+// tea.Program-DECOUPLED repo switch -- oldStop/notify are both injected
+// (never a package-level activeProgram reference INSIDE this function
+// itself), so this is fully testable with two plain temp directories and a
+// fake notify func(), no real tea.Program required
+// (switch_repo_test.go's TestSwitchRepoCmdStopsOldWatcherStartsNew).
+// Production wires notify as func(){ activeProgram.Send(watchMsg{}) }
+// (app.go/view_lobby.go's keyLobby) -- this function never imports or
+// touches activeProgram.
+//
+// Ordering decision (design note, bean bt-zhwl's own "Fehlerpfad"
+// constraint): the NEW repo is validated FIRST (client.List() must
+// succeed) -- oldStop is only ever called AFTER that validation passes.
+// This is a DELIBERATE deviation from epic-E5-plan.md's own Task 6 Step 3
+// pseudocode sketch (which calls oldStop() unconditionally, first thing) --
+// that ordering would retire a perfectly healthy OLD watcher for a switch
+// attempt that then turns out to target a broken/empty directory, leaving
+// the PO's live session without ANY watcher at all (an unnecessary,
+// avoidable degradation the bean's own "ACHTUNG" callout asks to decide
+// consciously). Validating first means a failed switch leaves the OLD
+// watcher completely untouched -- still running, still live -- exactly the
+// "session must not be destroyed" guarantee the bean demands.
+// TestSwitchRepoCmdKeepsOldWatcherAliveOnValidationFailure is the regression
+// guard for this exact ordering.
+//
+// B05 (data/watcher.go's own MANDATORY doc-stamp): calling oldStop()
+// synchronously HERE is safe -- this whole function runs as a tea.Cmd, i.e.
+// on a goroutine the bubbletea runtime spawns to evaluate the returned
+// func() tea.Msg, which is NOT the watcher's own onChange goroutine B05
+// forbids a synchronous stop from. oldStop()'s "blocks until the watcher
+// goroutine has fully exited" contract (Watch's own doc comment) is exactly
+// what guarantees NO event from the old repo can leak into the new watch
+// (data.StartWatch below) that starts syncronously right after it on this
+// same goroutine -- the whole point of doing this INSIDE a tea.Cmd (its own
+// goroutine, decoupled from Update()'s single-threaded dispatch) rather than
+// inline in a key handler, where a blocking oldStop() would freeze the
+// entire UI for however long the watcher goroutine takes to unwind.
+func switchRepoCmd(oldStop func(), newRepoDir string, notify func()) tea.Cmd {
+	return func() tea.Msg {
+		client := &data.Client{RepoDir: newRepoDir}
+		beans, err := client.List()
+		if err != nil {
+			return repoSwitchedMsg{repoDir: newRepoDir, err: err}
+		}
+
+		// Validated -- safe to retire the old watcher now (design note
+		// above).
+		if oldStop != nil {
+			oldStop()
+		}
+
+		stop, watchErr := data.StartWatch(newRepoDir, notify)
+		if watchErr != nil {
+			// The switch itself still SUCCEEDED (client+beans are valid) --
+			// degrade like app.go's own watchUnavailableMsg path instead of
+			// failing the whole switch over a live-reload nicety.
+			// applyRepoSwitched (update.go) surfaces this via the existing
+			// m.watchUnavailable flag (I04 precedent), watchStop stays nil.
+			stop = nil
+		}
+		return repoSwitchedMsg{client: client, repoDir: newRepoDir, beans: beans, watchStop: stop}
+	}
+}
+
+// repoMetric is the Lobby's per-repo "Offen/Gesamt" figure (E5 Task 6, bean
+// bt-zhwl design note: "Kosten/Latenz-Abwägung dokumentieren"). loaded=false
+// (the zero value) means "no repoMetricsMsg has arrived for this repo yet"
+// -- repoPickerBody (view_lobby.go) renders "…" for it; err != nil means
+// THIS repo's own `beans list` call failed (e.g. a moved/deleted directory
+// still listed in config.yaml) without blanking out every OTHER repo's
+// already-loaded metric.
+type repoMetric struct {
+	open, total int
+	err         error
+	loaded      bool
+}
+
+// repoMetricsMsg carries ONE repo's metric result, tagged by repo path so
+// applyRepoMetrics (update.go) can update just that ONE map entry --
+// N independent messages (one per configured repo), not a single batched
+// result, so a slow/broken repo never blocks the others from appearing as
+// soon as they're ready (design note below, repoMetricsBatchCmd).
+type repoMetricsMsg struct {
+	repo        string
+	open, total int
+	err         error
+}
+
+// openBeanStatuses are the statuses repoMetricsCmd counts as "offen" --
+// mirrors the bean's own acceptance-checklist wording verbatim ("beans list
+// --json -s todo -s in-progress -s draft"): every status EXCEPT
+// completed/scrapped.
+var openBeanStatuses = map[string]bool{"todo": true, "in-progress": true, "draft": true}
+
+// repoMetricsCmd loads ONE repo's full bean list and reduces it to an
+// open/total count, tagged as repoMetricsMsg -- design note (bean bt-zhwl,
+// "Kosten/Latenz-Abwägung"): this is genuinely a full `beans list --json
+// --full` subprocess call per configured repo (same cost as loadCmd itself),
+// so it is NEVER run synchronously in a loop (that would block the Lobby's
+// own open transition for N subprocess round-trips, "Latenz-Gift" per the
+// bean's own wording) -- always dispatched as its own independent tea.Cmd,
+// batched via repoMetricsBatchCmd below.
+func repoMetricsCmd(repo string) tea.Cmd {
+	return func() tea.Msg {
+		c := &data.Client{RepoDir: repo}
+		beans, err := c.List()
+		if err != nil {
+			return repoMetricsMsg{repo: repo, err: err}
+		}
+		open := 0
+		for _, b := range beans {
+			if openBeanStatuses[b.Status] {
+				open++
+			}
+		}
+		return repoMetricsMsg{repo: repo, open: open, total: len(beans)}
+	}
+}
+
+// repoMetricsBatchCmd dispatches repoMetricsCmd for EVERY configured repo at
+// once, via tea.Batch (design note, bean bt-zhwl): bubbletea runs every
+// Cmd in a batch concurrently on its own goroutine, so N configured repos
+// cost one round-trip's worth of WALL-CLOCK latency, not N sequential
+// round-trips -- "bei 2-5 konfigurierten Repos unkritisch" per the bean's
+// own sizing note. Called both at Lobby-open time (openLobby,
+// view_lobby.go) and from Init() when bt starts DIRECTLY into the Lobby
+// (design decision d, app.go).
+func repoMetricsBatchCmd(repos []string) tea.Cmd {
+	cmds := make([]tea.Cmd, len(repos))
+	for i, r := range repos {
+		cmds[i] = repoMetricsCmd(r)
+	}
+	return tea.Batch(cmds...)
 }
 
 // mutationDoneMsg carries any mutation's outcome (E3, bean bt-dlgk: the

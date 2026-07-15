@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"beans-tui/internal/clip"
+	"beans-tui/internal/config"
 	"beans-tui/internal/data"
 
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -95,6 +96,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// newer showToast call may have already replaced it).
 		return m.handleToastExpired(msg)
 
+	case initialWatchMsg:
+		// E5 Task 6 (bean bt-zhwl): app.go Run()'s VERY FIRST watcher stop
+		// func, handed to the model asynchronously (see that type's own
+		// doc-stamp, messages.go) so the FIRST repo switch can retire it.
+		m.watchStop = msg.stop
+		return m, nil
+
+	case repoSwitchedMsg:
+		// E5 Task 6 (bean bt-zhwl): switchRepoCmd's outcome (Lobby enter,
+		// keyLobby/view_lobby.go) -- applyRepoSwitched below is the shared
+		// success/failure tail.
+		return m.applyRepoSwitched(msg)
+
+	case repoMetricsMsg:
+		// E5 Task 6 (bean bt-zhwl): ONE repo's async Offen/Gesamt figure
+		// (repoMetricsBatchCmd, messages.go) -- applyRepoMetrics below
+		// updates just that one map entry.
+		return m.applyRepoMetrics(msg)
+
 	case tea.MouseMsg:
 		// E5 Task 4 (Maus, bean bt-mne6): HERE, ahead of tea.KeyMsg below --
 		// handleMouse's (mouse.go) very first check is the Toast hit-test
@@ -140,6 +160,75 @@ func (m model) handleToastExpired(msg toastExpiredMsg) (tea.Model, tea.Cmd) {
 	if m.toast != nil && msg.seq == m.toast.seq {
 		m.toast = nil
 	}
+	return m, nil
+}
+
+// applyRepoSwitched is switchRepoCmd's (messages.go) shared success/failure
+// tail (E5 Task 6, bean bt-zhwl). Failure: the CURRENT session (m.client/
+// m.idx/m.watchStop) is left COMPLETELY untouched -- switchRepoCmd already
+// validated the target repo BEFORE ever touching the old watcher (design
+// note, messages.go), so there is nothing stale to clean up here, only a
+// status-line/Toast note to surface (the "Fehlerpfad darf die laufende
+// Session NICHT zerstören" constraint, bean bt-zhwl).
+//
+// Success: rebuilds the Index directly from msg.beans (no separate loadCmd
+// round-trip needed -- switchRepoCmd already ran client.List() once as part
+// of its own validation, re-running it here would be a redundant second
+// subprocess call for the exact same data) and resets EVERY navigation/
+// search/filter/detail-focus field a stale value from the OLD repo could
+// otherwise leak through as (Port devd selectProject's own full reset
+// breadth, view_home.go -- deliberately wider than the bean's own minimal
+// "expanded/cursorID/detailFocus" acceptance-checklist sketch: a stale
+// searchQuery/facet filter from the old repo could silently show an EMPTY
+// tree for the new one with no visible reason, which is a genuine
+// usability bug, not just cosmetic drift -- same class of finding as this
+// file's own m.searchActive/m.filterOpen capture-order precedents).
+func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, "Repo-Wechsel fehlgeschlagen: "+msg.err.Error(), "", nil, false)
+		return m, toastCmd
+	}
+
+	m.client = msg.client
+	m.repoDir = msg.repoDir
+	m.watchStop = msg.watchStop
+	m.watchUnavailable = msg.watchStop == nil // I04 precedent: degrade visibly, never silently
+	m.idx = data.NewIndex(msg.beans)
+	m.view = viewBrowseRepo
+	m.err = ""
+
+	// Port devd selectProject's reset-on-switch breadth (view_home.go).
+	m.expanded = map[string]bool{}
+	m.cursorID = ""
+	m.detailFocus = false
+	m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+	m.searchActive = false
+	m.searchInput.SetValue("")
+	m.searchQuery = ""
+	m.searchBleveIDs = nil
+	m.searchBleveFor = ""
+	m.searchBleveLoading = false
+	m.filterOpen = false
+	m = m.clearFacets()
+	m.backlogList = listState{}
+	m.reviewCursor = 0
+	m.reviewAccOpen = 0
+
+	_ = config.SetLastRepo(msg.repoDir) // best-effort persistence (Port devd DD2-273 RMW pattern, state.go) -- a failed write must not block the switch itself
+	return m, nil
+}
+
+// applyRepoMetrics applies ONE repoMetricsMsg (E5 Task 6, bean bt-zhwl) --
+// I01 copy-on-write: clones m.repoMetrics before adding the new entry, same
+// convention as every other model map field (types.go's own I01 doc-stamp).
+func (m model) applyRepoMetrics(msg repoMetricsMsg) (tea.Model, tea.Cmd) {
+	metrics := make(map[string]repoMetric, len(m.repoMetrics)+1)
+	for k, v := range m.repoMetrics {
+		metrics[k] = v
+	}
+	metrics[msg.repo] = repoMetric{open: msg.open, total: msg.total, err: msg.err, loaded: true}
+	m.repoMetrics = metrics
 	return m, nil
 }
 
@@ -681,6 +770,32 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyOverlay(msg)
 	}
 
+	// E5 Task 6 (bean bt-zhwl, design decision h): the Lobby fully captures
+	// input, same full-capture precedent as m.overlay/m.filterOpen above --
+	// but positioned HERE, AHEAD of the ctrl+k/`?`/keys.Picker bare MATCH
+	// checks below (an ERRATUM vs. bt-0l8c's own forward-looking Notes-für-
+	// T6 sketch, which listed keys.Picker's match check BEFORE the
+	// m.view==viewLobby state check). This mirrors the SAME "every
+	// full-capture STATE check precedes every bare keybind MATCH check"
+	// rule this file's own m.helpOpen doc-comment already established for a
+	// structurally identical bug (an open Command-Center filter racing a
+	// later-added `?` match check for the same key). Concretely: repoQuery
+	// -- the Lobby's own live filter over Settings.Repos -- must accept "p"
+	// as an ordinary filter character like any other (a real repo path is
+	// highly likely to contain the letter, e.g. this very repo's own
+	// "beans-tui-repository" via "rePository"); with keys.Picker checked
+	// first instead, every keystroke containing "p" would re-open
+	// (reset) the Lobby instead of ever reaching keyLobby's own textinput
+	// handling. ctrl+k/`?` are DELIBERATELY not special-cased to still
+	// reach the Lobby either (Port devd's own keyHome, view_home.go, which
+	// never lets ctrl+k or any other global shortcut leak into viewHome's
+	// typing state) -- once inside the Lobby, every key is the Lobby's own
+	// to interpret; keyLobby provides its own esc/q path (US-01 parity,
+	// that function's own doc-stamp).
+	if m.view == viewLobby {
+		return m.keyLobby(msg)
+	}
+
 	// E4 Task 1 (bean bt-jpgn, design decision h): the Command-Center's own
 	// open state fully captures, same precedent as filterOpen/m.overlay
 	// above.
@@ -725,6 +840,26 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// review route through Tree/Backlog instead, a documented scope cut).
 	if m.view == viewReviewCockpit {
 		return m.keyReviewCockpit(msg)
+	}
+
+	// E5 Task 6 (bean bt-zhwl, design decision h): `p` opens the Lobby from
+	// any OTHER (non-Lobby, non-Cockpit) view -- checked AFTER the Review-
+	// Cockpit capture block above, NOT alongside ctrl+k/`?` before it. This
+	// is a DELIBERATE second deviation from bt-0l8c's own forward-looking
+	// "wie ctrl+k/?" sketch: unlike ctrl+k/`?`, keyReviewCockpit
+	// (view_review_cockpit.go) ALREADY binds the bare "p" key to its own,
+	// pre-existing, design-spec §7 "explicit prev, alias of up" meaning --
+	// a real, direct collision ctrl+k/`?` simply don't have (the Cockpit has
+	// no competing binding for either of THOSE keys). Letting the global
+	// Picker win here would silently break that documented Cockpit
+	// shortcut (TestKeyReviewCockpitNavigationMovesCursor is the existing
+	// regression guard). The Lobby remains fully reachable FROM the Cockpit
+	// regardless -- via ctrl+k -> "repo: wechseln" (overlay_palette.go),
+	// the Command-Center is a genuine second entry point to the exact same
+	// openLobby handler -- so no capability is actually lost, only the bare
+	// single-key shortcut's reach into this one view.
+	if keybind.Matches(msg, keys.Picker) {
+		return m.openLobby()
 	}
 
 	switch msg.String() {

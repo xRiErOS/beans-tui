@@ -660,6 +660,10 @@ func (m model) View() string {
 		out = m.viewBacklog()
 	case viewReviewCockpit:
 		out = m.viewReviewCockpit()
+	case viewLobby:
+		// E5 Task 6 (bean bt-zhwl): the Lobby/Repo-Picker -- a full
+		// top-level view (view_lobby.go), not an overlay.
+		out = m.viewLobby()
 	default:
 		out = m.viewBrowseRepo()
 	}

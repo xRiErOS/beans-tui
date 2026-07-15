@@ -86,11 +86,14 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Modale/Overlays sind tastaturgesteuert -- Maus ignorieren (kein
-	// Fehlklick-Fokus), devd precedent update.go:470-474. m.view == viewLobby
-	// is NOT checked here yet -- that view does not exist until Task 6
-	// (Lobby V1), see Deviations/Notes for T5/T6.
+	// Fehlklick-Fokus), devd precedent update.go:470-474. m.view ==
+	// viewLobby closes the gap bt-mne6's own Notes-für-T6 flagged (T4 could
+	// not add this guard since viewLobby did not exist yet) -- E5 Task 6
+	// (bean bt-zhwl): the Lobby is keyboard-only in V1 (design-spec.md §9
+	// scope cut, no click-to-select row mapping), so a click anywhere on it
+	// is a no-op, same as every other full-capture state in this list.
 	if m.form != nil || m.overlay != overlayNone || m.paletteOpen || m.filterOpen ||
-		m.searchActive || m.helpOpen || m.confirmQuit {
+		m.searchActive || m.helpOpen || m.confirmQuit || m.view == viewLobby {
 		return m, nil
 	}
 

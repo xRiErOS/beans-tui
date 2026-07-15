@@ -27,6 +27,7 @@ const (
 	viewBrowseRepo    viewID = iota
 	viewBacklog              // V3 Backlog (E2 Task 5, bean bt-gzu6, design-spec.md §6 V3)
 	viewReviewCockpit        // V6 Review-Cockpit (E4 Task 3, bean bt-hxyo, design-spec.md §6 V6)
+	viewLobby                // V1 Lobby/Repo-Picker (E5 Task 6, bean bt-zhwl, design-spec.md §6 V1)
 )
 
 // orphanRootID is the synthetic node ID for the "(verwaist)" root that
@@ -451,6 +452,45 @@ type model struct {
 	// tea.NewProgram in the real app, so a live TUI session never observes
 	// the zero value in practice.
 	settings config.Settings
+
+	// Lobby / Repo-Picker (E5 Task 6, bean bt-zhwl, design decisions d/h):
+	// repoQuery/repoSearch/repoList mirror the Tree search's own shape
+	// (searchQuery/searchInput/a listState cursor) -- repoQuery is the live
+	// filter text over m.settings.Repos, repoSearch the backing
+	// textinput.Model (constructed once in newModel, like searchInput/
+	// tagInput), repoList the cursor over the CURRENTLY filtered result
+	// (filteredRepos(), view_lobby.go). watchStop holds the CURRENTLY
+	// running watcher's stop func -- the crux of the whole task: unlike E1-
+	// E4, where the watcher's stop lived ONLY as app.go Run()'s own local
+	// variable (invisible to Update()), a repo switch needs Update() itself
+	// to be able to retire the OLD watcher before the new one starts
+	// (switchRepoCmd, messages.go) -- so it now lives on the model instead.
+	// Populated two ways: the VERY FIRST watcher (app.go Run(), via the
+	// async initialWatchMsg -- see that type's own doc-stamp for why not a
+	// direct field write) and every subsequent repoSwitchedMsg
+	// (applyRepoSwitched, update.go). nil is a legitimate steady-state value
+	// (data.Watch failed to start, m.watchUnavailable carries that instead,
+	// I04 precedent) -- callers must nil-check before calling it (mirrors
+	// data.Watch's own stop being nil on error).
+	repoQuery  string
+	repoSearch textinput.Model
+	repoList   listState
+	watchStop  func()
+
+	// repoMetrics is the Lobby's own "Offen/Gesamt" column per configured
+	// repo (design note, bean bt-zhwl: "Kosten/Latenz-Abwägung dokumentieren"
+	// -- resolved as N independent async tea.Cmd dispatches, batched via
+	// tea.Batch at Lobby-open time, NOT a synchronous N-subprocess loop
+	// blocking the Lobby's own render; see repoMetricsCmd/repoMetricsBatchCmd,
+	// messages.go). Keyed by repo path (Settings.Repos entries are already
+	// the natural, unique key -- no separate ID needed). A missing entry
+	// means "still loading" (repoPickerBody renders "…" for it);
+	// repoMetric.err != nil means that ONE repo's `beans list` call failed
+	// (a single misconfigured/moved repo must not blank out the whole
+	// Lobby's metric column, each entry is independent). COPY-ON-WRITE (I01
+	// doc-stamp above) -- applyRepoMetrics (update.go) clones before adding
+	// an entry, same convention as every other model map field.
+	repoMetrics map[string]repoMetric
 }
 
 // newModel builds the initial (pre-load) App-Shell state.
@@ -465,6 +505,11 @@ func newModel(client *data.Client, repoDir string) model {
 	tagIn.Prompt = ""
 	tagIn.CharLimit = 40
 
+	repoIn := textinput.New() // E5 Task 6: Lobby's own repo-filter input
+	repoIn.Placeholder = "Repo filtern (Pfad)"
+	repoIn.Prompt = ""
+	repoIn.CharLimit = 200
+
 	return model{
 		view:        viewBrowseRepo,
 		client:      client,
@@ -472,5 +517,6 @@ func newModel(client *data.Client, repoDir string) model {
 		expanded:    map[string]bool{},
 		searchInput: ti,
 		tagInput:    tagIn,
+		repoSearch:  repoIn,
 	}
 }

@@ -143,3 +143,16 @@ func Watch(repoDir string, onChange func()) (stop func(), err error) {
 
 	return stop, nil
 }
+
+// StartWatch is switchRepoCmd's (internal/tui/messages.go) own call site for
+// starting a fresh watcher during a repo switch (E5 Task 6, bean bt-zhwl) --
+// an identically-shaped, purely pass-through wrapper around Watch (same
+// params, same contract, same synchronous/idempotent stop). Kept as its own
+// name (not just a second call to Watch inline at every switch-driven call
+// site) so "start a NEW watch because the PO just switched repos" reads
+// textually distinct from Watch's original steady-state caller (app.go's
+// Run, the very first watch of a session) at a glance -- no behavioral
+// difference between the two names, this is a readability seam only.
+func StartWatch(repoDir string, notify func()) (stop func(), err error) {
+	return Watch(repoDir, notify)
+}
