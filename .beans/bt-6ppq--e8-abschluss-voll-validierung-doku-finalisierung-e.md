@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-15T21:10:37Z
-updated_at: 2026-07-15T21:10:37Z
+updated_at: 2026-07-15T22:17:18Z
 parent: bt-ntoz
 blocked_by:
     - bt-czpf
@@ -54,3 +54,14 @@ docs(release): E8-Abschluss — Epic to-review, US-08/bt-gdkx-Status, B06-Sign-o
 - [ ] T1-T8 alle completed (verifiziert)
 - [ ] B06-Sign-off-Verweis im Epic-Bean bt-ntoz auffindbar
 - [ ] validation.md-Konsistenz verifiziert (kein Widerspruch Doku vs. Code)
+
+
+## Prelude aus E8-T3-Review (2026-07-16, Quelle: bt-qbyq-Review APPROVED, I01 non-blocking)
+
+esc-Audit-Tabelle (Commit 6d0a9fe-Body + bt-qbyq) deckt nur die 6 PO-benannten Bereiche.
+Reviewer fand 5 weitere esc-Sites — ALLE bereits 'eine Ebene zurück'-konform, kein Bug:
+view_browse_backlog.go:307 (Backlog→Repo) · box_confirm_create.go:147 (Confirm→Form) ·
+box_confirm_delete.go:123 (Abbruch) · forms_shared.go:164 (Form verwerfen, dokumentierte
+Design-Entscheidung) · overlay_shortcuts.go:63 (Help schließen).
+Auftrag Doku-Finalisierung: Audit-Tabelle im Epic-bean bt-ntoz (oder design-spec-Anhang)
+um diese 5 Sites ergänzen — reine Nachvollziehbarkeit.

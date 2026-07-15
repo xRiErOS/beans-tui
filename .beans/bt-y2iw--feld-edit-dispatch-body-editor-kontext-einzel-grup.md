@@ -1,11 +1,11 @@
 ---
 # bt-y2iw
 title: 'Feld-Edit-Dispatch: BODY-Editor-Kontext + Einzel-Gruppen-Value-Menues'
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T21:08:25Z
-updated_at: 2026-07-15T21:08:25Z
+updated_at: 2026-07-15T22:17:18Z
 parent: bt-ntoz
 blocked_by:
     - bt-qbyq
