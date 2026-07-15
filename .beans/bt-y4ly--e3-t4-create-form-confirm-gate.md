@@ -1,11 +1,11 @@
 ---
 # bt-y4ly
 title: E3 T4 — Create-Form + Confirm-Gate
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T00:26:37Z
-updated_at: 2026-07-15T00:26:37Z
+updated_at: 2026-07-15T02:00:20Z
 parent: bt-gzcu
 blocked_by:
     - bt-p1uz

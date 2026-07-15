@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-15T00:28:07Z
-updated_at: 2026-07-15T00:28:07Z
+updated_at: 2026-07-15T02:00:20Z
 parent: bt-gzcu
 blocked_by:
     - bt-sl45
@@ -44,3 +44,10 @@ Plan: docs/plans/v1-port/epic-E3-plan.md »Task 6«.
 - [ ] ETag-Konflikt-Regressionstest je Mutations-Stelle aus Task 1-6 (Tabelle im
       Plan, mind. 8 Fälle), alle grün
 - [ ] go test ./... -count=1 (2x) grün, gofmt/vet leer, go build -o bin/bt . ok
+
+
+## Übernommene Findings aus E3-T3-Review (in Sweep aufnehmen)
+- [ ] Vanished-mutTarget-Regressionstests für Parent- UND Blocking-Picker (Muster TestValueMenuTargetVanished…)
+- [ ] Test: Blocking-Zyklus via CLI → VALIDATION_ERROR-Shape gepinnt (bisher nur Kommentar)
+- [ ] Test: current-parent-out-of-eligibility → Cursor-Fallback 0
+- [ ] Doc-Note Picker-Stil-Divergenz (Header/▸ vs Accent/▌) in types.go o.ä.
