@@ -1,11 +1,11 @@
 ---
 # bt-e6q9
 title: 'Detail-Pane Kopfblock + Meta-Feldliste: Tags-Zeile + Marker-/Spalten-Fixes'
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T21:05:09Z
-updated_at: 2026-07-15T21:05:09Z
+updated_at: 2026-07-15T21:16:22Z
 parent: bt-ntoz
 ---
 
