@@ -4,8 +4,10 @@ title: E6 Validierung & Release — alle US nachgewiesen
 status: in-progress
 type: epic
 priority: high
+tags:
+    - to-review
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T13:51:13Z
+updated_at: 2026-07-15T19:51:35Z
 parent: bt-apmy
 blocked_by:
     - bt-5h4d
