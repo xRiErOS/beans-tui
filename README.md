@@ -33,7 +33,11 @@ PF-3, PF-4, PF-12), redundant pane titles were removed (PF-10), the Header/
 Footer keybinding split is complete with no duplication (PF-11), and
 Detail-Focus gained an enter-cascade (section → field → edit-overlay) plus
 symmetric `tab`/`shift+tab` focus pairing (PF-2, PF-5, PF-13). E6
-(Validierung & Release) is open — current state: `beans list --ready`.
+(Validierung & Release) is done: all 14 v1 user stories are validated
+against `design-spec.md` §10 — 13 PASS, 1 PARTIAL (US-08, tag visibility —
+see Known Issues below). Full evidence trail, the smoke-test appendix and
+the table of 8 open PO decisions (D01–D08) live in
+[`docs/plans/v1-port/validation.md`](docs/plans/v1-port/validation.md).
 
 **Review happens in the chat, not in the TUI.** A former Review-Cockpit view
 (`R`) was removed per PO decision (PF-14, E7 T1, 2026-07-15 — "contradicts
@@ -232,6 +236,19 @@ direct-start behavior stays.
 
 ## Known Issues
 
+See [`docs/plans/v1-port/validation.md`](docs/plans/v1-port/validation.md)
+for the full v1 acceptance record, including a table of 8 open PO decisions
+(D01–D08) — the three below carry a direct cross-reference; the remaining
+five (Backlog sort-mode indicator, `esc` in Detail-Focus, upstream ETag
+drift on fresh creates, and the Tag-Management-Page scope question) are
+tracked there only, not duplicated here.
+
+- **Tag-trio/tag visibility gap (open PO decision, validation.md D01):**
+  tags — including the review tag-trio `to-review`/`accepted`/`rejected` —
+  are not shown passively in the Tree or in the Detail Meta list; the facet
+  filter (`f`) is currently the only working path of the four the design
+  spec names (Tree/Detail/Filter/Search). Filtering and live-reload both
+  work correctly. See `bt-gdkx`.
 - **Pickers deliberately show every valid relation target:** the Parent-
   Picker (`a`) and Blocking-Picker (`B`) do NOT filter by status/archive
   visibility — archived/`completed`/`scrapped` beans stay selectable as
@@ -244,23 +261,24 @@ direct-start behavior stays.
   running when the Lobby is reopened — redundant, path-keyed subprocesses,
   no data mix-up. Accepted for v1; worth a context-cancel once many repos
   are configured.
-- **I01 (medium, open PO point, E7 T7-Review) — Header wraps/truncates at
-  ~80 columns:** the 7-item global Header can lose `q:quit` on a narrow
-  (~80-column) terminal, a common terminal size. Candidate fixes: wrap the
-  Header like the Footer already does, or a priority-truncation order.
-  Raised to the PO in the E7 epic review, not yet decided.
-- **I02 (low, open PO point, E7 T7-Review) — Overlay footer restates
-  Enter/Back despite a visible Header:** several overlay-local footer hints
-  (e.g. paletteLocalBindings/helpLocalBindings) repeat `enter`/`esc` even
-  though the Header already shows them. Possibly deliberate reinforcement
-  for a modal context; raised to the PO for a sign-off or an explicit
-  invariant test.
-- **D01 (open PO point, E7 T7-Review) — Footer scope is deliberately
-  narrow:** `browseRepoLocalBindings`/`backlogLocalBindings` intentionally
-  leave out `f`/`X`/`b`/`t`/`a`/`B`/`y` (Filter/Clear-Filter/Backlog/Tag-/
-  Parent-/Blocking-Picker/Yank) — all remain reachable and are documented in
-  the Help-Overlay (`?`), just not restated in the footer. The PO may choose
-  to widen this.
+- **I01 (medium, open PO point, E7 T7-Review; validation.md D04) — Header
+  wraps/truncates at ~80 columns:** the 7-item global Header can lose
+  `q:quit` on a narrow (~80-column) terminal, a common terminal size.
+  Candidate fixes: wrap the Header like the Footer already does, or a
+  priority-truncation order. Raised to the PO in the E7 epic review, not
+  yet decided.
+- **I02 (low, open PO point, E7 T7-Review; validation.md D05) — Overlay
+  footer restates Enter/Back despite a visible Header:** several
+  overlay-local footer hints (e.g. paletteLocalBindings/helpLocalBindings)
+  repeat `enter`/`esc` even though the Header already shows them. Possibly
+  deliberate reinforcement for a modal context; raised to the PO for a
+  sign-off or an explicit invariant test.
+- **D01 (open PO point, E7 T7-Review; validation.md D06) — Footer scope is
+  deliberately narrow:** `browseRepoLocalBindings`/`backlogLocalBindings`
+  intentionally leave out `f`/`X`/`b`/`t`/`a`/`B`/`y` (Filter/Clear-Filter/
+  Backlog/Tag-/Parent-/Blocking-Picker/Yank) — all remain reachable and are
+  documented in the Help-Overlay (`?`), just not restated in the footer.
+  The PO may choose to widen this.
 
 ## Development
 
