@@ -1,10 +1,11 @@
 ---
 # bt-wpn9
 title: E5 T2 — Help-Overlay ? (aus Keymap generiert)
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-15T09:04:24Z
-updated_at: 2026-07-15T09:04:24Z
+updated_at: 2026-07-15T09:50:47Z
 parent: bt-5h4d
 ---
 
@@ -40,3 +41,8 @@ Plan: docs/plans/v1-port/epic-E5-plan.md »Task 2«.
       + TestHelpGroupsCoverEveryBindingExactlyOnce weiterhin grün (Drift-
       Guard unangetastet, da keine neuen Bindings)
 - [ ] Commit `feat(tui): Help-Overlay ? aus zentraler Keymap generiert`
+
+
+## Prelude aus E5-T1-Review (PFLICHT, vor Help-Arbeit)
+- [ ] B01: update.go:244 (applyCreateDone reopen-Branch) — showToast ergänzen (mechanisch identisch zu den anderen 8 Sites; wichtigster Fehlerpfad: aktiver Create abgelehnt) + Mini-Test
+- [ ] I01: bean bt-6dts Deviations-Sektion korrigieren (applyLoaded fehlt in Aufzählung, Zählung 6 vs 7)
