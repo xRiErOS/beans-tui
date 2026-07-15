@@ -1,11 +1,11 @@
 ---
 # bt-qzwt
 title: E3 T7 — E3-Abschluss-Ritual
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T00:28:17Z
-updated_at: 2026-07-15T00:28:17Z
+updated_at: 2026-07-15T04:58:37Z
 parent: bt-gzcu
 blocked_by:
     - bt-ppzb
@@ -30,3 +30,10 @@ Plan: docs/plans/v1-port/epic-E3-plan.md »Task 7«.
 - [ ] Commit `docs: E3-Abschluss` (Refs: bt-gzcu-Task-ID)
 - [ ] Skill `ce-nsp-auto` -> Handover-Prompt für E4 (Command-Center & Review-
       Cockpit, bean-Suche via `beans list --json`)
+
+
+## Übernommene Findings aus E3-T6-Review (PFLICHT)
+- [ ] I01: epic-E3-plan.md Task-6-Sektion: ERRATUM-Pointer oben ergänzen (Kinder→Roots, nicht verwaist; Zeilen ~1039-1124 stale) — surgical
+- [ ] Q01: Empirisch prüfen: löscht beans delete auch blocking/blocked_by-Referenzen ANDERER beans still? Wenn ja: deleteBox-Warntext erweitern + Regressionstest; wenn nein: Doc-Note warum out-of-scope
+- [ ] I02: Singular-Fall '1 Kind verliert' (Grammatik-Branch + Test count==1)
+- [ ] I03 (optional): Delete-des-letzten-beans-Test
