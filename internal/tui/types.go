@@ -32,6 +32,29 @@ const (
 // (beans IDs are `<prefix>-<n-chars>`, never containing \x00).
 const orphanRootID = "\x00orphans"
 
+// overlayID enumerates E3's node-action overlays (Value-Menü, Tag-/Parent-/
+// Blocking-Picker, Create-/Delete-Confirm) -- mutually exclusive by
+// construction (design decision a2, bean bt-dlgk): ONE model.overlay field
+// (iota-enum) instead of six more bool fields alongside filterOpen/
+// confirmQuit. The two E2 bools are NOT retrofitted into this enum
+// (documented, deliberate coexistence) -- handleKey's capture order settles
+// precedence between them. m.form != nil (T4) is a third, separate capture
+// state (huh forms are not a menu overlay). T1 wires overlayValueMenu only;
+// T2/T3/T4/T6 add their cases to keyOverlay/composeOverlays as their
+// overlays land -- the full closed set is declared here upfront so a new
+// overlay is always a new `case`, never a new bool.
+type overlayID int
+
+const (
+	overlayNone overlayID = iota
+	overlayValueMenu
+	overlayTagPicker
+	overlayParentPicker
+	overlayBlockingPicker
+	overlayCreateConfirm
+	overlayDeleteConfirm
+)
+
 // I01 (bean bt-7jr8, T8-review): every map[string]bool field on model
 // (expanded, and E2's new filter facet sets) is COPY-ON-WRITE, never mutated
 // in place. Rationale: model is a value-receiver Elm architecture (design-
@@ -139,6 +162,22 @@ type model struct {
 	backlogSort string
 
 	confirmQuit bool
+
+	// E3 (bean bt-dlgk): node-action overlays -- mutually exclusive by
+	// construction (ONE enum field, not 6 bools; filterOpen/confirmQuit
+	// predate this and are deliberately not retrofitted, see overlayID's
+	// doc-stamp above). mutTarget is the bean ID the open overlay acts on,
+	// captured at open time; the ETag is NEVER captured -- every submit
+	// re-reads m.idx.ByID[mutTarget].ETag (beanETag, update.go) so
+	// watch-reloads between open and submit are automatically honored
+	// (design decision d). menu is the shared cursor for the value menu
+	// (T1) / future pickers (T2/T3) -- one open at a time, so one field
+	// suffices. menuItems is the value-menu's row list, built fresh at
+	// open time (openValueMenu, box_menu_value.go).
+	overlay   overlayID
+	mutTarget string
+	menu      listState
+	menuItems []valueMenuItem
 
 	// watchUnavailable is set once (I04, T8 Opus quality review) when
 	// data.Watch failed to start in app.go's Run: the App-Shell still works

@@ -6,6 +6,7 @@ package tui
 // update.go.
 
 import (
+	"errors"
 	"strings"
 
 	"beans-tui/internal/data"
@@ -39,8 +40,104 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case searchBleveResultMsg:
 		return m.applyBleveResult(msg), nil
 
+	case mutationDoneMsg:
+		// E3 (bean bt-dlgk): every Set*/Add*/Remove*/Delete mutation goes
+		// through this ONE case -- applyMutationResult below is the shared
+		// status-line + unconditional-reload tail (design decision d).
+		return m.applyMutationResult(msg.err)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+	}
+	return m, nil
+}
+
+// applyMutationResult is the shared tail every E3 mutation's mutationDoneMsg
+// runs through (design decision d, bean bt-dlgk): ALWAYS reloads
+// (loadCmd), success or failure alike -- a success must show the new state,
+// a failure (including a genuine ETag conflict) must resolve the now-stale
+// index rather than leave the UI showing a value that silently failed to
+// apply. errors.Is(err, data.ErrConflict) gets its own status-line wording;
+// Toast is E5 scope, m.err/the status line's Red slot (view.go statusBar)
+// is the interim feedback channel.
+func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
+	m.err = ""
+	if err != nil {
+		if errors.Is(err, data.ErrConflict) {
+			m.err = "Konflikt: Bean extern geändert — neu geladen"
+		} else {
+			m.err = err.Error()
+		}
+	}
+	return m, loadCmd(m.client)
+}
+
+// beanETag reads id's CURRENT etag straight from the live index (design
+// decision d, bean bt-dlgk) -- NEVER a copy captured when an overlay opened,
+// so a watch-reload between open and submit is automatically honored and a
+// "real" ETag conflict is only ever the narrow Submit<->Disk race window.
+// ok=false means id is no longer in the index (deleted by another agent, or
+// this reload's own applyLoaded already dropped it) -- callers must close
+// their overlay and surface a status-line note instead of firing a doomed
+// mutation against a bean that no longer exists.
+func (m model) beanETag(id string) (etag string, ok bool) {
+	if m.idx == nil {
+		return "", false
+	}
+	b, ok := m.idx.ByID[id]
+	if !ok {
+		return "", false
+	}
+	return b.ETag, true
+}
+
+// keyNodeAction routes the node-focused mutation keys (design-spec §7:
+// s/t/a/B/c/d/e -- Status/TagAssign/Assign/Blocking/Create/Delete/Editor).
+// Placed in handleKey directly after the Refresh check and BEFORE the
+// m.detailFocus dispatch, since node actions must act on m.focusedBean()
+// regardless of which pane currently has focus (focusedBean() already
+// covers Tree, Backlog AND detail focus, the same view-agnostic dispatcher
+// E2 Task 2 built) -- routing through keyDetailFocus/keyTree/keyBacklog
+// first would either shadow these keys entirely or require duplicating the
+// dispatch in three places. Create is the ONE key that works without a
+// focused bean (an empty repo can still be seeded); every other key here is
+// a handled-but-silent no-op with no focused bean (design decision, plan
+// »Task 1« Step 10: a user-facing "not yet" text would be throwaway work,
+// the remaining keys land in the immediately following tasks T2-T6).
+// Returns handled=false for every other key so callers fall through to the
+// view-specific dispatch.
+func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
+	switch {
+	case keybind.Matches(msg, keys.Create):
+		return true, m, nil // T4: Create works without a focused bean; stub here
+	case keybind.Matches(msg, keys.Status),
+		keybind.Matches(msg, keys.TagAssign),
+		keybind.Matches(msg, keys.Assign),
+		keybind.Matches(msg, keys.Blocking),
+		keybind.Matches(msg, keys.Delete),
+		keybind.Matches(msg, keys.Editor):
+		if m.focusedBean() == nil {
+			return true, m, nil // handled, silent no-op -- no node to act on
+		}
+		if keybind.Matches(msg, keys.Status) {
+			return true, m.openValueMenu(), nil
+		}
+		return true, m, nil // stub: T2 (TagAssign), T3 (Assign/Blocking), T5 (Editor), T6 (Delete)
+	}
+	return false, m, nil
+}
+
+// keyOverlay routes to the currently open node-action overlay's own key
+// handler (design decision a2: exactly one overlayID is active at a time).
+// Checked in handleKey ahead of the global ctrl+c/q/tab switch (same
+// full-capture precedent as m.searchActive/m.filterOpen just above it) so
+// e.g. "q" cannot leak through to a quit-request while a menu/picker is
+// open. T1 wires overlayValueMenu; T2/T3/T4/T6 add their cases as their
+// overlays land.
+func (m model) keyOverlay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch m.overlay {
+	case overlayValueMenu:
+		return m.keyValueMenu(msg)
 	}
 	return m, nil
 }
@@ -137,6 +234,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyFilterMenu(msg)
 	}
 
+	// E3 (bean bt-dlgk): the open node-action overlay (Value-Menü T1, Tag-/
+	// Parent-/Blocking-Picker T2/T3, Create-/Delete-Confirm T4/T6) fully
+	// captures input, same precedent as m.filterOpen/m.searchActive just
+	// above -- checked ahead of the ctrl+c/q/tab switch so those single keys
+	// cannot leak through while a menu/picker is open.
+	if m.overlay != overlayNone {
+		return m.keyOverlay(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c": // immediate quit, no confirm (bean bt-7jr8: distinct from `q`)
 		return m, tea.Quit
@@ -157,6 +263,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if keybind.Matches(msg, keys.Refresh) {
 		return m, loadCmd(m.client)
+	}
+
+	// E3 (bean bt-dlgk): node-focused mutation keys (s/t/a/B/c/d/e) --
+	// checked BEFORE the detailFocus/keyBacklog/keyTree dispatch below so
+	// they act on m.focusedBean() regardless of which pane has focus (see
+	// keyNodeAction's own doc comment for the full rationale).
+	if handled, nm, cmd := m.keyNodeAction(msg); handled {
+		return nm, cmd
 	}
 
 	if m.detailFocus {

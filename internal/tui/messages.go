@@ -46,6 +46,41 @@ func loadCmd(c *data.Client) tea.Cmd {
 	}
 }
 
+// mutationDoneMsg carries any mutation's outcome (E3, bean bt-dlgk: the
+// SHARED tail every Set*/Add*/Remove*/Delete mutation goes through -- no
+// per-mutation Msg types). Success and failure BOTH trigger an unconditional
+// reload (applyMutationResult, update.go): success must show the new state,
+// an ErrConflict must resolve the now-stale index (design decision d).
+type mutationDoneMsg struct{ err error }
+
+// mutateCmd wraps a single mutation call (a data.Client Set*/Add*/Remove*/
+// Delete method, already bound to its args via a closure) into the shared
+// mutationDoneMsg Cmd -- every E3 overlay (Value-Menü T1, Tag-/Parent-/
+// Blocking-Picker T2/T3, Delete T6) dispatches through this ONE producer.
+func mutateCmd(fn func() error) tea.Cmd {
+	return func() tea.Msg { return mutationDoneMsg{err: fn()} }
+}
+
+// createDoneMsg is the ONE exception to mutationDoneMsg (E3 Task 4, bean
+// bt-y4ly): Create needs the newly minted bean back (for the post-create
+// cursor jump), not just a bare error. Defined here in Task 1 alongside the
+// rest of the shared mutation infra (plan »Task 1« Files list) -- Task 4
+// wires the Update-dispatch case and the cursor-jump behavior once the
+// Create form exists.
+type createDoneMsg struct {
+	bean data.Bean
+	err  error
+}
+
+// createCmd runs data.Client.Create async, tagging the result as
+// createDoneMsg.
+func createCmd(c *data.Client, opts data.CreateOpts) tea.Cmd {
+	return func() tea.Msg {
+		b, err := c.Create(opts)
+		return createDoneMsg{bean: b, err: err}
+	}
+}
+
 // searchBleveResultMsg carries the result of an async data.Client.Search
 // call (E2 Task 3, bean bt-4ep2), tagged with the query it answers. Update
 // (applyBleveResult, update.go) discards it if m.searchQuery has moved on in

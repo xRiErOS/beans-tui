@@ -315,6 +315,26 @@ func TestBacklogEscReturnsToTree(t *testing.T) {
 	}
 }
 
+// --- B01 (E3 Task 1, bean bt-dlgk): X/FilterClear must also work in keyBacklog ---
+
+// TestKeyBacklogFilterClearResetsFacets guards B01 (E2-Abschluss carryover,
+// epic-bean bt-gzcu PFLICHT-item): X was wired as a direct top-level facet
+// reset in keyTree (update.go's keyTree FilterClear case) but the parallel
+// case was missing from keyBacklog -- X silently fell through to the nav-key
+// switch at the bottom of keyBacklog and did nothing, leaving active facets
+// in place while the Backlog view kept rendering the narrowed list. keyTree
+// parity: same clearFacets() helper both keyFilterMenu's own X-case and
+// keyTree's X-case already share (box_filter_facets.go).
+func TestKeyBacklogFilterClearResetsFacets(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.view = viewBacklog
+	m.filterStatus = map[string]bool{"todo": true}
+	nm := step(t, m, runeMsg('X'))
+	if nm.filterActive() {
+		t.Fatal("X in Backlog view must clear all facets (B01, keyTree parity)")
+	}
+}
+
 // --- windowing reuse ---
 
 // TestBacklogWindowingReusesExistingWindowAround guards that a Backlog

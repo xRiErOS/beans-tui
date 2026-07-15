@@ -39,30 +39,30 @@ var facetHead = map[string]string{
 }
 
 // buildFilterItems assembles the menu row list: fixed Status/Type/Priority
-// facets (the beans enums, design-spec.md §4 -- 5 values each, listed in the
-// same canonical tier order data/index.go's statusOrder/typeOrder/
-// priorityOrder already define, so the menu reads top-to-bottom in the same
-// "most urgent first" order the rest of the app sorts by) plus the dynamic
-// Tag facet collected from the currently loaded beans.
+// facets (the beans enums, design-spec.md §4 -- 5 values each) plus the
+// dynamic Tag facet collected from the currently loaded beans.
+//
+// Enum single source (design decision b, E3 Task 1, bean bt-dlgk): the
+// former 15 hardcoded rows are now three loops over data.StatusValues()/
+// TypeValues()/PriorityValues() -- the SAME canonical tier order
+// data/index.go's statusOrder/typeOrder/priorityOrder derive from, so the
+// menu still reads top-to-bottom in "most urgent first" order, and this menu
+// can never drift out of sync with box_menu_value.go's combined value menu
+// (E3), which consumes the exact same accessors. Type labels are lowercase
+// now (previously "Milestone"/"Epic"/... capitalized) -- a deliberate
+// consistency fix with status/priority's already-lowercase labels; no golden
+// test covers the filter box (box_filter_facets_test.go only asserts facet
+// counts/values, not label casing).
 func (m model) buildFilterItems() []ffItem {
-	items := []ffItem{
-		{"status", "in-progress", "in-progress"},
-		{"status", "todo", "todo"},
-		{"status", "draft", "draft"},
-		{"status", "completed", "completed"},
-		{"status", "scrapped", "scrapped"},
-
-		{"type", "milestone", "Milestone"},
-		{"type", "epic", "Epic"},
-		{"type", "bug", "Bug"},
-		{"type", "feature", "Feature"},
-		{"type", "task", "Task"},
-
-		{"priority", "critical", "critical"},
-		{"priority", "high", "high"},
-		{"priority", "normal", "normal"},
-		{"priority", "low", "low"},
-		{"priority", "deferred", "deferred"},
+	var items []ffItem
+	for _, v := range data.StatusValues() {
+		items = append(items, ffItem{"status", v, v})
+	}
+	for _, v := range data.TypeValues() {
+		items = append(items, ffItem{"type", v, v})
+	}
+	for _, v := range data.PriorityValues() {
+		items = append(items, ffItem{"priority", v, v})
 	}
 	for _, tag := range m.tagFilterOptions() {
 		items = append(items, ffItem{"tag", tag, tag})

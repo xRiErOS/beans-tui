@@ -121,31 +121,49 @@ func (idx *Index) WithTag(tag string) []*Bean {
 // read custom status/priority/type names from .beans.yml, and upstream's
 // manual fractional-order tier is deliberately not implemented here (out of
 // scope per plan Task 3).
+//
+// statusValues/typeValues/priorityValues are the canonical, ORDERED enum
+// single source (design decision b, E3 Task 1, bean bt-dlgk): beans 0.4.2's
+// fixed enums in tier order. The rank maps below are DERIVED from these
+// slices (position == rank), not maintained as a second, independently
+// hand-authored order -- box_filter_facets.go's buildFilterItems and E3's
+// combined value menu (box_menu_value.go) both consume the exported
+// accessors (StatusValues/TypeValues/PriorityValues) instead of
+// re-hardcoding the values a second time.
 var (
-	statusOrder = map[string]int{
-		"in-progress": 0,
-		"todo":        1,
-		"draft":       2,
-		"completed":   3,
-		"scrapped":    4,
-	}
+	statusValues   = []string{"in-progress", "todo", "draft", "completed", "scrapped"}
+	typeValues     = []string{"milestone", "epic", "bug", "feature", "task"}
+	priorityValues = []string{"critical", "high", "normal", "low", "deferred"}
 
-	priorityOrder = map[string]int{
-		"critical": 0,
-		"high":     1,
-		"normal":   2,
-		"low":      3,
-		"deferred": 4,
-	}
-
-	typeOrder = map[string]int{
-		"milestone": 0,
-		"epic":      1,
-		"bug":       2,
-		"feature":   3,
-		"task":      4,
-	}
+	statusOrder   = rankMap(statusValues)
+	typeOrder     = rankMap(typeValues)
+	priorityOrder = rankMap(priorityValues)
 )
+
+// rankMap builds a value->position lookup from an ordered slice (position ==
+// rank) -- the single place statusOrder/typeOrder/priorityOrder derive their
+// ranking from their respective ordered slice above.
+func rankMap(vals []string) map[string]int {
+	m := make(map[string]int, len(vals))
+	for i, v := range vals {
+		m[v] = i
+	}
+	return m
+}
+
+// StatusValues returns the canonical beans status enum in tier order. A
+// defensive copy -- callers must not be able to mutate the package-level
+// slice (and thus every future caller's view of it) through the returned
+// value.
+func StatusValues() []string { return append([]string(nil), statusValues...) }
+
+// TypeValues returns the canonical beans type enum in tier order (defensive
+// copy, see StatusValues).
+func TypeValues() []string { return append([]string(nil), typeValues...) }
+
+// PriorityValues returns the canonical beans priority enum in tier order
+// (defensive copy, see StatusValues).
+func PriorityValues() []string { return append([]string(nil), priorityValues...) }
 
 // sortBeans sorts in place by Status -> Priority -> Type -> Title
 // (case-insensitive), matching beans upstream ordering. This is the single

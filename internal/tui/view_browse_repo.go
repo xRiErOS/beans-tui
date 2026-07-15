@@ -554,6 +554,29 @@ func (m model) repoLabel() string {
 	return filepath.Base(m.repoDir)
 }
 
+// composeOverlays layers every floating overlay onto out in a fixed
+// z-priority order (painter's algorithm, placeOverlay) -- E3 Task 1
+// extraction (bean bt-dlgk): viewBrowseRepo and viewBacklog used to
+// duplicate the filterOpen/confirmQuit block; a new overlay is now wired in
+// exactly ONE place instead of two. Order: filter menu first, then the
+// node-action overlay (design decision a2 -- EXACTLY one overlayID active
+// at a time), then huh forms (T4/T5, m.form != nil is its own separate
+// capture state, not part of the overlayID enum), quit-confirm LAST (it can
+// interrupt anything, same as its pre-extraction position in both views).
+func (m model) composeOverlays(out string, w, h int) string {
+	if m.filterOpen {
+		out = placeOverlay(out, m.treeFilterBox(), w, h)
+	}
+	switch m.overlay {
+	case overlayValueMenu:
+		out = placeOverlay(out, m.valueMenuBox(), w, h)
+	}
+	if m.confirmQuit {
+		out = placeOverlay(out, m.quitBox(), w, h)
+	}
+	return out
+}
+
 // View dispatches on viewID (devd port convention: enum + switch in view).
 // E2 Task 5 (bean bt-gzu6) adds the first sibling case (viewBacklog); later
 // epics grow this switch further, never branches.
@@ -585,7 +608,7 @@ func (m model) viewBrowseRepo() string {
 	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
 	head := breadcrumb(m.repoLabel(), "Browse", globalHint, innerW)
 
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh}) + "  tab:focus"
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh, keys.Status}) + "  tab:focus"
 	localKeys := footer(localHint, innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
@@ -625,11 +648,5 @@ func (m model) viewBrowseRepo() string {
 	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
 	out := outerBorder(content, innerW, true)
 
-	if m.filterOpen {
-		out = placeOverlay(out, m.treeFilterBox(), w, h)
-	}
-	if m.confirmQuit {
-		out = placeOverlay(out, m.quitBox(), w, h)
-	}
-	return out
+	return m.composeOverlays(out, w, h)
 }

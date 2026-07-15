@@ -215,7 +215,7 @@ func (m model) viewBacklog() string {
 	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
 	head := breadcrumb(m.repoLabel(), "Backlog", globalHint, innerW)
 
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog}) + "  tab:focus"
+	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status}) + "  tab:focus"
 	localKeys := footer(localHint, innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
@@ -249,13 +249,7 @@ func (m model) viewBacklog() string {
 	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
 	out := outerBorder(content, innerW, true)
 
-	if m.filterOpen {
-		out = placeOverlay(out, m.treeFilterBox(), w, h)
-	}
-	if m.confirmQuit {
-		out = placeOverlay(out, m.quitBox(), w, h)
-	}
-	return out
+	return m.composeOverlays(out, w, h)
 }
 
 // keyBacklog drives the Backlog view: up/down move backlogList, enter opens
@@ -284,6 +278,13 @@ func (m model) keyBacklog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openSearchInput()
 	case keybind.Matches(msg, keys.Filter):
 		return m.openFilterMenu()
+	case keybind.Matches(msg, keys.FilterClear):
+		// B01 (E2-Abschluss-Übernahme, Epic-Body bt-gzcu): X-Direct-Clear wirkte
+		// nur in keyTree (update.go) -- gleicher clearFacets()-Helper, danach
+		// Längen-Resync gegen die JETZT breitere Sicht.
+		m = m.clearFacets()
+		m.backlogList.setLen(len(m.backlogVisible()))
+		return m, nil
 	case keybind.Matches(msg, keys.Backlog), keybind.Matches(msg, keys.Back):
 		m.view = viewBrowseRepo
 		return m, nil

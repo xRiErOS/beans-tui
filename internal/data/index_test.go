@@ -1,6 +1,9 @@
 package data
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // idsOf extracts IDs in order, for compact order assertions.
 func idsOf(beans []*Bean) []string {
@@ -154,6 +157,76 @@ func TestPriorityRankEmptyDefaultsNormal(t *testing.T) {
 	}
 	if !(PriorityRank("critical") < PriorityRank("high") && PriorityRank("high") < PriorityRank("normal")) {
 		t.Fatal("PriorityRank does not reproduce the documented tier order")
+	}
+}
+
+// --- Enum single source (E3 Task 1, bean bt-dlgk, design decision b):
+// StatusValues/TypeValues/PriorityValues are the canonical ORDERED slices
+// the box_filter_facets.go/box_menu_value.go menus both consume instead of
+// re-hardcoding the beans enums; statusOrder/typeOrder/priorityOrder are
+// DERIVED from them (position == rank), not maintained as a second,
+// independently-ordered map. ---
+
+func TestStatusValuesCanonicalTierOrder(t *testing.T) {
+	want := []string{"in-progress", "todo", "draft", "completed", "scrapped"}
+	if got := StatusValues(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("StatusValues() = %v, want %v", got, want)
+	}
+}
+
+func TestTypeValuesCanonicalTierOrder(t *testing.T) {
+	want := []string{"milestone", "epic", "bug", "feature", "task"}
+	if got := TypeValues(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("TypeValues() = %v, want %v", got, want)
+	}
+}
+
+func TestPriorityValuesCanonicalTierOrder(t *testing.T) {
+	want := []string{"critical", "high", "normal", "low", "deferred"}
+	if got := PriorityValues(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("PriorityValues() = %v, want %v", got, want)
+	}
+}
+
+// TestValueSlicesAreDefensiveCopies guards that a caller mutating the
+// returned slice can never corrupt the package-level canonical order for the
+// next caller (StatusValues/TypeValues/PriorityValues each return a fresh
+// copy).
+func TestValueSlicesAreDefensiveCopies(t *testing.T) {
+	StatusValues()[0] = "mutated"
+	if StatusValues()[0] != "in-progress" {
+		t.Fatal("caller mutation of StatusValues()'s returned slice leaked into the next call")
+	}
+	TypeValues()[0] = "mutated"
+	if TypeValues()[0] != "milestone" {
+		t.Fatal("caller mutation of TypeValues()'s returned slice leaked into the next call")
+	}
+	PriorityValues()[0] = "mutated"
+	if PriorityValues()[0] != "critical" {
+		t.Fatal("caller mutation of PriorityValues()'s returned slice leaked into the next call")
+	}
+}
+
+// TestOrderMapsDerivedFromValueSlices is the Single-Source-Guard: the rank
+// maps behind StatusRank/PriorityRank/sortBeans MUST be derived from the
+// exported ordered slices -- a bean's position in StatusValues() must equal
+// its StatusRank, or the two could silently drift apart into two competing
+// "canonical" orders.
+func TestOrderMapsDerivedFromValueSlices(t *testing.T) {
+	for i, s := range StatusValues() {
+		if StatusRank(s) != i {
+			t.Fatalf("StatusRank(%q)=%d, want %d (position in StatusValues())", s, StatusRank(s), i)
+		}
+	}
+	for i, p := range PriorityValues() {
+		if PriorityRank(p) != i {
+			t.Fatalf("PriorityRank(%q)=%d, want %d (position in PriorityValues())", p, PriorityRank(p), i)
+		}
+	}
+	for i, ty := range TypeValues() {
+		if rank(typeOrder, ty) != i {
+			t.Fatalf("typeOrder[%q]=%d, want %d (position in TypeValues())", ty, rank(typeOrder, ty), i)
+		}
 	}
 }
 
