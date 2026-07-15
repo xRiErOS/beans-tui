@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:27:21Z
+updated_at: 2026-07-15T14:28:42Z
 parent: bt-apmy
 ---
 
@@ -129,3 +129,8 @@ Scope des Removals:
 - E6-Auswirkung: US-08-Validierung gegen NEUE Definition
 
 Planner-Hinweis Reihenfolge: Removal FRÜH einplanen (idealerweise erster Task) — dann müssen Glyphen-/Footer-/String-Umbauten das Cockpit nicht mehr mitziehen (spart Arbeit in allen Folge-Tasks).
+
+
+## PO-Präzisierung zu PF-14 (2026-07-15): Review-Tag-Trio
+
+Chat-Review steuert Rework über DREI Tags (kebab-case normalisiert): **to-review** (Agent meldet fertig) · **accepted** (PO nimmt an — Chat/CLI setzt Tag um bzw. schließt ab) · **rejected** (PO weist zurück → Agent-Rework). Ersetzt die bisherige Zwei-Tag-Konvention (to-review/rework). design-spec §5 entsprechend: Tag-Trio dokumentieren, KEINE TUI-Interaktion dafür — nur Sichtbarkeit (Tags im Tree/Detail/Filter sichtbar wie jedes Tag).
