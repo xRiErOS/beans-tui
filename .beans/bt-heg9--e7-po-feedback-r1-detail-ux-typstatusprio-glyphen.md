@@ -4,8 +4,10 @@ title: 'E7 — PO-Feedback R1: Detail-UX + Typ/Status/Prio-Glyphen'
 status: todo
 type: epic
 priority: high
+tags:
+    - to-review
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:30:06Z
+updated_at: 2026-07-15T18:48:32Z
 parent: bt-apmy
 ---
 
@@ -139,3 +141,40 @@ Chat-Review steuert Rework über DREI Tags (kebab-case normalisiert): **to-revie
 ## PO-Nachtrag 9 (2026-07-15): p in Header-Globals
 
 **PF-11-Ergänzung:** Keybinding 'p' (Repo-Picker, global von überall) fehlt in der Header-Global-Liste oben rechts. Soll: 'ctrl+r:Reload · ?:help · q:quit · esc:back · enter:open/confirm · p:repos' (Label-Wortlaut Englisch, Planner wählt konsistent kurz). Generell-Regel: ALLE globalen Bindings erscheinen oben rechts — auch ctrl+k (Command-Center) prüfen, das fehlt dort heute ebenfalls.
+
+
+## Epic-Review-Zusammenfassung (für PO)
+
+Stand 2026-07-15, T8-Abschluss (bean `bt-dsog`). Alle 13 PF-Design-Punkte
+(PF-1..PF-8, PF-10..PF-14 — PF-9 existiert nicht, in design-spec.md/PO-
+Nachträgen nie vergeben, keine Lücke im Scope) implementiert, per Golden-
+Tests + Voll-Gate (2x `go test ./...`, `-race`, Goldens `-count=2`) +
+tmux-Gesamt-Smoke (Scratch-Repo, Temp-HOME) belegt.
+
+| PF | Inhalt | Task | Status/Beleg |
+|---|---|---|---|
+| PF-1 | Meta-Sektion immer offen, nicht kollabierbar | T4 (`bt-kyj5`) | 🟢 Smoke: `[1] META ▾` bleibt immer expandiert, nie `▸` |
+| PF-2 | Zifferntasten 1-9 springen/wechseln Accordion-Sektionen direkt | T6 (`bt-t1uy`) | 🟢 Smoke: `1`/`3` springen direkt zu META/RELATIONS, Section auto-expandiert |
+| PF-3 | Kopfblock rechts (bean-id/title/type-status-prio) | T4 | 🟢 Smoke: Detail-Pane zeigt Kopfblock über der Accordion, mit PF-4 verschmolzen (PO-Antwort Q01) |
+| PF-4 | Meta-Feldliste (▷/▶-Cursor, 6 Felder) | T4 | 🟢 Smoke: title/status/type/priority/created_at/updated_at mit stabilem ▷/▶-Marker |
+| PF-5 | Enter-Kaskade (Sektion→Feld→Edit-Overlay/Relations-Jump), `tab` bleibt einziger Detail-Fokus-Einstieg | T6 | 🟢 Smoke: `enter` auf status öffnet Value-Menu, `enter` auf Relations-Feld springt zur verlinkten Bean |
+| PF-6 | Typ/Status/Prio als 1 kapitalisierter Buchstabe/Glyph + Farbe | T2 (`bt-2af1`) | 🟢 Smoke (capture -e, alle 5 Typen/Status/5 Prioritäten Farben verifiziert): M blue·E mauve·F mauve·T sky·B red; d blue·t green·i yellow·c/s subtext; ‼red·!yellow··text·↓/→subtext |
+| PF-7 | UI-Sprache durchgängig Englisch | T3 (`bt-w9o8`) | 🟢 Smoke (Filter/Palette/Create/Delete/Tags/Parent/Blocking/Settings/Help/Lobby) + README jetzt vollständig Englisch (Q01 aus T3-Review umgesetzt) |
+| PF-8 | Command-Center-Schema `verb entity`, ohne Doppelpunkt | T3 | 🟢 Smoke: „set status/tags/parent/blocking/title", „delete bean", „create bean", „go to backlog/browse/repo picker/settings", „filter facets", „search beans", „reload data" |
+| PF-10 | Redundante Pane-Titel entfernt (Tree/Backlog/Detail) | T5 (`bt-uyzf`) | 🟢 Smoke: erste Zeile im Pane ist direkt die Suchzeile, kein „Tree"/„Backlog"/„Detail"-Titel mehr |
+| PF-11 | Header/Footer-Keybinding-Split ohne Dopplung, `p`/`ctrl+k` im Header | T7 (`bt-m6at`) | 🟢 Smoke: Header exakt 7 Globals (`ctrl+r·ctrl+k·p·?·esc·enter·q`), Footer kontextsensitiv (Filter/Value-Menu/Tag-/Parent-/Blocking-Picker je eigene Bindings), kein Overlap |
+| PF-12 | Kein Layout-Shift bei Selektion (fester Gutter) | T4 | 🟢 Code-Beleg (`metaSectionBody`: Marker IMMER `▷ ` oder `▶ `, nie ausgelassen) + Smoke visuell bestätigt |
+| PF-13 | `tab`/`shift+tab` und `←`/`→` symmetrisch gepaart | T6 | 🟢 Smoke: `shift+tab` springt deterministisch zurück zu Tree (Border-Fokusfarbe verifiziert), `tab` bleibt bidirektionaler Toggle |
+| PF-14 | Review-Cockpit vollständig entfernt | T1 (`bt-wmtb`) | 🟢 Smoke: `R` ist no-op (kein Crash, View bleibt Browse), Help-Overlay zeigt keine Reviews-Bindings mehr |
+
+**Zusätzlich verifiziert (T8-Scope, kein eigener PF-Punkt):** Backlog-`enter`
+ist dokumentierter No-op (T6-Review B01) — Smoke bestätigt (kein
+Fokuswechsel, Border bleibt bei Tree/Backlog-Liste).
+
+### Offene PO-Punkte (Entscheidungstabelle)
+
+| Code | Hintergrund | Entscheidung | Empfehlung | Status |
+|---|---|---|---|---|
+| D01 | Footer zeigt in Browse/Backlog absichtlich NICHT `f`/`X`/`b`/`t`/`a`/`B`/`y` — alle bleiben über Help-Overlay (`?`) erreichbar/dokumentiert | PO entscheidet: Footer-Umfang so belassen (schlank) oder erweitern | Belassen — Footer bliebe sonst auf 80 Spalten noch enger (siehe I01); Help-Overlay deckt Vollständigkeit bereits ab | 🟣 Offen |
+| I01 | 80-Spalten-Terminal (gängiges Maß) truncatet den 7-Globals-Header, `q:quit` kann abgeschnitten werden | PO entscheidet: Header umbrechen wie Footer, oder Prioritäts-Truncation-Reihenfolge | Header analog zum Footer umbrechen (Konsistenz, kein Informationsverlust) | 🟣 Offen |
+| I02 | Overlay-lokale Footer-Hints (z.B. Palette/Help) wiederholen `enter`/`esc`, obwohl der Header sie bereits zeigt | PO entscheidet: gewollte Verstärkung (Sign-off) oder als Invarianten-Test/Fix behandeln | Sign-off — Redundanz in einem Overlay-Kontext ist visuell verstärkend, kein funktionaler Schaden | 🟣 Offen |

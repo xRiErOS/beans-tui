@@ -758,33 +758,45 @@ Filter-Menü, das Q04 auslöste.
 
 **blocked_by:** T5, T6, T7
 
-- [ ] **Step 1: Voller Regressionslauf.** `command go build -o bin/bt .`,
+- [x] **Step 1: Voller Regressionslauf.** `command go build -o bin/bt .`,
   `command go test ./... -race`, `command go test ./... -short` (2x),
   `command gofmt -l .` leer, `command go vet ./...` leer.
-- [ ] **Step 2: E6-Blocking bestätigen (Verifikation, keine Aktion nötig).**
+  **ERWEITERT gegenüber Plan-Text** (T8-Task-Brief verlangte mehr als
+  `-short`): `command go test ./...` (voll, ohne `-short`) 2× hintereinander
+  grün (~136s/~137s), zusätzlich `-race` grün (~140s), alle 5 Golden-Test-
+  Funktionen (`TestChromeGolden`/`TestTreeGolden`/
+  `TestTreeGoldenDeterministic`/`TestBacklogGolden`/
+  `TestBacklogGoldenDeterministic`) mit `-count=2` grün, Build/gofmt/vet
+  sauber. Voller Beleg im bean `bt-dsog` Abschnitt „Voll-Gate-Beleg".
+- [x] **Step 2: E6-Blocking bestätigen (Verifikation, keine Aktion nötig).**
   `beans show bt-wm4w --json | jq .blocked_by` und `beans show bt-9yvh
   --json | jq .blocked_by` → beide enthalten `bt-heg9` (bereits vom PO/D03
   gesetzt) — im Commit-Body bestätigen.
-- [ ] **Step 3: US-08/US-12-Hinweis für E6.** Kurzer Vermerk im
+- [x] **Step 3: US-08/US-12-Hinweis für E6.** Kurzer Vermerk im
   Commit-Body: die E6-Validierung von US-08 (jetzt „Review-Signal sichtbar"
   statt „Cockpit fahren", PF-14) UND US-12 (design-spec.md §10, „devd-
   Look") müssen gegen den NEUEN Stand (PF-1…PF-14) laufen —
   `validation.md` (E6 Task 3) referenziert `design-spec.md §5`/§15 als
   Quelle.
-- [ ] **Step 4: Epic-Ritual.** `beans update bt-heg9 --tag to-review`
+- [x] **Step 4: Epic-Ritual.** `beans update bt-heg9 --tag to-review`
   (Epic — PO-Gate, Agent setzt NIE `completed`).
-- [ ] **Step 5: Task-beans dieses Eposs (T1-T7) auf `completed`**
-  (agent-abschließbar, NICHT das Epic selbst).
-- [ ] **Step 6:** `docs/SSTD.md` — Pointer-Update nur falls sich
-  Referenzen geändert haben (voraussichtlich unverändert).
-- [ ] **Step 7:** Commit `docs(release): E7-Abschluss — Epic to-review,
-  E6-Blocking bestätigt`.
+- [x] **Step 5: Task-beans dieses Eposs (T1-T7) auf `completed`**
+  (agent-abschließbar, NICHT das Epic selbst) — bereits vor T8 erledigt,
+  hier verifiziert (`beans list`: alle 7 Status `C`).
+- [x] **Step 6:** `docs/SSTD.md` — Pointer-Update nur falls sich
+  Referenzen geändert haben. Geprüft: unverändert, kein Update nötig.
+- [x] **Step 7:** Commit `docs(release): E7-Abschluss — Epic to-review,
+  E6-Blocking bestätigt`. **ERWEITERT:** zusätzlich Prelude-Commit (T7-
+  Review-Nachträge), README-Commit (vollständig Englisch, Q01 aus
+  T3-Review umgesetzt) und ein tmux-Gesamt-Smoke aller E7-Features
+  (Scratch-Repo, Temp-HOME) — beides nicht im ursprünglichen Plan-Text,
+  aber Teil des T8-Task-Briefs; Details/Matrix im bean `bt-dsog`.
 
 **Akzeptanz-Checkliste:**
-- [ ] Voller Testlauf (inkl. `-race`) grün, gofmt/vet leer
-- [ ] `bt-heg9` trägt Tag `to-review`, ist NICHT `completed`
-- [ ] `bt-wm4w`/`bt-9yvh` bestätigt `blocked_by: [bt-heg9]`
-- [ ] T1-T7 alle `completed`
+- [x] Voller Testlauf (inkl. `-race`) grün, gofmt/vet leer
+- [x] `bt-heg9` trägt Tag `to-review`, ist NICHT `completed`
+- [x] `bt-wm4w`/`bt-9yvh` bestätigt `blocked_by: [bt-heg9]`
+- [x] T1-T7 alle `completed`
 
 ---
 
