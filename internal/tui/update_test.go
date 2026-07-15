@@ -270,7 +270,7 @@ func TestBeansLoadedErrorSurfacesInStatusLine(t *testing.T) {
 
 // TestOrphanShownUnderSyntheticRoot guards the MANDATORY orphan rule (bean
 // bt-7jr8 / T3-review Q01): a bean with an unresolvable parent must appear
-// under the synthetic "(verwaist)" root, never silently dropped, and never
+// under the synthetic "(orphaned)" root, never silently dropped, and never
 // leak into the real Roots() top level (its Parent is non-empty).
 func TestOrphanShownUnderSyntheticRoot(t *testing.T) {
 	beans := append(fixtureBeans(), data.Bean{
@@ -287,7 +287,7 @@ func TestOrphanShownUnderSyntheticRoot(t *testing.T) {
 		}
 	}
 	if orphanRoot == nil {
-		t.Fatal("orphan root node ('(verwaist)') missing from the tree -- orphan silently dropped")
+		t.Fatal("orphan root node ('(orphaned)') missing from the tree -- orphan silently dropped")
 	}
 	if orphanRoot.id != orphanRootID {
 		t.Errorf("orphan root id = %q, want the orphanRootID sentinel", orphanRoot.id)
@@ -428,7 +428,7 @@ func TestTabTogglesDetailFocusAndPaneAccent(t *testing.T) {
 // TestCycleBeansShowUnderOrphanRoot guards B02: beans trapped in a pure
 // parent cycle (A -> B -> A) are unreachable from any root, but their Parent
 // DOES resolve (to each other) -- so collectOrphans alone would never catch
-// them either. Both must still surface under the synthetic "(verwaist)"
+// them either. Both must still surface under the synthetic "(orphaned)"
 // root, and flattening a pure cycle must return promptly (no hang).
 func TestCycleBeansShowUnderOrphanRoot(t *testing.T) {
 	beans := []data.Bean{
@@ -460,7 +460,7 @@ func TestCycleBeansShowUnderOrphanRoot(t *testing.T) {
 		seen[n.id] = true
 	}
 	if !seen["cyc-a"] || !seen["cyc-b"] {
-		t.Fatalf("cycle beans not both visible under (verwaist): nodes=%v", nodeIDs(nodes))
+		t.Fatalf("cycle beans not both visible under (orphaned): nodes=%v", nodeIDs(nodes))
 	}
 }
 
@@ -734,7 +734,7 @@ func TestDetailFocusLeftAtSectionLevelExitsDetailFocus(t *testing.T) {
 
 // TestKeyDetailFocusOnOrphanRootExitsGracefully is a defensive nil-safety
 // test for focusedBean()'s orphan-guard: cursoring the synthetic
-// "(verwaist)" root itself (not a real bean) must never panic and must exit
+// "(orphaned)" root itself (not a real bean) must never panic and must exit
 // detail focus rather than getting stuck.
 func TestKeyDetailFocusOnOrphanRootExitsGracefully(t *testing.T) {
 	beans := append(fixtureBeans(), data.Bean{
@@ -908,7 +908,7 @@ func TestRepoSwitchClearsToast(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // applyRepoSwitched's best-effort config.SetLastRepo must not touch the real $HOME
 
 	m := fixtureModel(t, fixtureBeans())
-	m, _ = m.showToast(toastError, "Konflikt: Bean extern geändert", "", nil, true)
+	m, _ = m.showToast(toastError, "Conflict: bean changed externally", "", nil, true)
 	if m.toast == nil {
 		t.Fatal("setup: showToast did not set m.toast")
 	}

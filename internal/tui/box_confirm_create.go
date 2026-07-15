@@ -63,7 +63,7 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 		m.formKind = ""
 		etag, ok := m.beanETag(id)
 		if !ok {
-			m.err = "Bean nicht mehr vorhanden — Titel-Edit verworfen"
+			m.err = "Bean no longer exists — title edit discarded"
 			return m, nil
 		}
 		client := m.client
@@ -88,12 +88,12 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 		m.form = nil
 		m.formKind = ""
 		if err := config.SaveUserSettings(repos, editor, accent, treeWidth); err != nil {
-			m.err = "Einstellungen speichern fehlgeschlagen: " + err.Error()
+			m.err = "Failed to save settings: " + err.Error()
 			return m, nil
 		}
 		settings, err := config.LoadSettings() // re-read + clamp/validate, Port devd saveAndApplySettings
 		if err != nil {
-			m.err = "Einstellungen neu laden fehlgeschlagen: " + err.Error()
+			m.err = "Failed to reload settings: " + err.Error()
 			return m, nil
 		}
 		m.settings = settings

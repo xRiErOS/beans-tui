@@ -354,7 +354,7 @@ func (c *Client) RejectReview(id, comment, date, etag string) error {
 // the deleted ID, clearing that field entirely rather than leaving a
 // dangling reference. A deleted bean's direct children therefore surface
 // afterward as ordinary, parentless ROOT beans (data.Index.Roots()), NOT as
-// dangling-parent orphans (internal/tui's "(verwaist)" synthetic root,
+// dangling-parent orphans (internal/tui's "(orphaned)" synthetic root,
 // view_browse_repo.go) -- see TestDeleteClearsFormerChildrensParentField
 // (client_mut_test.go) for the pinned regression. Grandchildren are
 // unaffected: their own parent (the direct child, untouched by this

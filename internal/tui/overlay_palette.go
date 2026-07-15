@@ -13,7 +13,8 @@ package tui
 // Review-Cockpit view no longer exists.
 //
 // Port references: fuzzyMatch is a verbatim port (fuzzy.go, design decision
-// a). paletteActions' "verb: label" wording convention and dispatchPalette's
+// a). paletteActions' "verb entity" wording convention (E7 T3, PF-8 --
+// formerly "verb: label" with a colon) and dispatchPalette's
 // switch-over-an-id-string shape port devd overlay_palette.go:20-49/144-190
 // STRUCTURALLY only -- the concrete action list and every handler body are
 // beans-tui-native (design decision b). paletteBox's "> query" + separator +
@@ -59,29 +60,29 @@ func paletteActions(m model) []paletteItem {
 	var items []paletteItem
 	if b := m.focusedBean(); b != nil {
 		items = append(items,
-			paletteItem{kind: paletteKindAction, actionID: "status", label: "status: setzen"},
-			paletteItem{kind: paletteKindAction, actionID: "tags", label: "tags: zuweisen"},
-			paletteItem{kind: paletteKindAction, actionID: "parent", label: "parent: zuweisen"},
-			paletteItem{kind: paletteKindAction, actionID: "blocking", label: "blocking: zuweisen"},
-			paletteItem{kind: paletteKindAction, actionID: "edit_title", label: "titel: bearbeiten"},
-			paletteItem{kind: paletteKindAction, actionID: "delete", label: "bean: löschen"},
+			paletteItem{kind: paletteKindAction, actionID: "status", label: "set status"},
+			paletteItem{kind: paletteKindAction, actionID: "tags", label: "set tags"},
+			paletteItem{kind: paletteKindAction, actionID: "parent", label: "set parent"},
+			paletteItem{kind: paletteKindAction, actionID: "blocking", label: "set blocking"},
+			paletteItem{kind: paletteKindAction, actionID: "edit_title", label: "set title"},
+			paletteItem{kind: paletteKindAction, actionID: "delete", label: "delete bean"},
 		)
 	}
 	items = append(items,
-		paletteItem{kind: paletteKindAction, actionID: "create", label: "create: bean"},
-		paletteItem{kind: paletteKindAction, actionID: "go_backlog", label: "go to: backlog"},
-		paletteItem{kind: paletteKindAction, actionID: "go_browse", label: "go to: browse"},
-		paletteItem{kind: paletteKindAction, actionID: "filter", label: "filter: facetten"},
-		paletteItem{kind: paletteKindAction, actionID: "search", label: "search: beans"},
-		paletteItem{kind: paletteKindAction, actionID: "reload", label: "reload: daten"},
+		paletteItem{kind: paletteKindAction, actionID: "create", label: "create bean"},
+		paletteItem{kind: paletteKindAction, actionID: "go_backlog", label: "go to backlog"},
+		paletteItem{kind: paletteKindAction, actionID: "go_browse", label: "go to browse"},
+		paletteItem{kind: paletteKindAction, actionID: "filter", label: "filter facets"},
+		paletteItem{kind: paletteKindAction, actionID: "search", label: "search beans"},
+		paletteItem{kind: paletteKindAction, actionID: "reload", label: "reload data"},
 		// E5 Task 6 (bean bt-zhwl): a second entry point to the SAME
 		// keys.Picker dispatch (openLobby, view_lobby.go) -- mirrors every
 		// other single-key binding's own Command-Center mirror above.
-		paletteItem{kind: paletteKindAction, actionID: "repo_picker", label: "repo: wechseln"},
+		paletteItem{kind: paletteKindAction, actionID: "repo_picker", label: "go to repo picker"},
 		// E5 Task 5 (bean bt-0l8c): the Settings-Form has NO dedicated
 		// keybinding (design-spec §7 knows none) -- reachable exclusively
 		// through the Command-Center, appended last.
-		paletteItem{kind: paletteKindAction, actionID: "settings", label: "settings: öffnen"},
+		paletteItem{kind: paletteKindAction, actionID: "settings", label: "go to settings"},
 	)
 	return items
 }

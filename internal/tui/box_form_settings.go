@@ -1,13 +1,13 @@
 package tui
 
-// box_form_settings.go — the Settings-Form (Command-Center "settings:
-// öffnen", E5 Task 5, bean bt-0l8c, epic bt-5h4d): edits beans-tui's user
+// box_form_settings.go — the Settings-Form (Command-Center "go to
+// settings", E5 Task 5, bean bt-0l8c, epic bt-5h4d): edits beans-tui's user
 // config (~/.config/beans-tui/config.yaml) directly from the TUI. Port devd
 // form_edit_settings.go's field-set/validator shape, reduced to
 // design-spec §7/§9's own four fields (repos/editor/accent/tree_width) --
 // no ModalWidth/StartProject/Keybindings (not part of beans-tui's
 // design-spec, YAGNI here). NO dedicated keybinding (design-spec §7 knows
-// none) -- reachable ONLY via overlay_palette.go's "settings: öffnen"
+// none) -- reachable ONLY via overlay_palette.go's "go to settings"
 // action (openSettingsForm below). Submit fires LIVE (Port devd DD2-221):
 // configuredEditor + theme.SetAccent update immediately, no restart needed
 // -- submitForm's "settings" case (box_confirm_create.go) reuses the SAME

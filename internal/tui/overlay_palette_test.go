@@ -108,7 +108,7 @@ func TestPalFilteredActionsFuzzyFiltered(t *testing.T) {
 
 	items := m.palFiltered()
 	if len(items) != 1 {
-		t.Fatalf("len(palFiltered) = %d, want 1 (only 'go to: backlog' matches %q)", len(items), m.palQuery)
+		t.Fatalf("len(palFiltered) = %d, want 1 (only 'go to backlog' matches %q)", len(items), m.palQuery)
 	}
 	if items[0].actionID != "go_backlog" {
 		t.Fatalf("palFiltered[0].actionID = %q, want go_backlog", items[0].actionID)
@@ -351,7 +351,7 @@ func TestPalFilteredOrderActionsBeforeBeans(t *testing.T) {
 		ID: "bckl-1", Title: "Something Unrelated", Status: "todo", Type: "task", Priority: "normal",
 	})
 	m := fixtureModel(t, beans)
-	// "bckl" fuzzy-subsequence-matches the "go to: backlog" action label
+	// "bckl" fuzzy-subsequence-matches the "go to backlog" action label
 	// (TestPalFilteredActionsFuzzyFiltered precedent above) AND ID-substring-
 	// matches bckl-1.
 	m.palQuery = "bckl"
@@ -538,7 +538,7 @@ func TestPaletteSearchCmdTagsResultWithQuery(t *testing.T) {
 // (types.go doc-stamp). The Command-Center is a genuine second entry point
 // to the SAME handlers (dispatchPalette's own doc-stamp), so its "create"
 // case must refuse a second Create-Form exactly like the `c` key does while
-// m.pendingCreate != nil -- otherwise ctrl+k -> "create: bean" would
+// m.pendingCreate != nil -- otherwise ctrl+k -> "create bean" would
 // cross-contaminate the single createDraft/pendingCreate slots the same way
 // Finding 1b originally closed for the `c` key.
 func TestDispatchPaletteCreateIgnoredWhileCreateInFlight(t *testing.T) {
@@ -546,7 +546,7 @@ func TestDispatchPaletteCreateIgnoredWhileCreateInFlight(t *testing.T) {
 	m.pendingCreate = func() tea.Msg { return nil } // simulate an earlier create already in flight
 	m.paletteOpen = true
 
-	nm, cmd := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: "create", label: "create: bean"})
+	nm, cmd := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: "create", label: "create bean"})
 	mm, ok := nm.(model)
 	if !ok {
 		t.Fatalf("dispatchPalette did not return a model, got %T", nm)

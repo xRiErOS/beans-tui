@@ -89,7 +89,7 @@ func TestLocalSearchCollapsedAncestorHidesMatchingDescendant(t *testing.T) {
 }
 
 // TestLocalSearchOrphanBucketOmittedWhenNoMatch guards that the synthetic
-// "(verwaist)" root goes through the SAME predicate as the real tree: with
+// "(orphaned)" root goes through the SAME predicate as the real tree: with
 // zero matching orphans/cycle-beans, it must be omitted entirely (not shown
 // as an empty collapsed bucket).
 func TestLocalSearchOrphanBucketOmittedWhenNoMatch(t *testing.T) {

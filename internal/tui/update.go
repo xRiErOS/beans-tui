@@ -110,7 +110,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyRepoSwitched(msg)
 
 	case repoMetricsMsg:
-		// E5 Task 6 (bean bt-zhwl): ONE repo's async Offen/Gesamt figure
+		// E5 Task 6 (bean bt-zhwl): ONE repo's async Open/Total figure
 		// (repoMetricsBatchCmd, messages.go) -- applyRepoMetrics below
 		// updates just that one map entry.
 		return m.applyRepoMetrics(msg)
@@ -186,7 +186,7 @@ func (m model) handleToastExpired(msg toastExpiredMsg) (tea.Model, tea.Cmd) {
 func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		var toastCmd tea.Cmd
-		m, toastCmd = m.showToast(toastError, "Repo-Wechsel fehlgeschlagen: "+msg.err.Error(), "", nil, false)
+		m, toastCmd = m.showToast(toastError, "Repo switch failed: "+msg.err.Error(), "", nil, false)
 		return m, toastCmd
 	}
 
@@ -256,7 +256,7 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 	var toastCmd tea.Cmd
 	if err != nil {
 		if errors.Is(err, data.ErrConflict) {
-			m.err = "Konflikt: Bean extern geändert — neu geladen"
+			m.err = "Conflict: bean changed externally — reloaded"
 			// F2 (Review-Runde 2) nicety: applyEditorFinished's mutateCmd
 			// closure wraps a genuine conflict in *conflictWithRecovery when
 			// it managed to persist the PO's just-edited body to a kept
@@ -269,8 +269,8 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 			toastCtx := ""
 			var cr *conflictWithRecovery
 			if errors.As(err, &cr) {
-				m.err += " — deine Fassung: " + cr.path
-				toastCtx = "Fassung gesichert: " + cr.path
+				m.err += " — your version: " + cr.path
+				toastCtx = "Version saved: " + cr.path
 			}
 			// E5 Task 1 (bean bt-6dts, E3-I01 PFLICHT): sticky=true is the
 			// ONLY sticky Toast in the whole app -- a genuine ETag conflict
@@ -279,7 +279,7 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 			// newer toast replaces it, surviving every reload cycle in
 			// between (applyLoaded never touches m.toast, so there is
 			// nothing here that would clobber it).
-			m, toastCmd = m.showToast(toastError, "Konflikt: Bean extern geändert", toastCtx, nil, true)
+			m, toastCmd = m.showToast(toastError, "Conflict: bean changed externally", toastCtx, nil, true)
 		} else {
 			m.err = err.Error()
 			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
@@ -440,7 +440,7 @@ func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if _, ok := m.beanETag(id); !ok {
-		m.err = "Bean nicht mehr vorhanden — Editor-Änderung verworfen"
+		m.err = "Bean no longer exists — editor edit discarded"
 		var toastCmd tea.Cmd
 		m, toastCmd = m.showToast(toastWarn, m.err, "", nil, false)
 		return m, toastCmd
@@ -481,7 +481,7 @@ func (m model) beanETag(id string) (etag string, ok bool) {
 // to start a SECOND create while one is still parked-or-in-flight (F1,
 // Review-Runde 2, Finding 1b) -- one shared string so keyNodeAction's Create
 // case and submitForm's "create" case (box_confirm_create.go) can't drift.
-const createInFlightNote = "Erstellung läuft bereits — bitte warten"
+const createInFlightNote = "Creation already in progress — please wait"
 
 // keyNodeAction routes the node-focused mutation keys (design-spec §7:
 // s/t/a/B/c/d/e -- Status/TagAssign/Assign/Blocking/Create/Delete/Editor).
@@ -582,10 +582,10 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			return true, m, nil // orphan-root cursor: handled, silent no-op (Plan Step 6)
 		}
 		if err := clip.Copy(beanContext(m.idx, b)); err != nil {
-			nm, cmd := m.showToast(toastWarn, "Yank fehlgeschlagen", "", nil, false)
+			nm, cmd := m.showToast(toastWarn, "Yank failed", "", nil, false)
 			return true, nm, cmd
 		}
-		nm, cmd := m.showToast(toastInfo, "Kopiert: "+b.ID, "", nil, false)
+		nm, cmd := m.showToast(toastInfo, "Copied: "+b.ID, "", nil, false)
 		return true, nm, cmd
 	}
 	return false, m, nil

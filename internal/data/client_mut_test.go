@@ -442,7 +442,7 @@ func TestAddBlockingCyclePinsValidationErrorShape(t *testing.T) {
 // deleting tt-mlst (newTestRepo's fixture milestone, parent of tt-epic) must
 // NOT leave tt-epic with a dangling `parent: tt-mlst` reference -- the real
 // beans 0.4.2 CLI clears the field outright, turning tt-epic into an
-// ordinary parentless bean, not a "(verwaist)"-bucket orphan.
+// ordinary parentless bean, not a "(orphaned)"-bucket orphan.
 func TestDeleteClearsFormerChildrensParentField(t *testing.T) {
 	requireBeansBinary(t)
 

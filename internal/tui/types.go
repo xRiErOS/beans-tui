@@ -29,7 +29,7 @@ const (
 	viewLobby             // V1 Lobby/Repo-Picker (E5 Task 6, bean bt-zhwl, design-spec.md §6 V1)
 )
 
-// orphanRootID is the synthetic node ID for the "(verwaist)" root that
+// orphanRootID is the synthetic node ID for the "(orphaned)" root that
 // collects every bean whose parent field does not resolve to a known bean
 // (MANDATORY orphan rule, bean bt-7jr8 / T3-review Q01: dangling parents are
 // beans-legal — `.md` is freely editable and `beans check` only reports
@@ -225,7 +225,7 @@ type model struct {
 
 	// Parent-Picker `a` (E3 Task 3, bean bt-p1uz, box_picker_parent.go):
 	// parentItems is the row list built fresh at open time
-	// (buildParentItems) -- index 0 is ALWAYS the "(Kein Parent)" clear row
+	// (buildParentItems) -- index 0 is ALWAYS the "(No parent)" clear row
 	// (id "", port beans-src parentpicker.go's clearParentItem), the rest is
 	// data.EligibleParents(idx, b) (self/descendants/invalid-types
 	// pre-filtered, design decision f). Single-select, immediate-apply Enter
@@ -332,7 +332,7 @@ type model struct {
 	// grandchild's own parent (the direct child) stays intact either way.
 	// ERRATUM (empirically verified, box_confirm_delete.go's own doc-stamp
 	// has the full story): the affected direct children do NOT become
-	// "(verwaist)"-bucket orphans as originally assumed (epic-E3-plan.md) --
+	// "(orphaned)"-bucket orphans as originally assumed (epic-E3-plan.md) --
 	// beans 0.4.2's `delete` clears their `parent:` field outright, so they
 	// become ordinary parentless ROOTS instead. deleteBox's copy reflects
 	// the CORRECTED outcome, never devd's own "will also be deleted" cascade
@@ -485,7 +485,7 @@ type model struct {
 
 	// Archiv-Sicht (E5 Task 7, bean bt-ggt2, design decision e): showArchived
 	// is a PROGRAM DEFAULT (false = completed/scrapped hidden), toggled via
-	// the f-menu's own "Archivierte einblenden" row (box_filter_facets.go,
+	// the f-menu's own "Show archived" row (box_filter_facets.go,
 	// facet "archive", the SAME space/x toggle path every other facet uses,
 	// no new key). Deliberately NOT one of the four filterStatus/filterType/
 	// filterPriority/filterTag maps: filterActive() must stay unaffected by
@@ -503,7 +503,7 @@ type model struct {
 	// repo B).
 	showArchived bool
 
-	// repoMetrics is the Lobby's own "Offen/Gesamt" column per configured
+	// repoMetrics is the Lobby's own "Open/Total" column per configured
 	// repo (design note, bean bt-zhwl: "Kosten/Latenz-Abwägung dokumentieren"
 	// -- resolved as N independent async tea.Cmd dispatches, batched via
 	// tea.Batch at Lobby-open time, NOT a synchronous N-subprocess loop
@@ -522,17 +522,17 @@ type model struct {
 // newModel builds the initial (pre-load) App-Shell state.
 func newModel(client *data.Client, repoDir string) model {
 	ti := textinput.New() // E2 Task 3: Tree search box (port devd app.go treeSearch)
-	ti.Placeholder = "Suche (Titel/ID, ab 3 Zeichen zusätzlich Bleve)"
+	ti.Placeholder = "Search (title/ID, 3+ chars also searches Bleve)"
 	ti.Prompt = ""
 	ti.CharLimit = 80
 
 	tagIn := textinput.New() // E3 Task 2: Tag-Picker free-text new-tag input
-	tagIn.Placeholder = "neuer Tag (a-z0-9, Bindestrich-getrennt)"
+	tagIn.Placeholder = "new tag (a-z0-9, hyphen-separated)"
 	tagIn.Prompt = ""
 	tagIn.CharLimit = 40
 
 	repoIn := textinput.New() // E5 Task 6: Lobby's own repo-filter input
-	repoIn.Placeholder = "Repo filtern (Pfad)"
+	repoIn.Placeholder = "Filter repos (path)"
 	repoIn.Prompt = ""
 	repoIn.CharLimit = 200
 

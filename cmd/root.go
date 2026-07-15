@@ -10,8 +10,8 @@ import (
 // die TUI (optionaler Pfad-Arg für den beans-Repo-Pfad, Default cwd).
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "bt [repo-pfad]",
-		Short: "bt — PO-Cockpit-TUI für beans-Repos",
+		Use:   "bt [repo-path]",
+		Short: "bt — PO cockpit TUI for beans repos",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := ""

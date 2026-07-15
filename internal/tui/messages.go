@@ -162,7 +162,7 @@ func switchRepoCmd(oldStop func(), newRepoDir string, notify func()) tea.Cmd {
 	}
 }
 
-// repoMetric is the Lobby's per-repo "Offen/Gesamt" figure (E5 Task 6, bean
+// repoMetric is the Lobby's per-repo "Open/Total" figure (E5 Task 6, bean
 // bt-zhwl design note: "Kosten/Latenz-Abwägung dokumentieren"). loaded=false
 // (the zero value) means "no repoMetricsMsg has arrived for this repo yet"
 // -- repoPickerBody (view_lobby.go) renders "…" for it; err != nil means

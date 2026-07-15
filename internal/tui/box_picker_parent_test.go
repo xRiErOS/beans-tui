@@ -3,7 +3,7 @@ package tui
 // box_picker_parent_test.go — TDD coverage for the Parent-Picker (`a`, E3
 // Task 3, bean bt-p1uz): single-select over data.EligibleParents (self/
 // descendants/invalid-types pre-filtered, design decision f) plus a
-// "(Kein Parent)" clear row pinned first. Immediate-apply Enter semantics
+// "(No parent)" clear row pinned first. Immediate-apply Enter semantics
 // (like box_menu_value.go's value menu, design decision a3) -- NOT the
 // Pending-Diff pattern box_picker_tag.go/box_picker_blocking.go use, since a
 // bean has exactly one parent, nothing to diff.
@@ -101,7 +101,7 @@ func TestParentPickerExcludesSelfDescendantsAndInvalidTypes(t *testing.T) {
 
 // TestParentPickerMilestoneShowsNoEligibleParents guards the nil-
 // validParentTypes short-circuit: a milestone can never take a parent, so
-// only the "(Kein Parent)" clear row remains.
+// only the "(No parent)" clear row remains.
 func TestParentPickerMilestoneShowsNoEligibleParents(t *testing.T) {
 	m := fixtureModel(t, fixtureBeansForParentPicker())
 	m = focusBeanFull(m, "ms-1")
@@ -127,7 +127,7 @@ func TestParentPickerClearRowFirstAndCursorOnCurrentParent(t *testing.T) {
 	m = step(t, m, runeMsg('a'))
 
 	if len(m.parentItems) == 0 || m.parentItems[0].id != "" {
-		t.Fatalf("parentItems[0] = %+v, want the \"(Kein Parent)\" clear row first", m.parentItems)
+		t.Fatalf("parentItems[0] = %+v, want the \"(No parent)\" clear row first", m.parentItems)
 	}
 	wantIdx := -1
 	for i, it := range m.parentItems {
@@ -284,7 +284,7 @@ func TestParentPickerEnterTargetVanishedClosesGracefully(t *testing.T) {
 // = [milestone, epic, feature] -- a task can never legally parent a task),
 // so tk-9 never appears in parentItems at all. The seed loop
 // (openParentPicker) must fall back to its listState{} zero value (index 0,
-// the "(Kein Parent)" clear row) rather than leaving the cursor on a stale
+// the "(No parent)" clear row) rather than leaving the cursor on a stale
 // position -- this is already the loop's own documented behavior (no
 // explicit "not found" branch needed), pinned here as an end-to-end
 // regression.

@@ -217,7 +217,7 @@ func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		name := strings.TrimSpace(m.tagInput.Value())
 		if !data.ValidTagName(name) {
-			m.tagInputErr = "ungültiger Tag-Name (a-z0-9, Bindestrich-getrennt, Kleinbuchstaben)"
+			m.tagInputErr = "invalid tag name (a-z0-9, hyphen-separated, lowercase)"
 			return m, nil
 		}
 		m.tagInputErr = ""
@@ -285,7 +285,7 @@ func (m model) applyTagPickerDiff() (tea.Model, tea.Cmd) {
 
 	etag, ok := m.beanETag(id)
 	if !ok {
-		m.err = "Bean nicht mehr vorhanden — Auswahl verworfen"
+		m.err = "Bean no longer exists — selection discarded"
 		return m, nil
 	}
 	client := m.client
@@ -302,7 +302,7 @@ func (m model) tagPickerBox() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("space/x:toggle  n:neuer Tag  enter:speichern  esc:verwerfen") + "\n")
+	b.WriteString(theme.Muted.Render("space/x:toggle  n:new tag  enter:save  esc:discard") + "\n")
 	for i, it := range m.tagItems {
 		box := theme.Dim.Render("[ ]")
 		if m.tagPending[it.tag] {
@@ -318,7 +318,7 @@ func (m model) tagPickerBox() string {
 		b.WriteString(cursor + box + " " + label + count + "\n")
 	}
 	if len(m.tagItems) == 0 {
-		b.WriteString(theme.Muted.Render("(keine Tags im Repo)") + "\n")
+		b.WriteString(theme.Muted.Render("(no tags in repo)") + "\n")
 	}
 	return modalPanel("Tags", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
 }
@@ -326,10 +326,10 @@ func (m model) tagPickerBox() string {
 // tagInputBox renders the free-text new-tag capture prompt.
 func (m model) tagInputBox() string {
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("enter:anlegen  esc:abbrechen") + "\n\n")
+	b.WriteString(theme.Muted.Render("enter:create  esc:cancel") + "\n\n")
 	b.WriteString(m.tagInput.View() + "\n")
 	if m.tagInputErr != "" {
 		b.WriteString("\n" + lipgloss.NewStyle().Foreground(theme.Red).Render(m.tagInputErr) + "\n")
 	}
-	return modalPanel("Neuer Tag", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
+	return modalPanel("New tag", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
 }

@@ -7,7 +7,7 @@ package tui
 // utilities (no devd-API coupling to strip), homeLogoBlock/repoPickerBody/
 // viewLobby are beans-tui-native (a "beans" banner instead of "DevDashboard",
 // beans-tui's own config.Settings.Repos instead of devd's api.Project list,
-// an Offen/Gesamt bean-count metric instead of devd's Sprint/Backlog count).
+// an Open/Total bean-count metric instead of devd's Sprint/Backlog count).
 //
 // KEIN Overlay: viewLobby is a full top-level view (design decision, bean's
 // own body text) -- a repo switch needs a complete client/watcher restart,
@@ -108,7 +108,7 @@ func (m model) filteredRepos() []string {
 	return out
 }
 
-// repoMetricLabel renders repo's Offen/Gesamt column: "…" while
+// repoMetricLabel renders repo's Open/Total column: "…" while
 // repoMetricsMsg hasn't arrived yet (repoMetricsBatchCmd, messages.go, is
 // always async -- design note on cost/latency), "err" on a per-repo load
 // failure (a single broken repo must not blank the whole column, see
@@ -167,7 +167,7 @@ func (m model) repoPickerBody(w int) string {
 	}
 	var b strings.Builder
 	b.WriteString(theme.Muted.Render("⌕ ") + ti.View() + "\n\n")
-	b.WriteString(pickerRowFill(theme.Dim.Render("  ◦ Repo"), theme.Dim.Render("offen/gesamt"), w) + "\n")
+	b.WriteString(pickerRowFill(theme.Dim.Render("  ◦ Repo"), theme.Dim.Render("open/total"), w) + "\n")
 	b.WriteString(theme.Dim.Render(strings.Repeat("─", w)) + "\n")
 
 	filtered := m.filteredRepos()
@@ -189,7 +189,7 @@ func (m model) repoPickerBody(w int) string {
 	if len(filtered) == 0 && len(m.settings.Repos) > 0 {
 		b.WriteString(theme.Muted.Render("  (no matches)") + "\n")
 	} else if len(m.settings.Repos) == 0 {
-		b.WriteString(theme.Muted.Render("  (keine Repos in config.yaml -- ctrl+k -> settings)") + "\n")
+		b.WriteString(theme.Muted.Render("  (no repos in config.yaml -- ctrl+k -> settings)") + "\n")
 	}
 	return b.String()
 }

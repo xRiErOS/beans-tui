@@ -12,8 +12,8 @@ import (
 // Root-Command ohne Subcommand).
 func newTUICmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "tui [repo-pfad]",
-		Short: "Startet die TUI explizit",
+		Use:   "tui [repo-path]",
+		Short: "Starts the TUI explicitly",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := ""

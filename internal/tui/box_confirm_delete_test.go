@@ -159,12 +159,12 @@ func TestOpenDeleteConfirmNoLinksLeavesDelLinksZero(t *testing.T) {
 
 // TestDeleteBoxWarnsChildrenLoseParentBecomeRoots guards the semantic
 // deviation from devd (bean bt-ppzb Ziel): `beans delete` does NOT cascade
-// -- the modal must never claim children get deleted too ("gelöscht"). The
-// exact wording ("verlieren den Parent — werden zu eigenen Wurzeln") is
+// -- the modal must never claim children get deleted too ("deleted"). The
+// exact wording ("lose their parent — become their own roots") is
 // itself an ERRATUM correction (box_confirm_delete.go's own doc-stamp): the
-// original "become '(verwaist)'-bucket orphans" assumption was empirically
+// original "become '(orphaned)'-bucket orphans" assumption was empirically
 // WRONG -- beans 0.4.2 clears the parent reference outright rather than
-// leaving it dangling, so this test also guards against the STALE "verwaist"
+// leaving it dangling, so this test also guards against the STALE "orphan"
 // wording reappearing.
 func TestDeleteBoxWarnsChildrenLoseParentBecomeRoots(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
@@ -172,14 +172,14 @@ func TestDeleteBoxWarnsChildrenLoseParentBecomeRoots(t *testing.T) {
 	m = step(t, m, runeMsg('d'))
 
 	box := m.deleteBox()
-	if !strings.Contains(box, "verlieren den Parent") {
-		t.Fatalf("deleteBox() = %q, want it to mention the children losing their parent (not \"verwaist\" -- ERRATUM, beans clears the reference outright)", box)
+	if !strings.Contains(box, "lose their parent") {
+		t.Fatalf("deleteBox() = %q, want it to mention the children losing their parent (not \"orphan\" -- ERRATUM, beans clears the reference outright)", box)
 	}
-	if strings.Contains(box, "verwaist") {
-		t.Fatalf("deleteBox() = %q, must NOT use the stale \"verwaist\" wording -- beans 0.4.2 clears the parent reference, it does not leave a dangling one", box)
+	if strings.Contains(box, "orphan") {
+		t.Fatalf("deleteBox() = %q, must NOT use the stale \"orphan\" wording -- beans 0.4.2 clears the parent reference, it does not leave a dangling one", box)
 	}
-	if strings.Contains(box, "gelöscht") {
-		t.Fatalf("deleteBox() = %q, must NOT claim children get deleted (\"gelöscht\") -- beans delete does not cascade", box)
+	if strings.Contains(box, "deleted") {
+		t.Fatalf("deleteBox() = %q, must NOT claim children get deleted (\"deleted\") -- beans delete does not cascade", box)
 	}
 	if !strings.Contains(box, "2") {
 		t.Fatalf("deleteBox() = %q, want the child count (2) rendered", box)
@@ -200,7 +200,7 @@ func TestDeleteBoxLeafOmitsChildrenWarning(t *testing.T) {
 	m = step(t, m, runeMsg('d'))
 
 	box := m.deleteBox()
-	if strings.Contains(box, "verlieren den Parent") {
+	if strings.Contains(box, "lose their parent") {
 		t.Fatalf("deleteBox() for a leaf = %q, must not mention children losing a parent (delChildren == 0)", box)
 	}
 	if !strings.Contains(box, "Task One") {
@@ -209,9 +209,9 @@ func TestDeleteBoxLeafOmitsChildrenWarning(t *testing.T) {
 }
 
 // TestDeleteBoxSingularChildWording guards I02 (E3-T6-Review PFLICHT
-// finding, bean bt-qzwt): a delChildren == 1 case must read "1 Kind
-// verliert ... wird zur eigenen Wurzel" (singular verb/noun), not the
-// plural "Kinder verlieren ... werden zu eigenen Wurzeln" wording the
+// finding, bean bt-qzwt): a delChildren == 1 case must read "1 child
+// loses ... becomes its own root" (singular verb/noun), not the
+// plural "children lose ... become their own roots" wording the
 // count>1 case uses (TestDeleteBoxWarnsChildrenLoseParentBecomeRoots
 // above). ms-1 (fixtureBeans' milestone) has exactly ONE child (ep-1).
 func TestDeleteBoxSingularChildWording(t *testing.T) {
@@ -223,19 +223,19 @@ func TestDeleteBoxSingularChildWording(t *testing.T) {
 		t.Fatalf("setup: delChildren = %d, want 1 (ms-1 has exactly one child, ep-1)", m.delChildren)
 	}
 	// Short substrings deliberately (not the full sentence): the modal
-	// word-wraps at clampModalWidth(48, ...), so "wird zur eigenen Wurzel"
+	// word-wraps at clampModalWidth(48, ...), so "becomes its own root"
 	// itself splits across two rendered lines -- the same reason the
-	// EXISTING plural test above only checks "verlieren den Parent", not
+	// EXISTING plural test above only checks "lose their parent", not
 	// the full sentence, either.
 	box := m.deleteBox()
-	if !strings.Contains(box, "1 Kind verliert den Parent") {
-		t.Fatalf("deleteBox() = %q, want the singular \"1 Kind verliert den Parent\" wording", box)
+	if !strings.Contains(box, "1 child loses its parent") {
+		t.Fatalf("deleteBox() = %q, want the singular \"1 child loses its parent\" wording", box)
 	}
-	if strings.Contains(box, "Kinder verlieren") {
-		t.Fatalf("deleteBox() = %q, must not use the plural \"Kinder verlieren\" wording for delChildren == 1", box)
+	if strings.Contains(box, "children lose") {
+		t.Fatalf("deleteBox() = %q, must not use the plural \"children lose\" wording for delChildren == 1", box)
 	}
-	if strings.Contains(box, "Wurzeln") {
-		t.Fatalf("deleteBox() = %q, must not use the plural noun \"Wurzeln\" for delChildren == 1", box)
+	if strings.Contains(box, "roots") {
+		t.Fatalf("deleteBox() = %q, must not use the plural noun \"roots\" for delChildren == 1", box)
 	}
 }
 
@@ -251,10 +251,10 @@ func TestDeleteBoxWarnsLinkedBeanSingular(t *testing.T) {
 	// Short substring, same word-wrap reasoning as
 	// TestDeleteBoxSingularChildWording above.
 	box := m.deleteBox()
-	if !strings.Contains(box, "1 Bean verliert die Blocking") {
+	if !strings.Contains(box, "1 bean loses its blocking") {
 		t.Fatalf("deleteBox() = %q, want the singular linked-bean warning", box)
 	}
-	if strings.Contains(box, "Beans verlieren die Blocking") {
+	if strings.Contains(box, "beans lose their blocking") {
 		t.Fatalf("deleteBox() = %q, must not use plural wording for delLinks == 1", box)
 	}
 }
@@ -275,8 +275,8 @@ func TestDeleteBoxWarnsLinkedBeansPlural(t *testing.T) {
 	m = step(t, m, runeMsg('d'))
 
 	box := m.deleteBox()
-	if !strings.Contains(box, "2 Beans verlieren die Blocking") {
-		t.Fatalf("deleteBox() = %q, want the plural linked-bean warning (\"2 Beans verlieren\")", box)
+	if !strings.Contains(box, "2 beans lose their blocking") {
+		t.Fatalf("deleteBox() = %q, want the plural linked-bean warning (\"2 beans lose\")", box)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestDeleteBoxOmitsLinkedWarningWhenZero(t *testing.T) {
 	m = step(t, m, runeMsg('d'))
 
 	box := m.deleteBox()
-	if strings.Contains(box, "Verknüpfung") {
+	if strings.Contains(box, "blocking/blocked-by link") {
 		t.Fatalf("deleteBox() = %q, must not render the linked-bean warning when delLinks == 0", box)
 	}
 }

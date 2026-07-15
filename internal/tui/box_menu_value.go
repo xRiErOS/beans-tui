@@ -147,7 +147,7 @@ func (m model) applyValueMenuSelection() (tea.Model, tea.Cmd) {
 	id := m.mutTarget
 	etag, ok := m.beanETag(id)
 	if !ok {
-		m.err = "Bean nicht mehr vorhanden — Auswahl verworfen"
+		m.err = "Bean no longer exists — selection discarded"
 		return m, nil
 	}
 	client := m.client

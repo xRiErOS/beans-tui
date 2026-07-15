@@ -36,7 +36,7 @@ var facetHead = map[string]string{
 	"type":     "Type",
 	"priority": "Priority",
 	"tag":      "Tags",
-	"archive":  "Archiv",
+	"archive":  "Archive",
 }
 
 // buildFilterItems assembles the menu row list: fixed Status/Type/Priority
@@ -76,7 +76,7 @@ func (m model) buildFilterItems() []ffItem {
 	// no new key. value "show" is a placeholder, never map-looked-up:
 	// facetOn/toggleFacet special-case facet=="archive" against
 	// m.showArchived directly.
-	items = append(items, ffItem{"archive", "show", "Archivierte einblenden"})
+	items = append(items, ffItem{"archive", "show", "Show archived"})
 	return items
 }
 

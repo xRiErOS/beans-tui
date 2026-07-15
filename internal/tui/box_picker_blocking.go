@@ -158,7 +158,7 @@ func (m model) applyBlockingPickerDiff() (tea.Model, tea.Cmd) {
 
 	etag, ok := m.beanETag(id)
 	if !ok {
-		m.err = "Bean nicht mehr vorhanden — Auswahl verworfen"
+		m.err = "Bean no longer exists — selection discarded"
 		return m, nil
 	}
 	client := m.client
@@ -184,7 +184,7 @@ func blockingDot(pending bool) string {
 // from overflowing the modal.
 func (m model) blockingPickerBox() string {
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("space/x:toggle  enter:speichern  esc:verwerfen") + "\n")
+	b.WriteString(theme.Muted.Render("space/x:toggle  enter:save  esc:discard") + "\n")
 
 	rows := make([]string, len(m.blockItems))
 	for i, it := range m.blockItems {
@@ -202,7 +202,7 @@ func (m model) blockingPickerBox() string {
 		b.WriteString("\n")
 	}
 	if len(m.blockItems) == 0 {
-		b.WriteString(theme.Muted.Render("(keine anderen Beans im Repo)") + "\n")
+		b.WriteString(theme.Muted.Render("(no other beans in repo)") + "\n")
 	}
 	return modalPanel("Blocking", b.String(), "", clampModalWidth(48, m.width), theme.Mauve)
 }

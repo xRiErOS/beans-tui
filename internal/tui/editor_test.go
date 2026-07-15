@@ -374,10 +374,10 @@ func TestEditorFinishedConflictWritesRecoveryTempFileAndSurfacesPath(t *testing.
 	}
 
 	fm := step(t, nm, mdm)
-	if !strings.Contains(fm.err, "Konflikt") {
+	if !strings.Contains(fm.err, "Conflict") {
 		t.Fatalf("status line = %q, want it to mention the conflict", fm.err)
 	}
-	const marker = "deine Fassung: "
+	const marker = "your version: "
 	idx := strings.Index(fm.err, marker)
 	if idx < 0 {
 		t.Fatalf("status line = %q, want it to carry the recovery tempfile's path (%q)", fm.err, marker)

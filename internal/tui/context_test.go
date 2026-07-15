@@ -89,7 +89,7 @@ func TestBeanContextResolvesParentTitleAndRelations(t *testing.T) {
 }
 
 // TestYankShowsConfirmationToast (US-11 Kern): `y` on a focused bean fires
-// clip.Copy and confirms via a toastInfo "Kopiert: <id>" toast.
+// clip.Copy and confirms via a toastInfo "Copied: <id>" toast.
 func TestYankShowsConfirmationToast(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2")
@@ -108,8 +108,8 @@ func TestYankShowsConfirmationToast(t *testing.T) {
 	if mm.toast.kind != toastInfo {
 		t.Fatalf("toast.kind = %v, want toastInfo", mm.toast.kind)
 	}
-	if !strings.Contains(mm.toast.title, "Kopiert") || !strings.Contains(mm.toast.title, "tk-2") {
-		t.Fatalf("toast.title = %q, want it to mention Kopiert + tk-2", mm.toast.title)
+	if !strings.Contains(mm.toast.title, "Copied") || !strings.Contains(mm.toast.title, "tk-2") {
+		t.Fatalf("toast.title = %q, want it to mention Copied + tk-2", mm.toast.title)
 	}
 }
 

@@ -3,7 +3,7 @@ package tui
 // box_picker_parent.go — the Parent-Picker (`a`, E3 Task 3, bean bt-p1uz):
 // single-select over data.EligibleParents(idx, b) (self + descendants +
 // invalid types pre-filtered server-side rule mirror, design decision f)
-// plus a "(Kein Parent)" row pinned first (port beans-src parentpicker.go's
+// plus a "(No parent)" row pinned first (port beans-src parentpicker.go's
 // clearParentItem). Enter applies IMMEDIATELY (SetParent/RemoveParent) and
 // closes -- the SAME immediate-apply Enter semantics as the combined value
 // menu (box_menu_value.go, design decision a3), NOT the Pending-Diff pattern
@@ -22,10 +22,10 @@ import (
 
 // pickerItem is one row shared by the Parent-Picker (this file) and the
 // Blocking-Picker (box_picker_blocking.go). id "" is the Parent-Picker's own
-// "(Kein Parent)" clear row (RemoveParent) -- the Blocking-Picker never
+// "(No parent)" clear row (RemoveParent) -- the Blocking-Picker never
 // produces an empty id, every one of its rows is a real bean. label is the
 // already-themed row text (relationRow, view_detail_bean.go) for a real
-// bean, or a plain "(Kein Parent)" string for the clear row (themed at
+// bean, or a plain "(No parent)" string for the clear row (themed at
 // render time instead, see parentPickerBox).
 type pickerItem struct {
 	id    string
@@ -42,13 +42,13 @@ type pickerItem struct {
 // the modal past the terminal instead of computing one from m.height.
 const parentPickerRowBudget = 14
 
-// buildParentItems assembles the Parent-Picker's row list: "(Kein Parent)"
+// buildParentItems assembles the Parent-Picker's row list: "(No parent)"
 // pinned first (id "", port clearParentItem), then data.EligibleParents(idx,
 // b) (self/descendants/invalid-types pre-filtered, sorted) rendered via the
 // existing relationRow helper (view_detail_bean.go:66-68) -- same status-
 // icon+type-icon+ID+title glyph order as every other bean row in the app.
 func buildParentItems(idx *data.Index, b *data.Bean) []pickerItem {
-	items := []pickerItem{{id: "", label: "(Kein Parent)"}}
+	items := []pickerItem{{id: "", label: "(No parent)"}}
 	for _, cand := range data.EligibleParents(idx, b) {
 		items = append(items, pickerItem{id: cand.ID, label: relationRow(cand)})
 	}
@@ -58,7 +58,7 @@ func buildParentItems(idx *data.Index, b *data.Bean) []pickerItem {
 // openParentPicker opens the Parent-Picker on the focused bean (the
 // focusedBean()!=nil guard lives in the caller, keyNodeAction). Cursor
 // starts on the bean's CURRENT parent row, falling back to index 0 (the
-// "(Kein Parent)" row) for an unparented bean, or one whose parent fell out
+// "(No parent)" row) for an unparented bean, or one whose parent fell out
 // of eligibility since (port beans-src parentpicker.go's selectedIndex seed,
 // newParentPickerModel:175-182). mutTarget captures the bean ID only, never
 // the etag (design decision d) -- a watch-reload between open and the
@@ -107,7 +107,7 @@ func (m model) keyParentPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // applyParentPickerSelection dispatches SetParent (a real row) or
-// RemoveParent (the "(Kein Parent)" row, id "") against a FRESH etag read
+// RemoveParent (the "(No parent)" row, id "") against a FRESH etag read
 // from the live index (m.beanETag, update.go, design decision d -- never a
 // captured copy). Always fires, regardless of whether the cursored row
 // already matches the bean's current parent -- mirrors
@@ -125,7 +125,7 @@ func (m model) applyParentPickerSelection() (tea.Model, tea.Cmd) {
 	id := m.mutTarget
 	etag, ok := m.beanETag(id)
 	if !ok {
-		m.err = "Bean nicht mehr vorhanden — Auswahl verworfen"
+		m.err = "Bean no longer exists — selection discarded"
 		return m, nil
 	}
 	client := m.client
@@ -149,7 +149,7 @@ func (m model) applyParentPickerSelection() (tea.Model, tea.Cmd) {
 // the modal (plan Step 3).
 func (m model) parentPickerBox() string {
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("enter:setzen  esc:abbrechen") + "\n")
+	b.WriteString(theme.Muted.Render("enter:set  esc:cancel") + "\n")
 
 	rows := make([]string, len(m.parentItems))
 	for i, it := range m.parentItems {
@@ -170,7 +170,7 @@ func (m model) parentPickerBox() string {
 		b.WriteString("\n")
 	}
 	if len(m.parentItems) == 1 {
-		b.WriteString(theme.Muted.Render("(keine zulässigen Eltern-Typen)") + "\n")
+		b.WriteString(theme.Muted.Render("(no eligible parent types)") + "\n")
 	}
-	return modalPanel("Parent zuweisen", b.String(), "", clampModalWidth(48, m.width), theme.Mauve)
+	return modalPanel("Assign parent", b.String(), "", clampModalWidth(48, m.width), theme.Mauve)
 }

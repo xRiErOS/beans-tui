@@ -2,7 +2,7 @@ package tui
 
 // view_browse_repo.go — the Browse Primat-View (design-spec.md §6 V2 basis):
 // a two-pane master-detail layout, left = expandable Tree (Milestones as
-// roots -> Epics/Features -> leaves, plus a synthetic "(verwaist)" root for
+// roots -> Epics/Features -> leaves, plus a synthetic "(orphaned)" root for
 // orphans, MANDATORY per bean bt-7jr8/T3-review Q01), right = a placeholder
 // detail preview (full accordion lands in E2). Port-pattern reference: devd
 // view_browse_project.go (treeNode flattening + D08 cursor-bar rendering,
@@ -26,7 +26,7 @@ import (
 // own contract: consumers must not mutate it) -- depth-first order matches
 // render order 1:1, so cursor position == slice index.
 type treeNode struct {
-	id      string // bean ID, or orphanRootID for the synthetic "(verwaist)" root
+	id      string // bean ID, or orphanRootID for the synthetic "(orphaned)" root
 	bean    *data.Bean
 	depth   int
 	hasKids bool
@@ -157,7 +157,7 @@ func reachableIDs(idx *data.Index, roots []*data.Bean) map[string]bool {
 // non-empty), so without this sweep they are silently invisible. B02 (T8
 // Opus quality review, bean bt-7jr8): beans-legal state -- frontmatter is
 // hand-editable -- must never be dropped; swept into the same synthetic
-// "(verwaist)" root as dangling-parent orphans instead.
+// "(orphaned)" root as dangling-parent orphans instead.
 func collectCycleOrphans(idx *data.Index, orphans []*data.Bean) []*data.Bean {
 	anchors := append(append([]*data.Bean{}, idx.Roots()...), orphans...)
 	reachable := reachableIDs(idx, anchors)
@@ -414,7 +414,7 @@ func treeRowText(n treeNode) string {
 	indent := strings.Repeat("  ", n.depth)
 	marker := treeNodeMarker(n)
 	if n.orphan {
-		return indent + marker + theme.Dim.Render("(verwaist)")
+		return indent + marker + theme.Dim.Render("(orphaned)")
 	}
 	b := n.bean
 	return indent + marker + theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(b.ID) + " " + b.Title
@@ -723,7 +723,7 @@ func (m model) viewBrowseRepo() string {
 	// critical), leaving m.err/the Red slot reserved for real load failures.
 	indicator := ""
 	if m.watchUnavailable {
-		indicator = "watch unavailable — ctrl+r für manuelles Reload"
+		indicator = "watch unavailable — ctrl+r for manual reload"
 	}
 	status := statusBar(indicator, m.err, innerW)
 

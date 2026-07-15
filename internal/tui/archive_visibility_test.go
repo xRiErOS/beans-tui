@@ -2,7 +2,7 @@ package tui
 
 // archive_visibility_test.go — E5 Task 7 (bean bt-ggt2, epic bt-5h4d): TDD
 // coverage for the Archiv-Sicht (completed/scrapped hidden by default,
-// togglable via the f-menu's "Archivierte einblenden" row, design decision
+// togglable via the f-menu's "Show archived" row, design decision
 // e). Reuses fixtureModel/step/keyMsg/runeMsg/nodeIDs/equalStrings
 // (update_test.go, same package).
 
@@ -44,7 +44,7 @@ func TestArchivedBeanHiddenFromTreeByDefault(t *testing.T) {
 }
 
 // TestArchivedBeanShownWhenShowArchivedToggled drives the REAL f-menu key
-// path (space on the "Archivierte einblenden" row) end-to-end, not a direct
+// path (space on the "Show archived" row) end-to-end, not a direct
 // field write -- proves the facet wiring (buildFilterItems/facetOn/
 // toggleFacet) actually reaches m.showArchived, no new key involved.
 func TestArchivedBeanShownWhenShowArchivedToggled(t *testing.T) {
@@ -107,8 +107,8 @@ func TestBuildFilterItemsIncludesArchiveRow(t *testing.T) {
 	for _, it := range items {
 		if it.facet == "archive" {
 			n++
-			if it.label != "Archivierte einblenden" {
-				t.Errorf("archive row label = %q, want %q", it.label, "Archivierte einblenden")
+			if it.label != "Show archived" {
+				t.Errorf("archive row label = %q, want %q", it.label, "Show archived")
 			}
 		}
 	}

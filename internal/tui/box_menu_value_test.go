@@ -259,7 +259,7 @@ func TestKeyNodeActionStatusOpensMenuWithFocusedBean(t *testing.T) {
 // --- applyMutationResult ---
 
 // TestApplyMutationResultConflictSetsStatusLineAndReloads guards the
-// ErrConflict branch: m.err carries a German "Konflikt" note (Toast is E5;
+// ErrConflict branch: m.err carries a "Conflict" note (Toast is E5;
 // the status line is the interim channel) and a reload Cmd fires regardless.
 func TestApplyMutationResultConflictSetsStatusLineAndReloads(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
@@ -267,8 +267,8 @@ func TestApplyMutationResultConflictSetsStatusLineAndReloads(t *testing.T) {
 
 	tm, cmd := m.applyMutationResult(err)
 	nm := tm.(model)
-	if !strings.Contains(nm.err, "Konflikt") {
-		t.Fatalf("m.err = %q, want it to contain %q", nm.err, "Konflikt")
+	if !strings.Contains(nm.err, "Conflict") {
+		t.Fatalf("m.err = %q, want it to contain %q", nm.err, "Conflict")
 	}
 	if cmd == nil {
 		t.Fatal("cmd == nil, want a reload Cmd (loadCmd) even on conflict")
@@ -294,13 +294,13 @@ func TestApplyMutationResultSuccessClearsErrAndReloads(t *testing.T) {
 
 // TestApplyMutationResultNonConflictErrorSurfacesRawMessage guards a
 // non-ErrConflict failure (e.g. VALIDATION_ERROR): the raw error text
-// surfaces verbatim, not the "Konflikt" wording.
+// surfaces verbatim, not the "Conflict" wording.
 func TestApplyMutationResultNonConflictErrorSurfacesRawMessage(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	tm, cmd := m.applyMutationResult(errors.New("beans update: VALIDATION_ERROR: bad status"))
 	nm := tm.(model)
-	if strings.Contains(nm.err, "Konflikt") {
-		t.Fatalf("m.err = %q, must not use the Konflikt wording for a non-ErrConflict failure", nm.err)
+	if strings.Contains(nm.err, "Conflict") {
+		t.Fatalf("m.err = %q, must not use the Conflict wording for a non-ErrConflict failure", nm.err)
 	}
 	if !strings.Contains(nm.err, "VALIDATION_ERROR") {
 		t.Fatalf("m.err = %q, want it to surface the raw error text", nm.err)

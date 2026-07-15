@@ -230,7 +230,7 @@ func (m model) viewBacklog() string {
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	indicator := ""
 	if m.watchUnavailable {
-		indicator = "watch unavailable — ctrl+r für manuelles Reload"
+		indicator = "watch unavailable — ctrl+r for manual reload"
 	}
 	status := statusBar(indicator, m.err, innerW)
 

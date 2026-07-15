@@ -6,7 +6,7 @@ package tui
 // Picker Set/RemoveParent, Blocking-Picker, Title-Edit-Form, Body-$EDITOR),
 // asserting the ONE shared contract every site funnels through
 // (applyMutationResult, update.go, design decision d): a data.ErrConflict-
-// classified mutationDoneMsg -> a status line containing "Konflikt", no
+// classified mutationDoneMsg -> a status line containing "Conflict", no
 // panic, no silent drop. applyMutationResult's OWN Konflikt-branch already
 // has direct unit coverage (TestApplyMutationResultConflictSetsStatusLineAnd
 // Reloads, box_menu_value_test.go) -- this sweep's value is proving each
@@ -32,7 +32,7 @@ import (
 // assertConflictSweep is the ONE shared assertion every subtest below drives
 // its site to: cmd must be non-nil, its resolved Msg must be a
 // mutationDoneMsg wrapping data.ErrConflict, and running it back through
-// Update (step) must land a "Konflikt" note in the status line.
+// Update (step) must land a "Conflict" note in the status line.
 func assertConflictSweep(t *testing.T, tm tea.Model, cmd tea.Cmd) {
 	t.Helper()
 	if cmd == nil {
@@ -51,14 +51,14 @@ func assertConflictSweep(t *testing.T, tm tea.Model, cmd tea.Cmd) {
 		t.Fatalf("mutationDoneMsg.err = %v, want errors.Is(_, data.ErrConflict)", mdm.err)
 	}
 	nm := step(t, m, mdm)
-	if !strings.Contains(nm.err, "Konflikt") {
+	if !strings.Contains(nm.err, "Conflict") {
 		t.Fatalf("status line = %q, want it to mention the conflict", nm.err)
 	}
 }
 
 // TestEtagConflictSweep simulates a stale-etag conflict for EVERY mutation
 // site built in T1-T5 and asserts the ONE shared contract (design decision
-// d): mutationDoneMsg{ErrConflict} -> status line contains "Konflikt",
+// d): mutationDoneMsg{ErrConflict} -> status line contains "Conflict",
 // reload cmd fired, no panic, overlay/form state sane (each subtest's own
 // setup already closes its overlay/form as part of firing the mutation --
 // see e.g. applyValueMenuSelection/applyTagPickerDiff/keyDeleteConfirm's own
@@ -135,7 +135,7 @@ func TestEtagConflictSweep(t *testing.T) {
 		m.client = &data.Client{RepoDir: t.TempDir()}
 		m = focusBeanFull(m, "ep-1")
 		m = step(t, m, runeMsg('a'))
-		m.menu.cursor = 0 // "(Kein Parent)" clear row
+		m.menu.cursor = 0 // "(No parent)" clear row
 		tm, cmd := m.Update(keyMsg(tea.KeyEnter))
 		assertConflictSweep(t, tm, cmd)
 	})

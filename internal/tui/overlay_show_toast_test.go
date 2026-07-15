@@ -268,7 +268,7 @@ func TestConflictToastIsStickyAndSurvivesReload(t *testing.T) {
 
 	// A reload lands (watchMsg's own follow-up, or ctrl+r) -- the sticky
 	// toast must survive it untouched, same "readable until the PO acts"
-	// contract as the status line's own "Konflikt" text (m.err, unaffected
+	// contract as the status line's own "Conflict" text (m.err, unaffected
 	// by this reload either).
 	nm3 := step(t, nm2, beansLoadedMsg{beans: fixtureBeans()})
 	if nm3.toast == nil {

@@ -1,7 +1,7 @@
 package tui
 
 // box_form_settings_test.go — TDD coverage for the Settings-Form
-// (Command-Center "settings: öffnen", E5 Task 5, bean bt-0l8c, epic bt-5h4d):
+// (Command-Center "go to settings", E5 Task 5, bean bt-0l8c, epic bt-5h4d):
 // prefill from m.settings, submit -> config.SaveUserSettings + LIVE apply
 // (configuredEditor + theme.SetAccent, Port devd DD2-221) -- no Confirm-Gate
 // (same "editTitle" shape, submitForm's "settings" case, box_confirm_create.go).
@@ -172,10 +172,10 @@ func TestSettingsFormSubmitSavesAndAppliesLive(t *testing.T) {
 
 // TestDispatchPaletteSettingsOpensForm guards the Command-Center entry point
 // (design-spec §7: NO dedicated keybinding, ONLY reachable via
-// overlay_palette.go's "settings: öffnen" action).
+// overlay_palette.go's "go to settings" action).
 func TestDispatchPaletteSettingsOpensForm(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
-	nm, _ := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: "settings", label: "settings: öffnen"})
+	nm, _ := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: "settings", label: "go to settings"})
 	mm, ok := nm.(model)
 	if !ok {
 		t.Fatalf("dispatchPalette did not return a model, got %T", nm)

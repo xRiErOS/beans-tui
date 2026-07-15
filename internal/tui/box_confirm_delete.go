@@ -20,12 +20,12 @@ package tui
 // smoke test + an isolated `beans create`/`beans delete` probe, both
 // reproducible): the epic-E3-plan.md/bean bt-ppzb's ORIGINAL assumption --
 // that a deleted bean's direct children survive with a now-DANGLING Parent
-// field and surface under the synthetic "(verwaist)" root -- is WRONG. The
+// field and surface under the synthetic "(orphaned)" root -- is WRONG. The
 // real beans 0.4.2 `delete` command actively rewrites every direct child's
 // frontmatter, REMOVING the `parent:` field entirely rather than leaving it
 // dangling. A deleted bean's direct children therefore become genuine,
 // ordinary ROOT beans (idx.Roots(), view_browse_repo.go) -- NOT
-// "(verwaist)"-bucket orphans; they render at the top level exactly like any
+// "(orphaned)"-bucket orphans; they render at the top level exactly like any
 // other parentless bean, not flagged or quarantined in any way. delChildren
 // (below) is still an accurate PRE-delete count (computed from the CURRENT
 // in-memory idx.Children before the mutation fires) -- only the POST-delete
@@ -127,7 +127,7 @@ func (m model) keyDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		id := m.mutTarget
 		if _, ok := m.beanETag(id); !ok {
-			m.err = "Bean nicht mehr vorhanden — Löschung verworfen"
+			m.err = "Bean no longer exists — deletion discarded"
 			return m, nil
 		}
 		client := m.client
@@ -154,16 +154,16 @@ func (m model) deleteBox() string {
 	b.WriteString(lipgloss.NewStyle().Foreground(theme.Red).Bold(true).Render("Delete "+typ) + "\n")
 	b.WriteString(theme.Header.Render(m.delTitle) + "\n\n")
 	// I02 (E3-T6-Review PFLICHT finding, bean bt-qzwt): singular/plural
-	// grammar branch -- the original single Sprintf read "1 Kind(er)
-	// verlieren", grammatically wrong for the count==1 case ("Kind(er)"
-	// AND the plural verb "verlieren" both need their own singular form).
+	// grammar branch -- the original single Sprintf read "1 child(ren)
+	// lose", grammatically wrong for the count==1 case ("child(ren)"
+	// AND the plural verb "lose" both need their own singular form).
 	switch m.delChildren {
 	case 0:
 		// no line -- TestDeleteBoxLeafOmitsChildrenWarning
 	case 1:
-		b.WriteString("1 Kind verliert den Parent — wird zur eigenen Wurzel\n")
+		b.WriteString("1 child loses its parent — becomes its own root\n")
 	default:
-		b.WriteString(fmt.Sprintf("%d Kinder verlieren den Parent — werden zu eigenen Wurzeln\n", m.delChildren))
+		b.WriteString(fmt.Sprintf("%d children lose their parent — become their own roots\n", m.delChildren))
 	}
 	// Q01 (E3-T6-Review PFLICHT finding, bean bt-qzwt): same singular/plural
 	// discipline applied from the start for the linked-bean warning (never
@@ -172,9 +172,9 @@ func (m model) deleteBox() string {
 	case 0:
 		// no line -- TestDeleteBoxOmitsLinkedWarningWhenZero
 	case 1:
-		b.WriteString("1 Bean verliert die Blocking-/Blocked-by-Verknüpfung zu diesem Bean\n")
+		b.WriteString("1 bean loses its blocking/blocked-by link to this bean\n")
 	default:
-		b.WriteString(fmt.Sprintf("%d Beans verlieren die Blocking-/Blocked-by-Verknüpfung zu diesem Bean\n", m.delLinks))
+		b.WriteString(fmt.Sprintf("%d beans lose their blocking/blocked-by link to this bean\n", m.delLinks))
 	}
 	b.WriteString("\n" + lipgloss.NewStyle().Foreground(theme.Red).Render("Irreversible.") + "\n")
 	b.WriteString("\n" + theme.Dim.Render("enter: delete permanently   esc/n: cancel"))
