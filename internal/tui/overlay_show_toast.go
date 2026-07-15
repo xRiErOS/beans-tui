@@ -61,9 +61,11 @@ type toastTarget struct {
 	view viewID
 }
 
-// toastState is the ONE toast slot (no stack). seq = generation: a
+// toastState is the ONE toast slot (no stack). seq = generation, drawn from
+// model.toastSeqCounter (types.go), a counter that is NEVER reset -- a
 // toastExpiredMsg only clears the toast when seq still matches the current
-// generation (otherwise a newer toast has already replaced it).
+// generation (otherwise a newer toast has already replaced it, or the slot
+// was reset and refilled since, T6b-Review Prelude I01, bean bt-ggt2/T7).
 type toastState struct {
 	kind    toastKind
 	title   string
@@ -95,6 +97,13 @@ func toastDuration(kind toastKind) time.Duration {
 // existing slot is updated in place (content/kind/target), WITHOUT a new
 // generation/timer -- the already-running auto-dismiss tick stays the single
 // source of truth. Sticky toasts (AC2 parity) get NO auto-dismiss timer.
+//
+// seq is drawn from m.toastSeqCounter (T6b-Review Prelude I01 fix, bean
+// bt-ggt2/T7, types.go's own doc-stamp) -- a model-wide counter that is NEVER
+// reset by any m.toast=nil site, unlike the old `m.toast.seq + 1` scheme
+// (which restarted at 1 every time the slot was nil'd, letting a stale,
+// still-in-flight tick from a PRE-reset toast alias a POST-reset toast's
+// seq and dismiss it prematurely).
 func (m model) showToast(kind toastKind, title, context string, target *toastTarget, sticky bool) (model, tea.Cmd) {
 	now := time.Now()
 	if m.toast != nil && now.Sub(m.toast.setAt) < toastDebounceWindow {
@@ -103,10 +112,8 @@ func (m model) showToast(kind toastKind, title, context string, target *toastTar
 		m.toast = &t
 		return m, nil // debounce: no new tick, the running one stays valid
 	}
-	seq := 1
-	if m.toast != nil {
-		seq = m.toast.seq + 1
-	}
+	m.toastSeqCounter++
+	seq := m.toastSeqCounter
 	m.toast = &toastState{kind: kind, title: title, context: context, target: target, seq: seq, sticky: sticky, setAt: now}
 	if sticky {
 		return m, nil // AC2 parity: sticky = no auto-dismiss, until replace/click

@@ -400,16 +400,36 @@ type model struct {
 	// Toast (E5 Task 1, bean bt-6dts, epic bt-5h4d, Port devd
 	// overlay_show_toast.go, design decision a): ONE slot (no stack) --
 	// nil = no toast shown. ONLY ever written by showToast/dismissToast/
-	// handleToastExpired (update.go) -- no other call site may assign
-	// m.toast directly (Grep-Audit, Task 1 Step 4), which is exactly what
-	// lets a sticky toast (data.ErrConflict, applyMutationResult) survive a
-	// beansLoadedMsg/watchMsg reload automatically: applyLoaded never
-	// touches this field, so there is nothing to clobber it. Dual-Write
+	// handleToastExpired (update.go) and applyRepoSwitched's own
+	// unconditional `m.toast = nil` reset (update.go, T6-Prelude I02
+	// closure, T6b-Review bean bt-pd22 -- a repo switch is a bigger session
+	// discontinuity than a same-repo reload, so even a sticky toast must not
+	// survive it, see applyRepoSwitched's own doc comment) -- no OTHER call
+	// site may assign m.toast directly (Grep-Audit, Task 1 Step 4), which is
+	// exactly what lets a sticky toast (data.ErrConflict, applyMutationResult)
+	// survive a beansLoadedMsg/watchMsg reload automatically: applyLoaded
+	// never touches this field, so there is nothing to clobber it. Dual-Write
 	// with m.err (above): m.err stays the Chrome status-line's Red slot,
 	// UNCHANGED in content/semantics (>20 E1-E4 tests assert against its
 	// string content) -- Toast is purely additive, fired alongside every
 	// existing m.err assignment in update.go (design decision a).
 	toast *toastState
+
+	// toastSeqCounter is the toast generation source (T6b-Review Prelude I01
+	// fix, bean bt-ggt2/T7): a model-WIDE counter, incremented by showToast
+	// on every genuinely NEW generation (never on a debounced in-place
+	// update) and NEVER reset by any of the four m.toast=nil sites above.
+	// Fixes a real bug: the OLD scheme derived seq from `m.toast.seq + 1`,
+	// which restarts at 1 the moment m.toast is nil'd (dismiss/expire/repo-
+	// switch) -- a still-in-flight, non-cancelable toastTimeout tick from
+	// the toast that existed BEFORE the reset then carries a seq that
+	// COLLIDES with the very first toast shown after it, and
+	// handleToastExpired's `msg.seq == m.toast.seq` check would dismiss that
+	// unrelated new toast prematurely (even a sticky one, since the check
+	// runs before the sticky/non-sticky branch). A monotonic counter makes
+	// every generation's seq globally unique for the lifetime of the model,
+	// so a stale tick can never alias a later, unrelated toast again.
+	toastSeqCounter int
 
 	// Help-Overlay (E5 Task 2, bean bt-wpn9, Port devd overlay_shortcuts.go):
 	// helpOpen is a full-capture floating-overlay state, same precedent as

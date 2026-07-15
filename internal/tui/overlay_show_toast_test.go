@@ -190,6 +190,40 @@ func TestToastExpiredMsgClearsOnlyMatchingGeneration(t *testing.T) {
 	}
 }
 
+// TestToastSeqStaysMonotonicAcrossReset guards the T6b-Review Prelude I01
+// fix (bean bt-ggt2): showToast's seq must be drawn from a model-wide
+// counter that is NEVER reset by m.toast=nil (dismissToast,
+// handleToastExpired, applyRepoSwitched all assign it directly) -- otherwise
+// a still-in-flight toastTimeout tick from the toast that existed BEFORE the
+// reset carries a seq that COLLIDES with the FIRST toast shown AFTER it
+// (both would compute seq=1 under the old "m.toast.seq+1, m.toast==nil ->
+// 1" scheme), and handleToastExpired's seq-equality check would then
+// dismiss the wrong (new, unrelated) toast.
+func TestToastSeqStaysMonotonicAcrossReset(t *testing.T) {
+	m := model{width: 90, height: 24}
+	m, _ = m.showToast(toastInfo, "first", "", nil, false)
+	staleSeq := m.toast.seq
+
+	// Simulate a toast-slot reset that is NOT a debounced update -- exactly
+	// what dismissToast/handleToastExpired/applyRepoSwitched all do (m.toast
+	// = nil), independent of which one triggered it.
+	m.toast = nil
+
+	m, _ = m.showToast(toastWarn, "second", "", nil, false)
+	if m.toast.seq == staleSeq {
+		t.Fatalf("second toast's seq (%d) collides with the pre-reset toast's seq (%d) -- want a NEW, never-reused generation", m.toast.seq, staleSeq)
+	}
+
+	// The stale tick from the FIRST (pre-reset) toast must not dismiss the
+	// second, unrelated toast that would occupy the same OLD seq value under
+	// the buggy per-slot counter.
+	tm, _ := m.Update(toastExpiredMsg{seq: staleSeq})
+	nm := tm.(model)
+	if nm.toast == nil || nm.toast.title != "second" {
+		t.Fatalf("a stale pre-reset tick (seq=%d) cleared/changed the post-reset toast: %+v", staleSeq, nm.toast)
+	}
+}
+
 // --- E3 carry-over (E3-I01 PFLICHT, bean bt-5h4d body) ---
 
 // TestConflictToastIsStickyAndSurvivesReload is the E3-Übernahme-Kern-Test
