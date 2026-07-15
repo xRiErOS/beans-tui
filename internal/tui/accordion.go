@@ -21,13 +21,18 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// relationField is a jump-only navigation target inside the Beziehungen
-// section (never an edit target -- edit fields are E3 scope). beanID == ""
-// marks an unresolved/dangling reference: not jumpable, Task 2's enter
-// handler must guard on this.
+// relationField is a navigation target inside a section's field list --
+// EITHER a jump target (Relations section, kind == "") OR a Meta field (PF-4,
+// E7 T4, bean bt-kyj5, design-spec.md §15): kind drives T6's future
+// enter-dispatch (status/type/priority open the seeded Value-Menu, title
+// opens the Title-Edit-Form, readonly is a No-Op for created_at/updated_at).
+// beanID == "" marks either an unresolved/dangling relation reference (not
+// jumpable) or any Meta field (Meta fields are never jump targets, beanID is
+// always "" there).
 type relationField struct {
-	beanID string // target bean ID; "" for an unresolved/dangling reference (not jumpable)
+	beanID string // target bean ID; "" for an unresolved/dangling reference (not jumpable) or any Meta field
 	label  string // pre-rendered row text (theme colors already applied)
+	kind   string // "" = jump (Relations, E2 behavior unchanged) | "status"|"type"|"priority" = Value-Menu seeded on group | "title" = Title-Edit-Form | "readonly" = No-Op (created_at/updated_at)
 }
 
 // accordionSection mirrors devd's shape minus the editor-specific parts.
@@ -42,8 +47,12 @@ type accordionSection struct {
 // renderAccordion rendert die Sektions-Header (`> [n] Title`) und klappt die
 // offene Sektion (1-basiert, exklusiv) als eingerückten Body darunter auf
 // (port devd accordion.go:309-355). active/activeIdx/fieldIdx replace devd's
-// detailFocusView{sec,field} -- fieldStrip only ever renders for the
-// Beziehungen section (the only section carrying fields in E2).
+// detailFocusView{sec,field}. PF-1 (design-spec.md §15, E7 T4, bean bt-kyj5):
+// section 1 (Meta) is never collapsible -- its body renders regardless of
+// `open`, sections 2-4 stay exclusive-open. fieldStrip renders for ANY
+// active section carrying fields EXCEPT Meta itself (`i != 0`): Meta's own
+// ▷/▶ field cursor lives INSIDE metaSectionBody's per-row markers (PF-4), a
+// second "Fields: ..." strip above it would be a duplicate cursor.
 func renderAccordion(secs []accordionSection, open, w int, active bool, activeIdx, fieldIdx int) string {
 	if len(secs) == 0 {
 		return theme.Dim.Render("(no detail fields)")
@@ -57,7 +66,7 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 	var b strings.Builder
 	for i, s := range secs {
 		n := i + 1
-		isOpen := n == open
+		isOpen := n == open || n == 1         // PF-1: Meta (section 1) always shows its body
 		activeSec := active && activeIdx == i // D08: focus is on this section
 		marker := theme.Chevron.Render("> ") + theme.Key.Render(fmt.Sprintf("[%d]", n)) + " "
 		var title, hint string
@@ -68,17 +77,27 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 			title = theme.Muted.Render(s.title)
 			hint = theme.Muted.Render("  ▸")
 		}
-		header := truncate(marker+title+hint, w)
+		// PF-12 (design-spec.md §15, E7 T4): BOTH branches now reserve
+		// exactly 1 gutter column (" " inactive, "▌" active) and truncate
+		// content to w-1 -- previously only the active branch reserved a
+		// column (truncate to w-1), the inactive branch used the FULL w with
+		// no prefix, so a header's own title text shifted 1 column depending
+		// on whether IT ITSELF was active (layout shift on selection).
+		var header string
 		if activeSec {
 			// D08: active section = ▌ bar + whole line accent-tinted (own
 			// per-cell colors stripped first, mirrors the tree cursor).
 			header = theme.Accent.Render("▌" + truncate(ansi.Strip(marker+title+hint), w-1))
+		} else {
+			header = " " + truncate(marker+title+hint, w-1)
 		}
 		b.WriteString(headerStyle.Render(header) + "\n")
 		if isOpen {
 			// Field-level focus shows the field strip (which field a jump
-			// would target) before the body.
-			if activeSec && len(s.fields) > 0 {
+			// would target) before the body -- skipped for Meta (i == 0):
+			// its field cursor renders per-row inside the body itself
+			// (metaSectionBody's ▷/▶ markers, PF-4), not as a strip above.
+			if activeSec && i != 0 && len(s.fields) > 0 {
 				b.WriteString(fieldStrip(s.fields, fieldIdx, w) + "\n")
 			}
 			b.WriteString(boxStyle.Render(s.body) + "\n")
@@ -89,7 +108,11 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 
 // fieldStrip rendert die Beziehungen-Felder einer Section als kompakte Zeile
 // mit dem aktiven Feld (D08-Balken + Accent), die übrigen muted (port devd
-// accordion.go:360-373, detailField.label -> relationField.label).
+// accordion.go:360-373, detailField.label -> relationField.label). PF-12
+// (design-spec.md §15, E7 T4): the inactive branch now reserves the same 1
+// gutter column (" " prefix) the active branch's "▌" occupies -- previously
+// bare (no prefix), so a field's own label shifted 1 column depending on
+// whether IT ITSELF was active.
 func fieldStrip(fields []relationField, active, w int) string {
 	if len(fields) == 0 {
 		return theme.Muted.Render("Fields: (none)")
@@ -99,7 +122,7 @@ func fieldStrip(fields []relationField, active, w int) string {
 		if i == active {
 			parts[i] = theme.Accent.Render("▌" + f.label)
 		} else {
-			parts[i] = theme.Muted.Render(f.label)
+			parts[i] = " " + theme.Muted.Render(f.label)
 		}
 	}
 	return truncate(theme.Muted.Render("Fields: ")+strings.Join(parts, "  "), w)

@@ -894,7 +894,13 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detailFocus = false
 		return m, nil
 	}
-	secs := beanSections(m.idx, b, 40) // width is render-time only; section COUNT is fixed (4)
+	// width is render-time only; section COUNT is fixed (beanSectionCount).
+	// focused/secCursor/fieldCursor are passed for signature parity with the
+	// render call sites (view_browse_repo.go) -- this call only reads
+	// secs[...].fields for navigation, which metaFields/relationsSectionBody
+	// build independently of these 3 params (they only affect a section's
+	// rendered BODY string, e.g. Meta's ▷/▶ marker placement, unused here).
+	secs := beanSections(m.idx, b, 40, m.detailFocus, m.secCursor, m.fieldCursor)
 
 	// B02 (Review-Runde 2, bean bt-2jve, Critical): clamp secCursor/
 	// fieldCursor against the just-computed secs BEFORE any branch below

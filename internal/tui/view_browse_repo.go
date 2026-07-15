@@ -548,9 +548,14 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 		if accW < 1 {
 			accW = 1
 		}
-		secs := beanSections(idx, b, bodyW)
+		// PF-3+PF-4 (design-spec.md §15, E7 T4, bean bt-kyj5): the Kopfblock
+		// (ID/Title/type-status-prio) renders ABOVE the Accordion, same width
+		// as the Accordion itself (accW) -- not the App-Chrome header (PO-
+		// Antwort Q01: Detail-Pane only).
+		rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
+		secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor)
 		acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
-		rows = strings.Split(acc, "\n")
+		rows = append(rows, strings.Split(acc, "\n")...)
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}

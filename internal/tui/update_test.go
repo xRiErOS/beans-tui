@@ -600,23 +600,35 @@ func TestDetailFocusUpDownMovesSectionCursorClampedAtEnds(t *testing.T) {
 	}
 }
 
-// TestDetailFocusRightEntersFieldLevelOnlyForBeziehungenSection guards that
-// right/l is a no-op on a fieldless section (Meta) but enters field level on
-// Beziehungen (the only section carrying relationFields in E2).
-func TestDetailFocusRightEntersFieldLevelOnlyForBeziehungenSection(t *testing.T) {
+// TestDetailFocusRightEntersFieldLevelOnlyForSectionsWithFields guards that
+// right/l enters field level exactly on sections that carry fields. E7 T4
+// (PF-4, bean bt-kyj5) turns Meta into a 6-entry navigable field list
+// (previously fieldless) -- this invalidates the OLD test's "Meta has no
+// fields" premise, so Meta now joins Relations as a fields-bearing section;
+// Body remains the fieldless negative control. Renamed from
+// ...OnlyForBeziehungenSection (PF-7 also renamed the section RELATIONS).
+func TestDetailFocusRightEntersFieldLevelOnlyForSectionsWithFields(t *testing.T) {
 	m := fixtureModel(t, fixtureBeansWithBlocking())
 	m.expanded["ms-1"] = true
 	m.expanded["ep-1"] = true
 	m.cursorID = "bean-a"
+
 	m = step(t, m, keyMsg(tea.KeyTab)) // secCursor=0 (Meta)
 	m = step(t, m, keyMsg(tea.KeyRight))
-	if m.detailLevel != 0 {
-		t.Fatal("right on Meta (no fields) must stay at section level")
+	if m.detailLevel != 1 {
+		t.Fatal("right on Meta (PF-4: 6 navigable fields) must enter field level")
 	}
-	m = step(t, m, runeMsg('3')) // Beziehungen
+
+	m = step(t, m, runeMsg('2')) // Body -- digit jump resets detailLevel to 0
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.detailLevel != 0 {
+		t.Fatal("right on Body (no fields) must stay at section level")
+	}
+
+	m = step(t, m, runeMsg('3')) // Relations
 	m = step(t, m, keyMsg(tea.KeyRight))
 	if m.detailLevel != 1 {
-		t.Fatal("right on Beziehungen (has fields) must enter field level")
+		t.Fatal("right on Relations (has fields) must enter field level")
 	}
 }
 
