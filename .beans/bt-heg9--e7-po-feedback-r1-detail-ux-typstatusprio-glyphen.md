@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:28:42Z
+updated_at: 2026-07-15T14:30:06Z
 parent: bt-apmy
 ---
 
@@ -134,3 +134,8 @@ Planner-Hinweis Reihenfolge: Removal FRÜH einplanen (idealerweise erster Task) 
 ## PO-Präzisierung zu PF-14 (2026-07-15): Review-Tag-Trio
 
 Chat-Review steuert Rework über DREI Tags (kebab-case normalisiert): **to-review** (Agent meldet fertig) · **accepted** (PO nimmt an — Chat/CLI setzt Tag um bzw. schließt ab) · **rejected** (PO weist zurück → Agent-Rework). Ersetzt die bisherige Zwei-Tag-Konvention (to-review/rework). design-spec §5 entsprechend: Tag-Trio dokumentieren, KEINE TUI-Interaktion dafür — nur Sichtbarkeit (Tags im Tree/Detail/Filter sichtbar wie jedes Tag).
+
+
+## PO-Nachtrag 9 (2026-07-15): p in Header-Globals
+
+**PF-11-Ergänzung:** Keybinding 'p' (Repo-Picker, global von überall) fehlt in der Header-Global-Liste oben rechts. Soll: 'ctrl+r:Reload · ?:help · q:quit · esc:back · enter:open/confirm · p:repos' (Label-Wortlaut Englisch, Planner wählt konsistent kurz). Generell-Regel: ALLE globalen Bindings erscheinen oben rechts — auch ctrl+k (Command-Center) prüfen, das fehlt dort heute ebenfalls.
