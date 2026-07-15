@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"beans-tui/internal/clip"
 	"beans-tui/internal/data"
 
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -443,6 +444,24 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			return true, m.openDeleteConfirm(), nil
 		}
 		return true, m, nil // unreachable: msg matched one of the six keys in this case's condition above
+	case keybind.Matches(msg, keys.Yank):
+		// E5 Task 3 (bean bt-e4a6, design decision b): `y` always acts on
+		// m.focusedBean() -- Tree/Backlog identical (focusedBean is already
+		// the view-agnostic dispatcher E2 Task 2 built). The Review-Cockpit
+		// is the ONE view-local exception: it fully captures ahead of
+		// keyNodeAction (handleKey, view==viewReviewCockpit case) with its
+		// own y-override (reviewStandMarkdown, view_review_cockpit.go), so
+		// this branch is unreachable from inside the Cockpit.
+		b := m.focusedBean()
+		if b == nil {
+			return true, m, nil // orphan-root cursor: handled, silent no-op (Plan Step 6)
+		}
+		if err := clip.Copy(beanContext(m.idx, b)); err != nil {
+			nm, cmd := m.showToast(toastWarn, "Yank fehlgeschlagen", "", nil, false)
+			return true, nm, cmd
+		}
+		nm, cmd := m.showToast(toastInfo, "Kopiert: "+b.ID, "", nil, false)
+		return true, nm, cmd
 	}
 	return false, m, nil
 }

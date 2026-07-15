@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"strings"
 
+	"beans-tui/internal/clip"
 	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -113,6 +114,42 @@ func reviewRework(idx *data.Index) []*data.Bean {
 		return nil
 	}
 	return idx.WithTag("rework")
+}
+
+// reviewStandMarkdown renders the WHOLE Review-Cockpit queue as Markdown for
+// the clipboard (E5 Task 3, bean bt-e4a6, design decision b: the Cockpit's
+// `y`-override, in place of the generic per-bean beanContext, context.go) --
+// one "## <Epic ID> <Epic Title>" (or "## (kein Epic)") table per
+// reviewQueue group, THEN a "## Rework" table when reviewRework is
+// non-empty. Reuses reviewQueue/reviewRework as-is (Plan Step 4: "KEIN neuer
+// Gruppierungscode") -- both already canonically sort their members/epics.
+func reviewStandMarkdown(idx *data.Index) string {
+	groups := reviewQueue(idx)
+	rework := reviewRework(idx)
+
+	total := 0
+	for _, g := range groups {
+		total += len(g.beans)
+	}
+
+	var out strings.Builder
+	fmt.Fprintf(&out, "# Review-Stand (%d to-review)\n", total)
+
+	for _, g := range groups {
+		title := "(kein Epic)"
+		if g.epic != nil {
+			title = g.epic.ID + " " + g.epic.Title
+		}
+		fmt.Fprintf(&out, "\n## %s\n\n", title)
+		out.WriteString(contextBeanTable(g.beans))
+	}
+
+	if len(rework) > 0 {
+		fmt.Fprintf(&out, "\n## Rework (%d)\n\n", len(rework))
+		out.WriteString(contextBeanTable(rework))
+	}
+
+	return out.String()
 }
 
 // reviewFlat is the Cockpit's cursor index space (types.go's reviewCursor
@@ -395,6 +432,19 @@ func (m model) keyReviewCockpit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.reviewCursor++
 		}
 		return m, nil
+	}
+
+	// E5 Task 3 (bean bt-e4a6, design decision b): the Cockpit's own `y`
+	// override -- reviewStandMarkdown (the WHOLE queue) instead of
+	// keyNodeAction's generic per-bean beanContext. Reachable here at all
+	// because keyReviewCockpit fully captures ahead of keyNodeAction
+	// (handleKey, view==viewReviewCockpit case, checked BEFORE keyNodeAction
+	// is ever dispatched) -- no separate guard against keyNodeAction needed.
+	if keybind.Matches(msg, keys.Yank) {
+		if err := clip.Copy(reviewStandMarkdown(m.idx)); err != nil {
+			return m.showToast(toastWarn, "Yank fehlgeschlagen", "", nil, false)
+		}
+		return m.showToast(toastInfo, "Review-Stand kopiert", "", nil, false)
 	}
 
 	switch msg.String() {
