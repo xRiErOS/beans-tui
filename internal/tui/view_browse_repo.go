@@ -699,11 +699,24 @@ func (m model) View() string {
 // construction (Golden-Rule-Drift-Schutz: one source instead of two that
 // could drift apart, mirrors windowStart's own shared-geometry rationale).
 func (m model) browseRepoChrome(innerW int) (head, localKeys string) {
-	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
-	head = breadcrumb(m.repoLabel(), "Browse", globalHint, innerW)
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Enter, keys.Search, keys.Refresh, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
-	localKeys = footer(localHint, innerW)
+	head = breadcrumb(m.repoLabel(), "Browse", renderBindings(globalBindings()), innerW)
+	localKeys = footer(m.contextualLocalHint(browseRepoLocalBindings()), innerW)
 	return
+}
+
+// browseRepoLocalBindings is the Tree view's own Footer Zone 3 local set
+// (PF-11, design-spec.md §15, epic-E7-plan.md Task 7 Step 5, bean bt-m6at):
+// browseRepoChrome's PREVIOUS inline list, minus Refresh/Enter (now
+// globalBindings(), header-only -- duplicating them here is exactly what
+// PF-11 removes), plus FocusIn/FocusOut (PF-13) replacing the hand-typed
+// "  tab:focus" footer suffix -- shift+tab is now visible for the first
+// time. Everything else (Up/Down/Left/Right/Search/Status/Create/Delete/
+// Editor) is UNCHANGED from the pre-T7 list: T7's scope is the header/
+// footer SPLIT + disjointness, not a completeness pass over every key
+// keyNodeAction/keyTree also happen to handle (f/X/b/t/a/B/y are a
+// pre-existing gap -- see this task's Deviations).
+func browseRepoLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Search, keys.Status, keys.Create, keys.Delete, keys.Editor, keys.FocusIn, keys.FocusOut}
 }
 
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors

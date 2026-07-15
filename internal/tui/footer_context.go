@@ -1,0 +1,148 @@
+package tui
+
+// footer_context.go — the context-sensitive Footer Zone 3 (PF-11
+// Q04-Antwort, design-spec.md §15, epic-E7-plan.md Task 7, bean bt-m6at):
+// while a Filter-Menu/node-action-Overlay/Search/Command-Center/Help fully
+// captures input (handleKey's own capture-order precedent, update.go), the
+// view-local bindings underneath (browseRepoLocalBindings/
+// backlogLocalBindings) are non-functional -- showing them in the footer
+// would actively mislead. contextualLocalHint swaps the footer to the
+// ACTIVE capture state's own bindings instead.
+//
+// Two full-capture states are deliberately NOT cases below: an open huh Form
+// (m.form != nil, forms_shared.go's formChrome) and m.confirmQuit (quitBox,
+// box_confirm_quit.go) each already bake their own COMPLETE hint straight
+// into their own modalPanel footer argument ("enter next/save · esc cancel"
+// / "enter: quit   esc: cancel") -- there is no base-view fallback to build
+// for either. The overlays covered below (Filter-Menu/Value-Menu/Tag-/
+// Parent-/Blocking-Picker) also already render their OWN inline hint line
+// at the top of their body (e.g. treeFilterBox's "space/x:toggle X:clear
+// enter/esc/f:done") -- that is a separate, pre-existing surface; this
+// file's job is strictly the OUTER footer (Zone 3, visible around/below the
+// centered modal), which epic-E7-plan.md Task 7 Step 6 explicitly wants
+// synced to the same active context too (Q04's underlying complaint: the
+// outer footer kept showing STALE Tree/Backlog hints while a totally
+// different overlay had full input capture).
+import keybind "github.com/charmbracelet/bubbles/key"
+
+// filterMenuLocalBindings is the Facet-Filter-Menu's own footer set
+// (epic-E7-plan.md Task 7 Step 6, literal): keys.Toggle is exactly the
+// "space: select/toggle" hint Q04 asked for, at the concrete overlay (the
+// Filter-Menu) whose absence the PO actually noticed.
+func filterMenuLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.FilterClear, keys.Enter, keys.Back}
+}
+
+// valueMenuLocalBindings is the Value-Menu overlay's own footer set
+// (epic-E7-plan.md Task 7 Step 6, literal). keys.Status doubles as a close
+// alias here (keyValueMenu, box_menu_value.go: opened by `s`, ALSO closes
+// on a second `s`, same as Back) -- a genuine local binding of this
+// overlay, not a stray global leaking through.
+func valueMenuLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Status, keys.Back}
+}
+
+// tagPickerLocalBindings is the Tag-Picker overlay's own footer set.
+//
+// DEVIATION from epic-E7-plan.md Task 7 Step 6's literal text (which lumps
+// Tag-/Parent-/Blocking-Picker into ONE Toggle-free {Up,Down,Enter,Back}
+// set): keyTagPicker (box_picker_tag.go) actually wires keys.Toggle
+// (space/x, multi-select tag membership -- toggleTagPending). Omitting it
+// here would silently hide a real, working key and leave Q04's own general
+// wording ("wenn ein Form/Overlay aktiv ist ... inkl. 'space:
+// select/toggle'") only half addressed -- Q04's PO example (the Filter-Menu)
+// was illustrative, not exhaustive. See this task's Deviations section.
+func tagPickerLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.Enter, keys.Back}
+}
+
+// parentPickerLocalBindings is the Parent-Picker overlay's own footer set
+// (epic-E7-plan.md Task 7 Step 6, literal) -- genuinely Toggle-free:
+// keyParentPicker (box_picker_parent.go) is a single-select list, no
+// space/x case at all.
+func parentPickerLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Back}
+}
+
+// blockingPickerLocalBindings mirrors tagPickerLocalBindings' own Toggle
+// deviation -- keyBlockingPicker (box_picker_blocking.go) also wires
+// keys.Toggle (multi-select blocking-relation membership,
+// toggleBlockPending).
+func blockingPickerLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.Enter, keys.Back}
+}
+
+// confirmGateLocalBindings is the shared footer set for the two Confirm-Gate
+// overlays (Create/Delete).
+//
+// GAP-FILL, not literally named by epic-E7-plan.md Task 7 Step 6: that
+// step's overlay-specific-set enumeration only names Value-Menu and
+// Tag-/Parent-/Blocking-Picker, leaving overlayCreateConfirm/
+// overlayDeleteConfirm -- two more real `m.overlay != overlayNone` values
+// (types.go) -- without an assigned set. Both keyCreateConfirm
+// (box_confirm_create.go) and keyDeleteConfirm (box_confirm_delete.go)
+// really only answer to Enter/Back (their own modal body already bakes in
+// the destructive/constructive verb, e.g. "enter: delete permanently" --
+// this base-view fallback intentionally stays generic).
+func confirmGateLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Enter, keys.Back}
+}
+
+// searchLocalBindings is the inline Tree/Backlog search input's own footer
+// set while active (m.searchActive, keySearchInput, update.go) --
+// epic-E7-plan.md Task 7 Step 6, literal.
+func searchLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Enter, keys.Back}
+}
+
+// paletteLocalBindings/helpLocalBindings are deliberately minimal base-view
+// fallbacks (epic-E7-plan.md Task 7 Step 6, literal): paletteBox/helpBox
+// (overlay_palette.go/overlay_shortcuts.go) already bake their own complete
+// hint into their OWN modalPanel footer argument (non-empty, unlike the
+// overlays above) -- the plan still names a base-view fallback for both, so
+// one exists here too, kept intentionally short since the modal's own hint
+// is the primary surface.
+func paletteLocalBindings() []keybind.Binding { return []keybind.Binding{keys.Enter, keys.Back} }
+func helpLocalBindings() []keybind.Binding    { return []keybind.Binding{keys.Back} }
+
+// overlayLocalBindings dispatches m.overlay to its own footer set --
+// extracted helper for contextualLocalHint's overlay case, below.
+func overlayLocalBindings(o overlayID) []keybind.Binding {
+	switch o {
+	case overlayValueMenu:
+		return valueMenuLocalBindings()
+	case overlayTagPicker:
+		return tagPickerLocalBindings()
+	case overlayParentPicker:
+		return parentPickerLocalBindings()
+	case overlayBlockingPicker:
+		return blockingPickerLocalBindings()
+	case overlayCreateConfirm, overlayDeleteConfirm:
+		return confirmGateLocalBindings()
+	}
+	return nil
+}
+
+// contextualLocalHint is Footer Zone 3's single source for BOTH
+// Chrome-calling views (browseRepoChrome/view_browse_repo.go,
+// backlogChrome/view_browse_backlog.go): view-local (viewLocal) in the
+// normal state, but swaps to the active capture state's OWN bindings the
+// instant one fully captures input (Q04-Antwort, PO-Nachtrag 5). Priority
+// order (epic-E7-plan.md Task 7 Step 6, mirrors handleKey's own
+// full-capture dispatch order, update.go): Filter-Menü > Overlay > Suche >
+// Palette > Help > view-local default.
+func (m model) contextualLocalHint(viewLocal []keybind.Binding) string {
+	switch {
+	case m.filterOpen:
+		return renderBindings(filterMenuLocalBindings())
+	case m.overlay != overlayNone:
+		return renderBindings(overlayLocalBindings(m.overlay))
+	case m.searchActive:
+		return renderBindings(searchLocalBindings())
+	case m.paletteOpen:
+		return renderBindings(paletteLocalBindings())
+	case m.helpOpen:
+		return renderBindings(helpLocalBindings())
+	}
+	return renderBindings(viewLocal)
+}

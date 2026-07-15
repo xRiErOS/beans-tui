@@ -86,13 +86,13 @@ func newKeyMap() keyMap {
 		Back:    keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithHelp("esc", "back")),
 		Quit:    keybind.NewBinding(keybind.WithKeys("q", "ctrl+c"), keybind.WithHelp("q", "quit")),
 		Help:    keybind.NewBinding(keybind.WithKeys("?"), keybind.WithHelp("?", "help")),
-		Palette: keybind.NewBinding(keybind.WithKeys("ctrl+k", "K"), keybind.WithHelp("ctrl+k", "Command-Center")),
-		Picker:  keybind.NewBinding(keybind.WithKeys("p"), keybind.WithHelp("p", "Repo-Picker")),
+		Palette: keybind.NewBinding(keybind.WithKeys("ctrl+k", "K"), keybind.WithHelp("ctrl+k", "commands")),
+		Picker:  keybind.NewBinding(keybind.WithKeys("p"), keybind.WithHelp("p", "repos")),
 		Backlog: keybind.NewBinding(keybind.WithKeys("b"), keybind.WithHelp("b", "Backlog")),
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "Search")),
 		Filter:  keybind.NewBinding(keybind.WithKeys("f"), keybind.WithHelp("f", "Filter")),
 		Yank:    keybind.NewBinding(keybind.WithKeys("y"), keybind.WithHelp("y", "Copy context")),
-		Refresh: keybind.NewBinding(keybind.WithKeys("ctrl+r"), keybind.WithHelp("ctrl+r", "Reload data")),
+		Refresh: keybind.NewBinding(keybind.WithKeys("ctrl+r"), keybind.WithHelp("ctrl+r", "reload")),
 		Section: keybind.NewBinding(keybind.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"), keybind.WithHelp("1…9", "Section")),
 
 		FilterClear: keybind.NewBinding(keybind.WithKeys("X"), keybind.WithHelp("X", "Clear filters")),
@@ -128,6 +128,30 @@ func (k keyMap) helpGroups() []helpGroup {
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
 		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort}},
 	}
+}
+
+// globalBindings is Header Zone 1's single source (PF-11, design-spec.md
+// §15, erweitert Nachtrag 9, epic-E7-plan.md Task 7, bean bt-m6at): ALL 7
+// globally-reachable bindings that get their own dedicated header slot --
+// `ctrl+r:reload · ctrl+k:commands · p:repos · ?:help · esc:back ·
+// enter:open/confirm · q:quit`, in this exact order. Replaces the old
+// 3-item ad hoc `renderBindings([]keybind.Binding{keys.Refresh, keys.Help,
+// keys.Quit})` literal duplicated in both browseRepoChrome
+// (view_browse_repo.go) and backlogChrome (view_browse_backlog.go) --
+// esc/enter/ctrl+k/p were completely missing from the header before this.
+// FocusIn/FocusOut (PF-13) are deliberately NOT here despite being
+// dispatched at the same global handleKey checkpoint as Refresh/Palette/
+// Picker/Quit -- dispatch POSITION and display BUCKET are two different
+// axes (see bt-t1uy's own T7 notes): FocusIn/FocusOut stay footer/view-local
+// (browseRepoLocalBindings/backlogLocalBindings). Every other
+// global-checkpoint key (Create/Status/TagAssign/Assign/Blocking/Delete/
+// Editor/Yank/Backlog/Search/Filter/FilterClear/Section) is the same --
+// reachable from anywhere, but shown per-view in the footer, not here
+// (TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList guards the two
+// footer lists against ever re-adding one of THESE 7, not against the
+// wider global-checkpoint set).
+func globalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Refresh, keys.Palette, keys.Picker, keys.Help, keys.Back, keys.Enter, keys.Quit}
 }
 
 // bindHas reports whether key k is part of binding b (exact match).

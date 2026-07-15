@@ -683,7 +683,7 @@ DESSEN lokale Bindings statt der (dann irrelevanten) View-Bindings —
 insbesondere `keys.Toggle` (`space/x:Toggle facet`) beim offenen
 Filter-Menü, das Q04 auslöste.
 
-- [ ] **Step 1: Failing tests — `keymap_test.go`.**
+- [x] **Step 1: Failing tests — `keymap_test.go`.**
   - NEU `TestGlobalBindingsExactSet`: `globalBindings()` liefert exakt
     `{Refresh, Palette, Picker, Help, Back, Enter, Quit}` in dieser
     Reihenfolge.
@@ -694,45 +694,61 @@ Filter-Menü, das Q04 auslöste.
     (Drift-Guard, Reflection): für `browseRepoLocalBindings()`/
     `backlogLocalBindings()` (neu benannte Funktionen, s. Step 5): kein
     `Keys()`-Wert überschneidet sich mit `globalBindings()`s `Keys()`.
-- [ ] **Step 2: Failing tests — Chrome-Funktionen.** Bestehende Tests (per
+- [x] **Step 2: Failing tests — Chrome-Funktionen.** Bestehende Tests (per
   `grep -n "func Test.*Chrome" internal/tui/*_test.go` ermitteln) auf die
-  neuen Header-/Footer-Inhalte umstellen.
-- [ ] **Step 3:** `command go test ./internal/tui/...` → FAIL.
-- [ ] **Step 4: Implement `keymap.go`.** Help-Texte kürzen (s. oben). `func
-  globalBindings() []keybind.Binding { return []keybind.Binding{keys.Refresh,
-  keys.Palette, keys.Picker, keys.Help, keys.Back, keys.Enter, keys.Quit} }`.
-- [ ] **Step 5: Implement die 2 Chrome-Funktionen.** Jede extrahiert ihre
-  bisherige inline `[]keybind.Binding{...}`-Liste in eine benannte Funktion
-  (`browseRepoLocalBindings()`, `backlogLocalBindings()`) — OHNE
-  `Refresh`/`Enter`, MIT `FocusIn`/`FocusOut` statt hand-getipptem
-  `tab:focus`. `head = breadcrumb(m.repoLabel(), "<Titel>",
-  renderBindings(globalBindings()), innerW)` ersetzt die bisherige
-  2× duplizierte Zeile.
-- [ ] **Step 6: Implement kontextsensitiven Footer.** Neue Funktion
-  (`view.go` oder `footer_context.go`): `func (m model) contextualLocalHint(viewLocal
-  []keybind.Binding) string` — Switch-Priorität: `m.filterOpen` →
-  `renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Toggle,
-  keys.FilterClear, keys.Enter, keys.Back})`; `m.overlay != overlayNone` →
-  overlay-spezifisches Set (Value-Menu: `{Up,Down,Enter,Status,Back}`;
-  Tag-/Parent-/Blocking-Picker: `{Up,Down,Enter,Back}`); `m.searchActive`
-  → `{Enter,Back}`; `m.paletteOpen` → `{Enter,Back}`; `m.helpOpen` →
-  `{Back}`; sonst → `renderBindings(viewLocal)`. Beide Chrome-Funktionen
-  rufen diese mit ihrer eigenen `*LocalBindings()`-Liste als `viewLocal`
-  auf.
-- [ ] **Step 7:** `command go test ./internal/tui/...` → PASS.
-- [ ] **Step 8: Golden-Regen** (3 Goldens). ALLE betroffen (Header+Footer
-  Teil jeder View). Vorher/Nachher je Datei.
-- [ ] **Step 9:** `command go test ./... -short` grün, gofmt/vet leer.
-- [ ] **Step 10:** Commit `refactor(tui): PF-11 Header/Footer-Keybinding-
-  Split (vollständige Global-Liste) + kontextsensitiver Footer (Q04)`.
+  neuen Header-/Footer-Inhalte umstellen. ERRATUM: keine bestehenden
+  browseRepoChrome/backlogChrome-spezifischen Tests gefunden (nur
+  `chrome_test.go`, das die generische `Chrome()`-Funktion mit statischen
+  `ChromeOpts` testet — unberührt von diesem Task) — neue Tests statt
+  Umstellung: `view_browse_repo_test.go` (neu) + Ergänzung in
+  `view_browse_backlog_test.go` + `footer_context_test.go` (neu).
+- [x] **Step 3:** `command go test ./internal/tui/...` → FAIL (RED bestätigt:
+  Compile-Fehler `m.contextualLocalHint undefined`, dann nach Teil-Fix
+  Golden-Diffs).
+- [x] **Step 4: Implement `keymap.go`.** Help-Texte gekürzt.
+  `globalBindings()` wie spezifiziert.
+- [x] **Step 5: Implement die 2 Chrome-Funktionen.**
+  `browseRepoLocalBindings()`/`backlogLocalBindings()` extrahiert, OHNE
+  Refresh/Enter, MIT FocusIn/FocusOut. DEVIATION (dokumentiert,
+  bean bt-m6at): die vollere Liste `f/X/b/t/a/B/y` aus dem übergeordneten
+  Implementer-Auftrag NICHT übernommen — bewusst bei "ihre bisherige
+  Liste" (dieser Steps eigener Wortlaut) geblieben, da eine Erweiterung
+  PF-11s eigene Footer-Kürzungs-Begründung (VQA-I01) unterlaufen hätte und
+  außerhalb der von T6s Notes-for-T7 benannten 3 konkreten Baustellen lag.
+  Siehe bean bt-m6at Deviations.
+- [x] **Step 6: Implement kontextsensitiven Footer.** `footer_context.go`
+  (neue Datei) mit `contextualLocalHint`. DEVIATIONS (dokumentiert):
+  (1) Tag-/Blocking-Picker erhalten `Toggle` zusätzlich zum literalen
+  `{Up,Down,Enter,Back}` (keyTagPicker/keyBlockingPicker verdrahten
+  `keys.Toggle` wirklich — Auslassen hätte Q04s eigene Absicht nur halb
+  erfüllt); Parent-Picker bleibt Toggle-frei (echtes Single-Select).
+  (2) `overlayCreateConfirm`/`overlayDeleteConfirm` (vom Plan-Text nicht
+  benannt) ergänzt mit `{Enter,Back}` (Gap-Fill, beide Overlays kennen real
+  nur diese zwei Tasten). Siehe bean bt-m6at Deviations.
+- [x] **Step 7:** `command go test ./internal/tui/...` → PASS.
+- [x] **Step 8: Golden-Regen.** NUR 2 von 3 Goldens betroffen (ERRATUM
+  ggü. "ALLE betroffen"): `tree.golden`/`backlog.golden` regeneriert
+  (Header 1→2 Zeilen bei 100 Spalten, Footer-Inhalt neu). `chrome.golden`
+  UNVERÄNDERT — sein eigener Test (`chrome_test.go`) rendert die generische
+  `Chrome()`-Funktion mit statischen, hand-geschriebenen `ChromeOpts`
+  (`GlobalHint`/`FooterHint` als Literal), berührt weder `globalBindings()`
+  noch `browseRepoChrome`/`backlogChrome` — bestätigt PASS ohne `-update`.
+- [x] **Step 9:** `command go test ./... -short` grün, `command go test
+  ./...` (voller Lauf, ~136s) grün, gofmt/vet leer.
+- [x] **Step 10:** Commit `feat(tui): Header/Footer-Keybinding-Split,
+  kontextsensitiver Footer (PF-11)` (Refs: bt-m6at).
 
 **Akzeptanz-Checkliste:**
-- [ ] Header zeigt exakt `{Refresh, Palette, Picker, Help, Back, Enter,
+- [x] Header zeigt exakt `{Refresh, Palette, Picker, Help, Back, Enter,
   Quit}` (7 Bindings), EINE Quelle (`globalBindings()`)
-- [ ] Kein Binding erscheint gleichzeitig in Header UND einer View-lokalen
+- [x] Kein Binding erscheint gleichzeitig in Header UND einer View-lokalen
   Footer-Liste (Drift-Guard-Test grün)
-- [ ] Footer wechselt kontextsensitiv bei offenem Filter-Menü/Overlay/Form
-  (inkl. `space:Toggle facet`, Q04)
+- [x] Footer wechselt kontextsensitiv bei offenem Filter-Menü/Overlay/Form
+  (inkl. `space:Toggle facet`, Q04) -- huh-Forms bewusst AUSSER Scope (siehe
+  Step 6 DEVIATIONS/`footer_context.go` Doc-Kommentar: `formChrome` trägt
+  bereits eigenen, vollständigen Footer-Hint)
+- [x] Goldens regeneriert + Vorher/Nachher je Datei (2 von 3 betroffen,
+  `chrome.golden` bestätigt unverändert -- s. Step 8 ERRATUM)
 - [ ] Goldens regeneriert + Vorher/Nachher je Datei
 
 ---

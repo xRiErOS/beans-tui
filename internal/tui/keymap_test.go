@@ -76,6 +76,75 @@ func TestFocusInFocusOutKeysBound(t *testing.T) {
 	}
 }
 
+// TestGlobalBindingsExactSet guards PF-11 (design-spec.md §15, E7 T7, bean
+// bt-m6at): globalBindings() is Header Zone 1's single source -- exactly the
+// 7 header-global bindings, in the exact display order design-spec §15
+// specifies (`ctrl+r:reload · ctrl+k:commands · p:repos · ?:help · esc:back
+// · enter:open/confirm · q:quit`).
+func TestGlobalBindingsExactSet(t *testing.T) {
+	want := []keybind.Binding{keys.Refresh, keys.Palette, keys.Picker, keys.Help, keys.Back, keys.Enter, keys.Quit}
+	got := globalBindings()
+	if len(got) != len(want) {
+		t.Fatalf("globalBindings() has %d entries, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if strings.Join(got[i].Keys(), ",") != strings.Join(want[i].Keys(), ",") {
+			t.Errorf("globalBindings()[%d].Keys() = %v, want %v", i, got[i].Keys(), want[i].Keys())
+		}
+	}
+}
+
+// TestGlobalBindingHelpTextsShortened guards PF-11's Label-Kürzung
+// (design-spec.md §15, Planner-Entscheidung "kurz und konsistent"):
+// Refresh/Palette/Picker's Help().Desc shrink to single lowercase words --
+// helpGroups()/the Help-Overlay reuse the SAME keybind.Binding objects
+// (Single Source), so this shortening is the only edit needed anywhere.
+func TestGlobalBindingHelpTextsShortened(t *testing.T) {
+	cases := []struct {
+		name string
+		b    keybind.Binding
+		want string
+	}{
+		{"Refresh", keys.Refresh, "reload"},
+		{"Palette", keys.Palette, "commands"},
+		{"Picker", keys.Picker, "repos"},
+	}
+	for _, c := range cases {
+		if got := c.b.Help().Desc; got != c.want {
+			t.Errorf("keys.%s.Help().Desc = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList is PF-11's own
+// Drift-Guard (design-spec.md §15, epic-E7-plan.md Task 7 Step 1): no
+// binding may appear in BOTH globalBindings() (Header Zone 1, always
+// visible) AND either Chrome-calling view's own local-footer list --
+// duplication is exactly what PF-11 removes. Scoped to the two VIEW-local
+// lists only (browseRepoLocalBindings/backlogLocalBindings) -- the
+// overlay-/search-/palette-/help-context footer sets (footer_context.go)
+// are a DIFFERENT axis (Q04-Antwort) and deliberately restate Enter/Back
+// for local reinforcement while a modal has full input capture (see that
+// file's own doc comment for the rationale).
+func TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList(t *testing.T) {
+	global := map[string]bool{}
+	for _, b := range globalBindings() {
+		global[strings.Join(b.Keys(), ",")] = true
+	}
+	lists := map[string][]keybind.Binding{
+		"browseRepoLocalBindings": browseRepoLocalBindings(),
+		"backlogLocalBindings":    backlogLocalBindings(),
+	}
+	for name, list := range lists {
+		for _, b := range list {
+			id := strings.Join(b.Keys(), ",")
+			if global[id] {
+				t.Errorf("%s contains %v, which is also in globalBindings() -- duplicate header/footer binding (PF-11)", name, b.Keys())
+			}
+		}
+	}
+}
+
 // TestHelpGroupsCoverEveryBindingExactlyOnce is a drift guard (T7 follow-up
 // I02, bean bt-7jr8): reflects over every keybind.Binding field of keyMap and
 // asserts helpGroups() references each one exactly once -- a future added

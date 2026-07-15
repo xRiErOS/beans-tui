@@ -203,11 +203,23 @@ func (m model) renderBacklogDetailPane(vis []*data.Bean, w, h int, focused bool)
 // construction (Golden-Rule-Drift-Schutz, mirrors browseRepoChrome's own
 // rationale, view_browse_repo.go).
 func (m model) backlogChrome(innerW int) (head, localKeys string) {
-	globalHint := renderBindings([]keybind.Binding{keys.Refresh, keys.Help, keys.Quit})
-	head = breadcrumb(m.repoLabel(), "Backlog", globalHint, innerW)
-	localHint := renderBindings([]keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status, keys.Create, keys.Delete, keys.Editor}) + "  tab:focus"
-	localKeys = footer(localHint, innerW)
+	head = breadcrumb(m.repoLabel(), "Backlog", renderBindings(globalBindings()), innerW)
+	localKeys = footer(m.contextualLocalHint(backlogLocalBindings()), innerW)
 	return
+}
+
+// backlogLocalBindings is the Backlog view's own Footer Zone 3 local set --
+// mirrors browseRepoLocalBindings' own rationale (view_browse_repo.go):
+// backlogChrome's PREVIOUS inline list, minus Enter (now globalBindings(),
+// header-only -- backlogChrome never duplicated Refresh, only Enter), plus
+// FocusIn/FocusOut (PF-13) replacing the hand-typed "  tab:focus" footer
+// suffix. Everything else (Up/Down/Sort/Search/Filter/Backlog/Status/
+// Create/Delete/Editor) is UNCHANGED from the pre-T7 list, including its
+// pre-existing asymmetry vs. the Tree list (e.g. Filter WAS already shown
+// here but not in Tree) -- preserved as-is, not reconciled (out of T7's
+// scope, see this task's Deviations).
+func backlogLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status, keys.Create, keys.Delete, keys.Editor, keys.FocusIn, keys.FocusOut}
 }
 
 // viewBacklog renders the two-pane master-detail Backlog view -- mirrors

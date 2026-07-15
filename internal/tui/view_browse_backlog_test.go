@@ -19,6 +19,7 @@ import (
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -470,5 +471,56 @@ func TestBacklogGoldenDeterministic(t *testing.T) {
 	b := m.View()
 	if a != b {
 		t.Error("View() is not deterministic across repeated calls with identical Backlog model state")
+	}
+}
+
+// --- backlogChrome: PF-11 Header/Footer-Keybinding-Split (design-spec.md
+// §15, epic-E7-plan.md Task 7, bean bt-m6at). Mirrors
+// view_browse_repo_test.go's browseRepoChrome coverage exactly -- same
+// Header 7-Globals/Footer-context contract, just this view's own Chrome
+// function.
+
+func TestBacklogChromeHeaderShowsAllSevenGlobals(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	head, _ := m.backlogChrome(200) // wide enough to never trigger breadcrumb's narrow-stack fallback
+	plain := ansi.Strip(head)
+	for _, want := range []string{"ctrl+r:reload", "ctrl+k:commands", "p:repos", "?:help", "esc:back", "enter:open/confirm", "q:quit"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("backlogChrome header = %q, want it to contain %q", plain, want)
+		}
+	}
+}
+
+func TestBacklogChromeFooterOmitsEnter(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	_, localKeys := m.backlogChrome(200)
+	plain := ansi.Strip(localKeys)
+	if strings.Contains(plain, "enter:") {
+		t.Errorf("backlogChrome footer = %q, must NOT contain enter: (now header-only, PF-11)", plain)
+	}
+}
+
+func TestBacklogChromeFooterShowsFocusInFocusOut(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	_, localKeys := m.backlogChrome(200)
+	plain := ansi.Strip(localKeys)
+	if !strings.Contains(plain, "tab:focus in/toggle") {
+		t.Errorf("backlogChrome footer = %q, want FocusIn's real hint (not a hand-typed suffix)", plain)
+	}
+	if !strings.Contains(plain, "shift+tab:focus out") {
+		t.Errorf("backlogChrome footer = %q, want shift+tab visible for the first time (PF-13)", plain)
+	}
+}
+
+func TestBacklogChromeFooterIsContextSensitiveOnOverlayOpen(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	m.overlay = overlayValueMenu
+	_, localKeys := m.backlogChrome(200)
+	plain := ansi.Strip(localKeys)
+	if !strings.Contains(plain, "s:Status menu") {
+		t.Errorf("backlogChrome footer while overlayValueMenu = %q, want the Value-Menu's own context set", plain)
+	}
+	if strings.Contains(plain, "c:Create") {
+		t.Errorf("backlogChrome footer while overlayValueMenu = %q, must not leak the (now irrelevant) view-local Create hint", plain)
 	}
 }
