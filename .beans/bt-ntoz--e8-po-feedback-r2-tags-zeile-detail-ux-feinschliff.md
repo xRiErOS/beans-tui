@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T20:30:04Z
+updated_at: 2026-07-15T20:31:30Z
 parent: bt-apmy
 ---
 
@@ -45,3 +45,8 @@ Tags werden als Zeile in der Meta-Feldliste DIREKT NACH priority angezeigt (7. F
 3. Footer darf 2 Zeilen einnehmen.
 4. Optik: Taste in TEAL, Aktions-Wort grau (subtext), KEIN ':' mehr — Farbtrennung ersetzt den Doppelpunkt. (Gilt konsistent auch für Header-Globals? Planner: einheitlich anwenden.)
 Offene Präzisierung Q06: 'r Blocking' — Umbelegung B→r oder Tippfehler? / und f/X fehlen in der PO-Liste bewusst? (f war Supervisor-Empfehlung wegen D01-Filter-Workflow.)
+
+
+**Q06 GELÖST (2026-07-15):** (1) Blocking-Key UMBELEGEN B→r (r seit PF-14 frei; Keymap+helpGroups+Drift-Guard+Doku nachziehen, B wird frei). (2) f Filter kommt MIT in den Footer. Finale Footer-Liste: tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking.
+
+**B09:** Detail-View: inaktive ▹-Feldmarker sind WEISS statt grau — auf subtext/grau stellen (nur der aktive ▶ trägt Farbe/mauve, konsistent mit B04-Feedback-Logik).
