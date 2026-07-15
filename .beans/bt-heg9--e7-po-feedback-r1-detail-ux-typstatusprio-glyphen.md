@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:21:30Z
+updated_at: 2026-07-15T14:22:44Z
 parent: bt-apmy
 ---
 
@@ -106,3 +106,8 @@ Q04 = Variante (b): Gemeint ist die BESTEHENDE Space-Auswahl in Forms/Overlays (
 ## PO-Nachtrag 6 (2026-07-15): Layout-Stabilität Detail-Pane
 
 **PF-12 — Kein Layout-Shift bei Selektion.** Im rechten Detail-Pane darf sich beim Auswählen/Fokussieren NICHTS verschieben: Der Platz für den Select-Marker (▷/▶ bzw. Fokus-Cursor) ist IMMER reserviert (feste Gutter-Spalte, auch im unselektierten Zustand — dann Leerzeichen/▷ statt nichts). Gilt für alle markierbaren Zeilen: Accordion-Sektionen UND Meta-Feldliste (PF-4). Test-Anforderung: Renderbreite/Spaltenposition jeder Zeile identisch mit und ohne Selektion (Golden- oder Assertion-Test).
+
+
+## PO-Nachtrag 7 (2026-07-15): Fokus-Wechsel-Symmetrie
+
+**PF-13 — tab/shift+tab und ←/→ konsistent paaren.** Ist-Zustand in Browse: tab wechselt den Fokus (Tree↔Detail), aber shift+tab macht NICHT den Rückweg — stattdessen geht's mit arrow-left zurück. PO: 'für Nutzer murks'. Soll: BEIDE Paare vollständig und symmetrisch: tab = Fokus vorwärts, shift+tab = Fokus rückwärts; arrow-right = nach rechts (in Detail), arrow-left = nach links (zurück in Tree) — jeweils in beide Richtungen funktionsfähig und in der lokalen Keybinding-Zeile (PF-11) korrekt ausgewiesen. Kollisionscheck: arrow-left/right haben heute ggf. Zweitbelegung (j/l-Äquivalent im Tree: collapse/expand) — Planner muss die Semantik sauber trennen (Fokus-Wechsel vs. Tree-Navigation) und in design-spec festhalten; PO-Intention: vorhersagbare Paare, kein Überraschungsverhalten.
