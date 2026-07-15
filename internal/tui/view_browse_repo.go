@@ -524,7 +524,7 @@ func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string
 // is not needed yet: exclusive-open sections keep the open section's content
 // near the top, and digit-jump/1-4 always re-opens from row 0.
 func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) string {
-	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, focused)
+	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused)
 }
 
 // renderAccordionPane (I02, E4-T3-Review PFLICHT carried into E4 Task 4,
@@ -539,7 +539,7 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // state backs the accordion stays entirely at each call site, mirroring
 // I01's copy-on-write doctrine applied to "shared render body, independent
 // state" instead of maps.
-func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor int, focused bool) string {
+func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool) string {
 	var rows []string
 	if b != nil {
 		bodyW := w - 4
@@ -555,7 +555,7 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 		// as the Accordion itself (accW) -- not the App-Chrome header (PO-
 		// Antwort Q01: Detail-Pane only).
 		rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
-		secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor)
+		secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
 		acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
 		rows = append(rows, strings.Split(acc, "\n")...)
 	} else {

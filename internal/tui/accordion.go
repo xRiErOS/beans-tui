@@ -32,7 +32,7 @@ import (
 type relationField struct {
 	beanID string // target bean ID; "" for an unresolved/dangling reference (not jumpable) or any Meta field
 	label  string // pre-rendered row text (theme colors already applied)
-	kind   string // "" = jump (Relations, E2 behavior unchanged) | "status"|"type"|"priority" = Value-Menu seeded on group | "title" = Title-Edit-Form | "readonly" = No-Op (created_at/updated_at)
+	kind   string // "" = jump (Relations, E2 behavior unchanged) | "status"|"type"|"priority" = Value-Menu seeded on group | "tags" = Tag-Picker (PF-15/D01, E8 Task 1, bean bt-e6q9) | "title" = Title-Edit-Form | "readonly" = No-Op (created_at/updated_at)
 }
 
 // accordionSection mirrors devd's shape minus the editor-specific parts.

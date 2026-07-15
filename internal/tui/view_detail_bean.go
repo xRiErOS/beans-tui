@@ -6,9 +6,10 @@ package tui
 // is no reason to hide an empty section; digit jump 1..4 stays meaningful for
 // every bean. Section titles are uppercase English (PF-7, E7 T3 deliberately
 // left these 4 to this task -- bt-w9o8 "Notes for T4"). META additionally
-// carries a NEW, non-collapsible (PF-1) 6-entry field list (PF-4) instead of
-// its old 4-line status/type/priority/tags summary -- Tags is no longer part
-// of Meta at all under the new fixed field set.
+// carries a NEW, non-collapsible (PF-1) 7-entry field list (PF-4 + PF-15/D01)
+// instead of its old 4-line status/type/priority/tags summary -- tags
+// rejoined Meta as its own field (E8 Task 1, bean bt-e6q9, directly after
+// priority).
 
 import (
 	"fmt"
@@ -25,6 +26,17 @@ import (
 // removed by PF-14 -- with one shared constant).
 const beanSectionCount = 4
 
+// Section index constants (E8 Task 1, bean bt-e6q9, PF-16/B04 "Kleine
+// Zusatzarbeit"): named indices into the 4 fixed sections beanSections
+// returns, replacing Magic-Number section indices at call sites. Prepared
+// for T6/B10 (bean bt-ntoz), which needs bodySectionIdx instead of a bare 1.
+const (
+	metaSectionIdx      = 0
+	bodySectionIdx      = 1
+	relationsSectionIdx = 2
+	historySectionIdx   = 3
+)
+
 // Section titles (PF-7, uppercase English).
 const (
 	sectionTitleMeta      = "META"
@@ -40,12 +52,16 @@ const (
 // triple renderAccordion itself takes (E7 T4, bean bt-kyj5): META's body
 // needs to know whether IT is the currently active section to place its own
 // ▶ field marker (PF-4) -- previously META's body was static text, agnostic
-// of focus state.
-func beanSections(idx *data.Index, b *data.Bean, bodyW int, focused bool, activeIdx, fieldIdx int) []accordionSection {
+// of focus state. detailLevel (E8 Task 1, bean bt-e6q9, PF-16/B04) is a 4th
+// gate: the ▶ marker must not appear merely because Meta IS the active
+// section (activeIdx==0) -- it appears only once the field level has
+// actually been entered (detailLevel==1), otherwise a bare `tab` already
+// shows title: pre-selected before the user did anything at field level.
+func beanSections(idx *data.Index, b *data.Bean, bodyW int, focused bool, activeIdx, fieldIdx, detailLevel int) []accordionSection {
 	var secs []accordionSection
 	secs = append(secs, accordionSection{
 		title:  sectionTitleMeta,
-		body:   metaSectionBody(b, bodyW, focused && activeIdx == 0, fieldIdx),
+		body:   metaSectionBody(b, bodyW, focused && activeIdx == 0 && detailLevel == 1, fieldIdx),
 		fields: metaFields(b),
 	})
 	secs = append(secs, accordionSection{title: sectionTitleBody, body: bodySectionBody(b, bodyW)})
@@ -55,36 +71,47 @@ func beanSections(idx *data.Index, b *data.Bean, bodyW int, focused bool, active
 	return secs
 }
 
-// metaFieldLabels are the 6 fixed row labels of the Meta field list (PF-4),
-// left-padded to a common width (12) so every value column aligns -- exact
-// spacing verified against design-spec.md §15's mockup (every label pads to
-// 12 cells: "title:      ", "created_at: ", etc.).
-var metaFieldLabels = [...]string{"title:", "status:", "type:", "priority:", "created_at:", "updated_at:"}
+// metaFieldLabels are the 7 fixed row labels of the Meta field list (PF-4 +
+// PF-15/D01, E8 Task 1, bean bt-e6q9), left-padded to a common width (12) so
+// every value column aligns -- exact spacing verified against design-spec.md
+// §15's mockup (every label pads to 12 cells: "title:      ", "created_at: ",
+// etc. -- "created_at: " stays the longest at 12 chars, tags: fits well
+// within the existing padding width unchanged).
+var metaFieldLabels = [...]string{"title:", "status:", "type:", "priority:", "tags:", "created_at:", "updated_at:"}
 
-// metaFields builds the 6 kind-tagged Meta field entries (PF-4, design-
-// spec.md §15): title / status / type / priority / created_at / updated_at,
-// in that fixed order. status/type/priority reuse T2's GLYPH-producing theme
-// helpers (StatusIcon/TypeIcon/Priority) -- NOT the word, unlike the
-// Kopfblock (detailHeaderBlock, below), which uses the word for type/status.
-// beanID is always "" (Meta fields are never Beziehungen-style jump
-// targets); kind drives T6's future enter-dispatch (status/type/priority ->
-// seeded Value-Menu, title -> Title-Edit-Form, readonly -> No-Op).
+// metaFields builds the 7 kind-tagged Meta field entries (PF-4 + PF-15/D01,
+// design-spec.md §15): title / status / type / priority / tags / created_at
+// / updated_at, in that fixed order. status/type/priority reuse T2's
+// GLYPH-producing theme helpers (StatusIcon/TypeIcon/Priority) -- NOT the
+// word, unlike the Kopfblock (detailHeaderBlock, below), which uses the word
+// for type/status. tags (PF-15/D01, E8 Task 1) reuses the previously
+// caller-less tagsInline/tagSwatch helper (render_shared.go) -- Hash-colored
+// "● tag" swatches, or a theme.Dim "(none)" placeholder for an empty Tags
+// slice. beanID is always "" (Meta fields are never Beziehungen-style jump
+// targets); kind drives the enter-dispatch (status/type/priority/tags ->
+// seeded Value-Menu / Tag-Picker, title -> Title-Edit-Form, readonly ->
+// No-Op).
 func metaFields(b *data.Bean) []relationField {
 	priority := b.Priority
 	if priority == "" {
 		priority = "normal"
+	}
+	tags := tagsInline(b.Tags)
+	if tags == "" {
+		tags = theme.Dim.Render("(none)")
 	}
 	return []relationField{
 		{kind: "title", label: b.Title},
 		{kind: "status", label: theme.StatusIcon(b.Status)},
 		{kind: "type", label: theme.TypeIcon(b.Type)},
 		{kind: "priority", label: theme.Priority(priority)},
+		{kind: "tags", label: tags},
 		{kind: "readonly", label: fmtTime(b.CreatedAt)},
 		{kind: "readonly", label: fmtTime(b.UpdatedAt)},
 	}
 }
 
-// metaSectionBody renders the 6-entry Meta field list (PF-4): a ▷/▶ cursor
+// metaSectionBody renders the 7-entry Meta field list (PF-4 + PF-15/D01): a ▷/▶ cursor
 // column (PF-12: ALWAYS one or the other, never omitted -- the gutter is
 // inherently stable by construction here, unlike the two accordion.go call
 // sites PF-12 had to retrofit) followed by the field's label (padded to
@@ -99,7 +126,7 @@ func metaSectionBody(b *data.Bean, bodyW int, active bool, fieldIdx int) string 
 	fields := metaFields(b)
 	var lines []string
 	for i, f := range fields {
-		marker := "▷ "
+		marker := theme.Muted.Render("▷ ") // B09 (bean bt-ntoz, PF-16): was unstilisiert (terminal-default white)
 		if active && fieldIdx == i {
 			marker = theme.Accent.Render("▶ ")
 		}
@@ -123,8 +150,17 @@ func detailHeaderBlock(b *data.Bean, w int) string {
 	if priority == "" {
 		priority = "normal"
 	}
-	typeStatusPrio := theme.Muted.Render("type: ") + theme.TypeStyle(b.Type).Render(b.Type) +
-		theme.Muted.Render("    status: ") + theme.StatusStyle(b.Status).Render(b.Status) +
+	// B02 (bean bt-ntoz, design-spec.md §15 PF-16): type/status are padded to
+	// the longest legal word BEFORE the TypeStyle/StatusStyle color is
+	// applied (9 = len("milestone"), 11 = len("in-progress")) -- otherwise
+	// the row's total width (and thus "status:"/"prio:"'s column start)
+	// shifts on every bean-change depending on word length. prio stays a
+	// GLYPH (theme.Priority), never a variable-length word, so it needs no
+	// padding of its own.
+	typeWord := fmt.Sprintf("%-9s", b.Type)
+	statusWord := fmt.Sprintf("%-11s", b.Status)
+	typeStatusPrio := theme.Muted.Render("type: ") + theme.TypeStyle(b.Type).Render(typeWord) +
+		theme.Muted.Render("    status: ") + theme.StatusStyle(b.Status).Render(statusWord) +
 		theme.Muted.Render("    prio: ") + theme.Priority(priority)
 	lines := []string{
 		truncate(theme.Key.Render(b.ID), w),

@@ -845,7 +845,8 @@ func TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields(t *testing.T) {
 
 // metaFieldCursorTo steps `down` n times from a just-entered Meta field level
 // (fieldCursor 0, title) to reach the field at index n -- mirrors metaFields'
-// fixed order (title/status/type/priority/created_at/updated_at).
+// fixed order (title/status/type/priority/tags/created_at/updated_at, PF-15/
+// D01).
 func metaFieldCursorTo(t *testing.T, m model, n int) model {
 	t.Helper()
 	for i := 0; i < n; i++ {
@@ -959,7 +960,7 @@ func TestKeyDetailFocusEnterOnCreatedAtFieldNoop(t *testing.T) {
 	m = focusBean(m, "tk-2")
 	m = step(t, m, keyMsg(tea.KeyTab))
 	m = step(t, m, keyMsg(tea.KeyEnter))
-	m = metaFieldCursorTo(t, m, 4) // created_at
+	m = metaFieldCursorTo(t, m, 5) // created_at (PF-15/D01: tags now occupies index 4)
 
 	m = step(t, m, keyMsg(tea.KeyEnter))
 
@@ -969,7 +970,7 @@ func TestKeyDetailFocusEnterOnCreatedAtFieldNoop(t *testing.T) {
 	if m.form != nil {
 		t.Fatal("enter on created_at must not open a form")
 	}
-	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 4 {
+	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 5 {
 		t.Fatalf("enter on created_at must be a pure no-op: detailFocus=%v detailLevel=%d fieldCursor=%d",
 			m.detailFocus, m.detailLevel, m.fieldCursor)
 	}
@@ -980,7 +981,7 @@ func TestKeyDetailFocusEnterOnUpdatedAtFieldNoop(t *testing.T) {
 	m = focusBean(m, "tk-2")
 	m = step(t, m, keyMsg(tea.KeyTab))
 	m = step(t, m, keyMsg(tea.KeyEnter))
-	m = metaFieldCursorTo(t, m, 5) // updated_at
+	m = metaFieldCursorTo(t, m, 6) // updated_at (PF-15/D01: tags now occupies index 4)
 
 	m = step(t, m, keyMsg(tea.KeyEnter))
 
@@ -990,9 +991,35 @@ func TestKeyDetailFocusEnterOnUpdatedAtFieldNoop(t *testing.T) {
 	if m.form != nil {
 		t.Fatal("enter on updated_at must not open a form")
 	}
-	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 5 {
+	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 6 {
 		t.Fatalf("enter on updated_at must be a pure no-op: detailFocus=%v detailLevel=%d fieldCursor=%d",
 			m.detailFocus, m.detailLevel, m.fieldCursor)
+	}
+}
+
+// TestKeyDetailFocusEnterOnTagsFieldOpensTagPicker guards D01's Enter-Kaskade
+// dispatch (design-spec.md §15 PF-15, bean bt-e6q9): enter on the tags field
+// (index 4, between priority and created_at) opens the SAME Tag-Picker the
+// `t` key opens (m.openTagPicker()) -- and, mirroring status/type/priority,
+// m.detailFocus stays true (the overlay lays on top as its own capture
+// state, D02 "schnell/einfach").
+func TestKeyDetailFocusEnterOnTagsFieldOpensTagPicker(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter)) // section -> field level, fieldCursor=0 (title)
+	m = metaFieldCursorTo(t, m, 4)       // tags
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.overlay != overlayTagPicker {
+		t.Fatalf("overlay = %v, want overlayTagPicker", m.overlay)
+	}
+	if m.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", m.mutTarget)
+	}
+	if !m.detailFocus {
+		t.Fatal("detailFocus must stay true while the seeded overlay is open (mirrors status/type/priority, Task 6 Step 7 design decision)")
 	}
 }
 

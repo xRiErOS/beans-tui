@@ -914,7 +914,7 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// secs[...].fields for navigation, which metaFields/relationsSectionBody
 	// build independently of these 3 params (they only affect a section's
 	// rendered BODY string, e.g. Meta's ▷/▶ marker placement, unused here).
-	secs := beanSections(m.idx, b, 40, m.detailFocus, m.secCursor, m.fieldCursor)
+	secs := beanSections(m.idx, b, 40, m.detailFocus, m.secCursor, m.fieldCursor, m.detailLevel)
 
 	// B02 (Review-Runde 2, bean bt-2jve, Critical): clamp secCursor/
 	// fieldCursor against the just-computed secs BEFORE any branch below
@@ -1007,6 +1007,12 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// einfach"). Only the jump case below (a DIFFERENT bean) exits
 			// detail focus.
 			return m.openValueMenu(f.kind), nil
+		case "tags":
+			// PF-15/D01 (design-spec.md §15, E8 Task 1, bean bt-e6q9): enter
+			// on the tags field opens the SAME Tag-Picker the `t` key opens
+			// -- m.detailFocus stays true, mirroring status/type/priority
+			// above (the overlay is its own capture state).
+			return m.openTagPicker(), nil
 		case "title":
 			return m.openEditTitleForm(b)
 		case "readonly":

@@ -10,9 +10,14 @@ package tui
 // and Meta's body becomes a 6-entry cursor-navigable field list instead of a
 // 4-line status/type/priority/tags summary (tags are no longer part of Meta
 // at all -- PF-4 fixes the field set to title/status/type/priority/
-// created_at/updated_at).
+// created_at/updated_at). E8 Task 1 (bean bt-e6q9, PF-15/PF-16, D01/B02/B04):
+// tags rejoins Meta as its own 7th field (title/status/type/priority/tags/
+// created_at/updated_at) and beanSections grows a 4th render-state param
+// (detailLevel) so the ▶ marker gates on the field level actually having
+// been entered, not merely on Meta being the active section (B04).
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +38,7 @@ func TestBeanSectionsAlwaysFourFixedSections(t *testing.T) {
 		{ID: "min-1", Title: "Minimal", Status: "todo", Type: "task", Priority: "normal"},
 	}
 	idx := data.NewIndex(beans)
-	secs := beanSections(idx, idx.ByID["min-1"], 60, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["min-1"], 60, false, 0, 0, 0)
 
 	if len(secs) != 4 {
 		t.Fatalf("beanSections returned %d sections, want 4", len(secs))
@@ -46,20 +51,20 @@ func TestBeanSectionsAlwaysFourFixedSections(t *testing.T) {
 	}
 }
 
-// TestMetaFieldsSixEntriesWithKinds guards metaFields' structural contract
-// (PF-4): exactly 6 kind-tagged entries in a fixed order (title/status/type/
-// priority/created_at/updated_at), every entry's beanID empty (Meta fields
-// are never Beziehungen-style jump targets -- kind drives T6's future enter-
-// dispatch instead). Supersedes the old
-// TestBeanSectionsMetaRendersStatusTypePriorityTags (Tags is no longer part
-// of Meta at all under PF-4's fixed 6-field layout).
-func TestMetaFieldsSixEntriesWithKinds(t *testing.T) {
+// TestMetaFieldsSevenEntriesWithKinds guards metaFields' structural contract
+// (PF-4 + PF-15/D01): exactly 7 kind-tagged entries in a fixed order
+// (title/status/type/priority/tags/created_at/updated_at), every entry's
+// beanID empty (Meta fields are never Beziehungen-style jump targets -- kind
+// drives T6's future enter-dispatch instead). Renamed from
+// TestMetaFieldsSixEntriesWithKinds (PF-15/D01: tags rejoins Meta as its own
+// field, directly after priority).
+func TestMetaFieldsSevenEntriesWithKinds(t *testing.T) {
 	b := &data.Bean{ID: "meta-1", Title: "Meta Bean", Status: "in-progress", Type: "bug", Priority: "critical"}
 	fields := metaFields(b)
-	if len(fields) != 6 {
-		t.Fatalf("metaFields returned %d entries, want 6", len(fields))
+	if len(fields) != 7 {
+		t.Fatalf("metaFields returned %d entries, want 7", len(fields))
 	}
-	wantKinds := []string{"title", "status", "type", "priority", "readonly", "readonly"}
+	wantKinds := []string{"title", "status", "type", "priority", "tags", "readonly", "readonly"}
 	for i, want := range wantKinds {
 		if fields[i].kind != want {
 			t.Errorf("fields[%d].kind = %q, want %q", i, fields[i].kind, want)
@@ -86,6 +91,33 @@ func TestMetaFieldsSixEntriesWithKinds(t *testing.T) {
 	}
 }
 
+// TestMetaFieldsTagsEmptyShowsNonePlaceholder guards D01's placeholder path:
+// a bean with no tags renders the tags field as a theme.Dim "(none)", not an
+// empty string (design-spec.md §15 PF-15).
+func TestMetaFieldsTagsEmptyShowsNonePlaceholder(t *testing.T) {
+	b := &data.Bean{ID: "meta-notags", Title: "No Tags", Status: "todo", Type: "task", Priority: "normal"}
+	fields := metaFields(b)
+	if got := ansi.Strip(fields[4].label); got != "(none)" {
+		t.Errorf("fields[4] (tags) label = %q, want the empty-tags placeholder \"(none)\"", got)
+	}
+}
+
+// TestMetaFieldsTagsNonEmptyUsesTagsInline guards D01's value-rendering path:
+// a bean WITH tags renders fields[4] via the revived tagsInline/tagSwatch
+// helper (render_shared.go) -- Hash-colored "● tag" swatches, not a plain
+// comma-joined list.
+func TestMetaFieldsTagsNonEmptyUsesTagsInline(t *testing.T) {
+	b := &data.Bean{ID: "meta-tags", Title: "Tagged", Status: "todo", Type: "task", Priority: "normal", Tags: []string{"backend", "urgent"}}
+	fields := metaFields(b)
+	want := tagsInline(b.Tags)
+	if fields[4].label != want {
+		t.Errorf("fields[4] (tags) label = %q, want tagsInline(b.Tags) = %q", fields[4].label, want)
+	}
+	if got := ansi.Strip(fields[4].label); !strings.Contains(got, "backend") || !strings.Contains(got, "urgent") {
+		t.Errorf("fields[4] (tags) label = %q, want both tag names present", got)
+	}
+}
+
 // TestMetaFieldsPriorityDefaultsToNormalWhenEmpty guards the same "" ->
 // "normal" default the old metaSectionBody used to apply (b.Priority is
 // beans-legal empty on hand-edited frontmatter).
@@ -105,11 +137,11 @@ func TestMetaFieldsReadonlyTimestampsUseFmtTime(t *testing.T) {
 	created := time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
 	b := &data.Bean{ID: "meta-ts", Title: "T", Status: "todo", Type: "task", Priority: "normal", CreatedAt: &created}
 	fields := metaFields(b)
-	if !strings.Contains(fields[4].label, "2026-01-02") {
-		t.Errorf("fields[4] (created_at) label = %q, want formatted CreatedAt", fields[4].label)
+	if !strings.Contains(fields[5].label, "2026-01-02") {
+		t.Errorf("fields[5] (created_at) label = %q, want formatted CreatedAt", fields[5].label)
 	}
-	if !strings.Contains(ansi.Strip(fields[5].label), "unknown") {
-		t.Errorf("fields[5] (updated_at) label = %q, want the nil-timestamp placeholder", fields[5].label)
+	if !strings.Contains(ansi.Strip(fields[6].label), "unknown") {
+		t.Errorf("fields[6] (updated_at) label = %q, want the nil-timestamp placeholder", fields[6].label)
 	}
 }
 
@@ -120,39 +152,41 @@ func TestMetaFieldsReadonlyTimestampsUseFmtTime(t *testing.T) {
 func TestMetaSectionBodyShowsSelectedFieldMarker(t *testing.T) {
 	b := &data.Bean{ID: "meta-mark", Title: "Marked", Status: "todo", Type: "task", Priority: "high"}
 
-	active := metaSectionBody(b, 80, true, 2) // priority row (index 2)
+	active := metaSectionBody(b, 80, true, 2) // type row (index 2)
 	lines := strings.Split(active, "\n")
-	if len(lines) != 6 {
-		t.Fatalf("metaSectionBody active=true has %d lines, want 6", len(lines))
+	if len(lines) != 7 {
+		t.Fatalf("metaSectionBody active=true has %d lines, want 7 (PF-15/D01: 7 Meta fields)", len(lines))
 	}
 	if n := strings.Count(ansi.Strip(active), "▶"); n != 1 {
 		t.Fatalf("active metaSectionBody has %d ▶ markers, want exactly 1", n)
 	}
 	if !strings.Contains(ansi.Strip(lines[2]), "▶") {
-		t.Errorf("▶ marker not on the priority row (index 2): %q", ansi.Strip(lines[2]))
+		t.Errorf("▶ marker not on row index 2: %q", ansi.Strip(lines[2]))
 	}
-	if n := strings.Count(ansi.Strip(active), "▷"); n != 5 {
-		t.Errorf("active metaSectionBody has %d ▷ markers, want exactly 5 (the other rows): %q", n, ansi.Strip(active))
+	if n := strings.Count(ansi.Strip(active), "▷"); n != 6 {
+		t.Errorf("active metaSectionBody has %d ▷ markers, want exactly 6 (the other rows): %q", n, ansi.Strip(active))
 	}
 
 	inactive := metaSectionBody(b, 80, false, 2)
 	if strings.Contains(ansi.Strip(inactive), "▶") {
 		t.Error("inactive metaSectionBody must show no ▶ marker anywhere")
 	}
-	if n := strings.Count(ansi.Strip(inactive), "▷"); n != 6 {
-		t.Errorf("inactive metaSectionBody has %d ▷ markers, want exactly 6 (every row): %q", n, ansi.Strip(inactive))
+	if n := strings.Count(ansi.Strip(inactive), "▷"); n != 7 {
+		t.Errorf("inactive metaSectionBody has %d ▷ markers, want exactly 7 (every row): %q", n, ansi.Strip(inactive))
 	}
 }
 
-// TestMetaSectionBodyShowsAllSixLabelsAndValues guards the row content
-// itself (label prefixes + values), not just the marker: PF-4's mockup shows
-// title/status/type/priority/created_at/updated_at in that exact order.
-func TestMetaSectionBodyShowsAllSixLabelsAndValues(t *testing.T) {
+// TestMetaSectionBodyShowsAllSevenLabelsAndValues guards the row content
+// itself (label prefixes + values), not just the marker: PF-15/D01's mockup
+// shows title/status/type/priority/tags/created_at/updated_at in that exact
+// order. Renamed from TestMetaSectionBodyShowsAllSixLabelsAndValues (tags
+// rejoins Meta as its own field).
+func TestMetaSectionBodyShowsAllSevenLabelsAndValues(t *testing.T) {
 	created := time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
 	b := &data.Bean{ID: "meta-full", Title: "Full Bean", Status: "todo", Type: "task", Priority: "normal", CreatedAt: &created}
 	body := ansi.Strip(metaSectionBody(b, 80, false, 0))
 
-	wantLabels := []string{"title:", "status:", "type:", "priority:", "created_at:", "updated_at:"}
+	wantLabels := []string{"title:", "status:", "type:", "priority:", "tags:", "created_at:", "updated_at:"}
 	lastIdx := -1
 	for _, label := range wantLabels {
 		idx := strings.Index(body, label)
@@ -169,6 +203,34 @@ func TestMetaSectionBodyShowsAllSixLabelsAndValues(t *testing.T) {
 	}
 	if !strings.Contains(body, "2026-01-02") {
 		t.Errorf("metaSectionBody missing created_at value: %q", body)
+	}
+}
+
+// TestBeanSectionsMetaMarkerHiddenUntilDetailLevelEntered guards B04 (bean
+// bt-ntoz, design-spec.md §15 PF-16): the Meta field ▶ marker must NOT appear
+// merely because Meta (activeIdx==0) is the active section after `tab` --
+// it appears only once the field level has actually been entered
+// (detailLevel==1). Meta's ▷/▶ marker lives inside metaSectionBody (via
+// beanSections' `focused && activeIdx == 0` gate) -- detailLevel is the NEW
+// third gate condition this test pins.
+func TestBeanSectionsMetaMarkerHiddenUntilDetailLevelEntered(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "b04-1", Title: "B04 Bean", Status: "todo", Type: "task", Priority: "normal"},
+	}
+	idx := data.NewIndex(beans)
+
+	// focused=true, activeIdx=0 (Meta is active section), detailLevel=0 (field
+	// level NOT yet entered) -- must show NO ▶ marker anywhere in Meta's body.
+	secsLevel0 := beanSections(idx, idx.ByID["b04-1"], 60, true, 0, 0, 0)
+	if strings.Contains(ansi.Strip(secsLevel0[0].body), "▶") {
+		t.Errorf("Meta body shows ▶ at detailLevel==0 (field level not entered): %q", ansi.Strip(secsLevel0[0].body))
+	}
+
+	// Same focused/activeIdx, but detailLevel=1 (field level entered) -- ▶
+	// must now appear at fieldIdx's row.
+	secsLevel1 := beanSections(idx, idx.ByID["b04-1"], 60, true, 0, 0, 1)
+	if !strings.Contains(ansi.Strip(secsLevel1[0].body), "▶") {
+		t.Errorf("Meta body missing ▶ at detailLevel==1 (field level entered): %q", ansi.Strip(secsLevel1[0].body))
 	}
 }
 
@@ -199,6 +261,19 @@ func TestDetailHeaderBlockShowsIDTitleTypeStatusPrio(t *testing.T) {
 	if !strings.Contains(stripped, "prio: !") {
 		t.Errorf("header block missing prio as GLYPH (\"prio: !\", high): %q", stripped)
 	}
+	// B02 (bean bt-ntoz, design-spec.md §15 PF-16): type/status are padded to
+	// fixed column widths (9 = len("milestone"), 11 = len("in-progress")) so
+	// the Kopfblock never jumps between beans of differing word length.
+	// Expected spacing computed via the SAME fmt verb the implementation
+	// uses, not hand-counted, to avoid a brittle literal.
+	wantTypeCol := fmt.Sprintf("type: %-9s    status:", "bug")
+	if !strings.Contains(stripped, wantTypeCol) {
+		t.Errorf("header block type column not padded to 9: got %q, want to contain %q", stripped, wantTypeCol)
+	}
+	wantStatusCol := fmt.Sprintf("status: %-11s    prio:", "in-progress")
+	if !strings.Contains(stripped, wantStatusCol) {
+		t.Errorf("header block status column not padded to 11: got %q, want to contain %q", stripped, wantStatusCol)
+	}
 
 	lines := strings.Split(out, "\n")
 	if len(lines) < 5 {
@@ -206,6 +281,38 @@ func TestDetailHeaderBlockShowsIDTitleTypeStatusPrio(t *testing.T) {
 	}
 	if lines[len(lines)-1] != "" {
 		t.Errorf("header block must end with a trailing blank line, got %q as last line", lines[len(lines)-1])
+	}
+}
+
+// TestDetailHeaderBlockFixedColumnWidthsNoJumpAcrossBeans is B02's core
+// regression guard (bean bt-ntoz, design-spec.md §15 PF-16): the "status:"
+// and "prio:" column start positions must be IDENTICAL across beans with
+// differing type/status word length (epic vs. milestone, todo vs.
+// in-progress) -- previously type/status rendered unpadded, so the Kopfblock
+// row shifted horizontally on every bean-change.
+func TestDetailHeaderBlockFixedColumnWidthsNoJumpAcrossBeans(t *testing.T) {
+	short := &data.Bean{ID: "hdr-short", Title: "Short", Status: "todo", Type: "epic", Priority: "normal"}
+	long := &data.Bean{ID: "hdr-long2", Title: "Long", Status: "in-progress", Type: "milestone", Priority: "normal"}
+
+	shortLine := ansi.Strip(strings.Split(detailHeaderBlock(short, 80), "\n")[3])
+	longLine := ansi.Strip(strings.Split(detailHeaderBlock(long, 80), "\n")[3])
+
+	shortStatusIdx := strings.Index(shortLine, "status:")
+	longStatusIdx := strings.Index(longLine, "status:")
+	if shortStatusIdx < 0 || longStatusIdx < 0 {
+		t.Fatalf("missing \"status:\" in one of the two lines: %q / %q", shortLine, longLine)
+	}
+	if shortStatusIdx != longStatusIdx {
+		t.Errorf("status: column shifted across beans (type word length varies): short=%d long=%d (%q vs %q)", shortStatusIdx, longStatusIdx, shortLine, longLine)
+	}
+
+	shortPrioIdx := strings.Index(shortLine, "prio:")
+	longPrioIdx := strings.Index(longLine, "prio:")
+	if shortPrioIdx < 0 || longPrioIdx < 0 {
+		t.Fatalf("missing \"prio:\" in one of the two lines: %q / %q", shortLine, longLine)
+	}
+	if shortPrioIdx != longPrioIdx {
+		t.Errorf("prio: column shifted across beans (status word length varies): short=%d long=%d (%q vs %q)", shortPrioIdx, longPrioIdx, shortLine, longLine)
 	}
 }
 
@@ -231,7 +338,7 @@ func TestBeanSectionsBodyEmptyShowsPlaceholder(t *testing.T) {
 		{ID: "nobody-1", Title: "No Body", Status: "todo", Type: "task", Priority: "normal"},
 	}
 	idx := data.NewIndex(beans)
-	secs := beanSections(idx, idx.ByID["nobody-1"], 60, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["nobody-1"], 60, false, 0, 0, 0)
 
 	if strings.TrimSpace(secs[1].body) == "" {
 		t.Fatal("Body section must show a placeholder for an empty bean body, got empty string")
@@ -248,7 +355,7 @@ func TestBeanSectionsBodyRendersMarkdown(t *testing.T) {
 		{ID: "body-1", Title: "Has Body", Status: "todo", Type: "task", Priority: "normal", Body: "# Heading\n\nSome **bold** text."},
 	}
 	idx := data.NewIndex(beans)
-	secs := beanSections(idx, idx.ByID["body-1"], 60, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["body-1"], 60, false, 0, 0, 0)
 
 	if !strings.Contains(secs[1].body, "\x1b[") {
 		t.Errorf("Body section under TrueColor must contain ANSI escapes (glamour-rendered), got: %q", secs[1].body)
@@ -277,7 +384,7 @@ func TestBeanSectionsRelationsListsParentChildrenBlockingBlockedByInCanonicalOrd
 		{ID: "rel-block-inprog", Title: "Blocked InProgress", Status: "in-progress", Type: "task", Priority: "normal"},
 	}
 	idx := data.NewIndex(beans)
-	secs := beanSections(idx, idx.ByID["rel-main"], 60, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["rel-main"], 60, false, 0, 0, 0)
 
 	rel := secs[2]
 	if rel.title != "RELATIONS" {
@@ -316,7 +423,7 @@ func TestBeanSectionsRelationsDanglingReferenceShowsUnresolvedNotJumpable(t *tes
 			BlockedBy: []string{"does-not-exist"}},
 	}
 	idx := data.NewIndex(beans)
-	secs := beanSections(idx, idx.ByID["dangling-1"], 60, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["dangling-1"], 60, false, 0, 0, 0)
 
 	rel := secs[2]
 	if !strings.Contains(rel.body, "does-not-exist") {
@@ -348,7 +455,7 @@ func TestBeanSectionsMetaWrapsLongTitleToBodyWidth(t *testing.T) {
 	}
 	idx := data.NewIndex(beans)
 	const bodyW = 20
-	secs := beanSections(idx, idx.ByID["wrap-meta"], bodyW, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["wrap-meta"], bodyW, false, 0, 0, 0)
 
 	for _, line := range strings.Split(ansi.Strip(secs[0].body), "\n") {
 		if w := lipgloss.Width(line); w > bodyW {
@@ -366,7 +473,7 @@ func TestBeanSectionsHistorieShowsCreatedUpdatedETag(t *testing.T) {
 		{ID: "hist-nil", Title: "No Timestamps", Status: "todo", Type: "task", Priority: "normal"},
 	}
 	idx := data.NewIndex(beans)
-	secs := beanSections(idx, idx.ByID["hist-nil"], 60, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["hist-nil"], 60, false, 0, 0, 0)
 
 	if secs[3].title != "HISTORY" {
 		t.Fatalf("section 3 title = %q, want HISTORY", secs[3].title)
@@ -384,7 +491,7 @@ func TestBeanSectionsHistorieShowsCreatedUpdatedETag(t *testing.T) {
 			CreatedAt: &created, UpdatedAt: &updated, ETag: "abc123"},
 	}
 	idx2 := data.NewIndex(beansSet)
-	secs2 := beanSections(idx2, idx2.ByID["hist-set"], 60, false, 0, 0)
+	secs2 := beanSections(idx2, idx2.ByID["hist-set"], 60, false, 0, 0, 0)
 	hist := secs2[3].body
 	if !strings.Contains(hist, "2026-01-02") {
 		t.Errorf("Historie missing CreatedAt: %q", hist)
@@ -408,7 +515,7 @@ func TestBeanSectionsHistorieWrapsLongETagToBodyWidth(t *testing.T) {
 	}
 	idx := data.NewIndex(beans)
 	const bodyW = 20
-	secs := beanSections(idx, idx.ByID["wrap-hist"], bodyW, false, 0, 0)
+	secs := beanSections(idx, idx.ByID["wrap-hist"], bodyW, false, 0, 0, 0)
 
 	for _, line := range strings.Split(ansi.Strip(secs[3].body), "\n") {
 		if w := lipgloss.Width(line); w > bodyW {
