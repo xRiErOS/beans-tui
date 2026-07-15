@@ -1034,6 +1034,19 @@ Refs: bt-sl45
 
 ## Task 6: Delete-Confirm + ETag-Konflikt-Sweep (`bt-ppzb`)
 
+> **ERRATUM (E3-T6-Review PFLICHT-Finding I01, bean bt-qzwt):** die Skizze
+> unten (Zeilen ~1037-1124, insb. „(verwaist)"-Root / „N Kinder werden
+> verwaist") ist STALE — empirisch widerlegt während T6s tmux-Smoke + einem
+> isolierten `beans create`/`beans delete`-Probe (beide reproduzierbar).
+> `beans delete` lässt Kinder NICHT mit einem hängenden `parent:`-Feld
+> zurück; die reale beans-0.4.2-CLI entfernt das Feld aktiv — Kinder werden
+> zu gewöhnlichen ROOTS (`idx.Roots()`), nicht in eine „(verwaist)"-Bucket
+> einsortiert. Quelle der Wahrheit: Doc-Stamp
+> `internal/tui/box_confirm_delete.go` + Regressionstest
+> `internal/data/client_mut_test.go:TestDeleteClearsFormerChildrensParentField`.
+> Diese Sektion wird NICHT rückwirkend umgeschrieben (Plan-Historie bleibt
+> nachvollziehbar als Entwurfs-Snapshot) — nur dieser Pointer ist verbindlich.
+
 `d` → Delete-Confirm mit Kinder-Count-WARNUNG (Semantik-Abweichung von devd:
 `beans delete` kaskadiert NICHT — Kinder verwaisen und landen in der bestehenden
 „(verwaist)"-Root, mutations.go-Delete-Doc; die Preview sagt „N Kinder werden
