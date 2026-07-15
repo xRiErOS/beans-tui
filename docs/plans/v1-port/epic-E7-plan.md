@@ -78,6 +78,8 @@ kein Compile-Zwang, nur stale Doc-Kommentare).
 329) bleiben: harmlos, CLI-nah, keine TUI-Kopplung mehr nach diesem Task,
 kein Risiko in einer Funktion, die niemand mehr aufruft. Datenlayer-Test-
 Coverage dafür (falls vorhanden) bleibt ebenfalls unangetastet.
+`internal/data/review.go` — `EpicAncestor` bleibt ebenfalls (Supervisor-Vorgabe,
+gleiche Risikolage: aufruferlos seit diesem Task, pure/read-only, kein TUI-Coupling).
 
 **Bereits VERIFIZIERT (Recherche zu diesem Plan, nicht mehr zu prüfen):**
 - `keys.Reviews` (`R`) ist das EINZIGE zentrale `keyMap`-Feld für den

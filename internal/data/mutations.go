@@ -328,6 +328,13 @@ func (c *Client) PassReview(id, etag string) error {
 // YAGNI, no caller left) rather than computed here, purely for deterministic
 // tests (client_mut_test.go pins the exact section text without touching
 // the clock).
+//
+// STALE TAG LITERAL (E7 T1-Review, bean bt-2af1, 2026-07-15): the "rework"
+// tag below predates design-spec.md §5's tag-trio revision (PF-14) --
+// current convention is to-review/accepted/rejected (rejected, not rework).
+// Do NOT reactivate this function's caller without first updating the
+// literal to "rejected" and re-checking the whole §5 flow; it is
+// documentation-only drift for now since there is no caller (YAGNI).
 func (c *Client) RejectReview(id, comment, date, etag string) error {
 	section := "\n## Review " + date + "\n\n" + comment + "\n"
 	return c.update(id, etag, "--remove-tag", "to-review", "--tag", "rework", "--body-append", section)
