@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:19:49Z
+updated_at: 2026-07-15T14:21:30Z
 parent: bt-apmy
 ---
 
@@ -101,3 +101,8 @@ Konsistenz-Prüfauftrag an Planner: gleiche Logik für Review-Cockpit ('Review-Q
 ## PO-Antwort Q04 (2026-07-15, GELÖST)
 
 Q04 = Variante (b): Gemeint ist die BESTEHENDE Space-Auswahl in Forms/Overlays (aufgefallen beim Facetten-Filter: space/x toggle). KEIN Multi-Select-Feature. Anforderung → Teil von PF-11: Wenn ein Form/Overlay aktiv ist, zeigt die lokale Keybinding-Zeile (Footer) dessen lokale Bindings — inkl. 'space: select/toggle'. Kontextsensitiver Footer: View-lokal im Normalzustand, Overlay-/Form-lokal wenn eines offen ist.
+
+
+## PO-Nachtrag 6 (2026-07-15): Layout-Stabilität Detail-Pane
+
+**PF-12 — Kein Layout-Shift bei Selektion.** Im rechten Detail-Pane darf sich beim Auswählen/Fokussieren NICHTS verschieben: Der Platz für den Select-Marker (▷/▶ bzw. Fokus-Cursor) ist IMMER reserviert (feste Gutter-Spalte, auch im unselektierten Zustand — dann Leerzeichen/▷ statt nichts). Gilt für alle markierbaren Zeilen: Accordion-Sektionen UND Meta-Feldliste (PF-4). Test-Anforderung: Renderbreite/Spaltenposition jeder Zeile identisch mit und ohne Selektion (Golden- oder Assertion-Test).
