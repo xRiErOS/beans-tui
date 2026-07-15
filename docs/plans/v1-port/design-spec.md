@@ -614,6 +614,90 @@ Header/Footer-Task (PF-11, baut den kontextsensitiven Footer, der diese Felder m
 anzeigt) laufen — `blocked_by` in `epic-E7-plan.md`s Task-Übersicht entsprechend
 gesetzt.
 
+**PF-15 — Tags als 7. Meta-Feld** (PO-Feedback-Runde 2, 2026-07-15, bean
+`bt-ntoz`, D01 ENTSCHIEDEN). Löst US-08s einzige verbliebene Lücke
+(validation.md §2 B01/bean `bt-gdkx`: Tags weder im Tree noch im
+Detail-META sichtbar, nur die Filter-Facette funktionierte). Die
+PF-4-Meta-Feldliste (§15 oben) wächst von 6 auf 7 Zeilen — `tags:` wird
+DIREKT NACH `priority` und VOR `created_at` eingefügt (PO-Entscheid
+verbatim: KEIN Tree-Suffix — rasches Filtern nach z.B. offenen Reviews via
+`f`-Filter/Tags-Facette deckt den Überblick bereits ab):
+
+```
+[1] META
+▷ title:      xxxx
+▷ status:     xxxx
+▷ type:       xxxx
+▷ priority:   xxxx
+▷ tags:       xxxx
+▷ created_at: xxxx
+▷ updated_at: xxxx
+```
+
+Wert-Rendering: die bislang tote `tagsInline`/`tagSwatch`-Helferfunktion
+(`render_shared.go`, seit dem PF-1/PF-4-Meta-Redesign ohne Aufrufer —
+validation.md B01 wertet das als Indiz für ein ERSATZLOSES statt bewusstes
+Wegfallen) wird hier wiederbelebt: `tagsInline(b.Tags)` liefert die
+Hash-gefärbten `● tag`-Swatches; ein taglos Bean zeigt einen
+`theme.Dim`-Platzhalter `(none)` statt Leerzeile. `kind: "tags"` ist ein
+NEUER `relationField.kind`-Wert — die Enter-Kaskade (PF-5, §15 oben)
+behandelt ihn analog `status`/`type`/`priority`: `enter` auf der
+`tags:`-Zeile öffnet den bestehenden Tag-Picker (`m.openTagPicker()`,
+funktional identisch zur `t`-Taste) statt des Value-Menüs; `m.detailFocus`
+bleibt dabei — wie bei den anderen drei constrained-Feldern — `true`
+(Overlay legt sich als eigener Capture-State darüber, D02-Leitprinzip
+„schnell/einfach", PF-5 oben). Schließt bean `bt-gdkx` (US-08-Redefinition,
+design-spec §10) inhaltlich — der Implementer-Task referenziert `bt-gdkx`,
+schließt es aber NICHT selbst (PO-Gate, Review-Flow §5).
+
+**PF-16 — PO-Feedback-Runde 2 Sammelposten** (Grilling 2026-07-15, bean
+`bt-ntoz`, B01-B14 + Revisionen D02-D06, D08 — vollständige Herleitung/
+Zitate NUR in `bt-ntoz`, hier bewusst kompakt; Umsetzung
+`epic-E8-plan.md`):
+
+| Code | Fix (kompakt) | Betroffen |
+|---|---|---|
+| B01 | Pfeil-links verlässt Detail-Fokus nicht mehr (asymmetrisch zu Pfeil-rechts, das nie hineinführt) — Fokus-Wechsel exklusiv `tab`/`shift+tab`. **Revidiert PF-13** (unten). | `update.go` (`keyDetailFocus`) |
+| B02 | Kopfblock `type:…status:…prio:…` springt bei Bean-Wechsel — feste Spaltenbreiten (`type`→9, `status`→11, Wortlänge `milestone`/`in-progress`). | `view_detail_bean.go` (`detailHeaderBlock`) |
+| B03 | Kinderlose Beans zeigen ein Expand-Dreieck. **Verifiziert bereits korrekt** (`treeNodeMarker`, `view_browse_repo.go:401-409`, blanks bereits für `!hasKids`) — kein Code-Fix, nur Regressionstest ergänzt. | `view_browse_repo.go` (Test only) |
+| B04 | `title:` erscheint sofort ▶-selektiert nach `tab`, bevor die Feld-Ebene betreten wurde — ▶-Marker erst ab `m.detailLevel==1`. | `view_detail_bean.go`/`accordion.go`/`view_browse_repo.go` (Signatur-Erweiterung `detailLevel` durchgereicht) |
+| B05 | Redundantes `▾`/`▸`-Chevron im Accordion-Header entfernt (Zustand am Inhalt sichtbar). | `accordion.go` (`renderAccordion`) |
+| B06 | EXPERIMENT: inaktive Accordion-Header-Farbe Grau→Teal (Verwechslungsgefahr mit Meta-Label-Spalte). PO-Sign-off per Vorher/Nachher-Vergleich VOR Abnahme. | `accordion.go`, `theme.go` (neuer Token) |
+| B07 | Maus im Detail-Pane: Sektions-Header UND Meta-Feldzeilen bislang nicht klickbar. Klick auf Header = aktivieren/expandieren; Klick auf Feld = selektieren; Doppelklick = Edit-Overlay (analog Enter-Kaskade PF-5). | `mouse.go` (neu `detailClickRow`/`mouseDetailClick`), `view_browse_repo.go`/`view_browse_backlog.go` (Dispatch) |
+| B08 | Quit-Text `„Really quit bt."`→`„Really quit bt?"`. Quit-Kaskade zweistufig: `q`→`enter` aus Browse/Backlog (mit konfigurierten Repos) führt zur Lobby statt zum Exit; aus der Lobby (oder ohne konfigurierte Repos, Randfall) beendet `q`→`enter` die TUI. | `box_confirm_quit.go` |
+| B09 | Inaktive `▷`-Feldmarker der Meta-Feldliste waren unstilisiert (weiß) — auf `theme.Muted` (subtext/grau) gestellt, nur `▶` trägt Mauve. | `view_detail_bean.go` (`metaSectionBody`) |
+| B10 | `e`/`enter` auf Sektion `[2] BODY` war inkonsistent (`e` öffnete fälschlich Titel-Edit, `enter` war No-Op) — beide öffnen jetzt `$EDITOR` auf dem Body, kontextsensitiv zur gewählten Sektion. | `update.go` (`keyNodeAction`, `keyDetailFocus`), neuer Helfer `openBodyEditor` |
+| B11, B12 | Kombiniertes Value-Menü (`s`, `box_menu_value.go`) zeigte IMMER alle 15 Zeilen (Status+Type+Priority) statt nur der über die Enter-Kaskade/`s`-Taste gewählten Gruppe — `buildValueMenuItems(group)` liefert künftig nur noch die eine angefragte Gruppe; Palette gewinnt `set type`/`set priority` (bislang nur `set status`). | `box_menu_value.go`, `overlay_palette.go` |
+| B13 | Command-Center mischte Bean-Treffer unter die Commands — entfernt (Bean-Suche gehört exklusiv zu `/`). **Revidiert US-04** (§10) und die E4-Design-Entscheidung „Aktionen + Bean-Treffer gemischt". | `overlay_palette.go`, `types.go`, `messages.go` (kompletter Bleve-Palette-Unterbau entfernt, Compiler-gesteuert wie PF-14/T1) |
+| B14 | Tag-Neuanlage war unentdeckbar (existierte bereits als `n`-Taste im Tag-Picker, aber nirgends im Footer sichtbar, kein Palette-Command). Neue `keys.NewTag`-Bindung (`n`) im Tag-Picker-Footer sichtbar; Palette-Command `create tag`. Tag-Management-**Page** (`bt-6oyy`) bleibt v1.1 (D08). | `keymap.go`, `box_picker_tag.go`, `footer_context.go`, `overlay_palette.go` |
+| D02 | Backlog-Sort-Modus (E2-Erbe, kein sichtbarer Indikator) — dezenter Subtext-Suffix in der Backlog-Suchzeile, z. B. `⌕ / search · sort prio` (Tree unverändert, kein Suffix). | `view_browse_repo.go` (`treeSearchLine`, neuer Parameter), `view_browse_backlog.go` |
+| D03 | `esc` war in der Detail-Kaskade ein No-Op (E2-Erbe) — jetzt universelles „eine Ebene zurück": Feld-Ebene→Sektions-Ebene→Fokus verlassen. Prüfauftrag „alle esc-Sites einheitlich" (Suche/Filter/Picker/Lobby/Quit) als Audit-Tabelle im Umsetzungs-Task belegt, nicht blind neu gebaut — alle fünf bereits konform. | `update.go` (`keyDetailFocus`) |
+| D04 | Header-Globals auf genau 4 gekürzt: `ctrl+k` · `p:repos` · `?:help` · `q:quit` — `ctrl+r`/`esc`/`enter` fliegen aus dem Header (bleiben im Help-Overlay dokumentiert). | `keymap.go` (`globalBindings()`) |
+| D05 | Overlay-Footer zeigen weiterhin `enter`/`esc` — durch D04 keine Dopplung mehr mit dem Header. Sign-off, KEIN Code-Fix. | — |
+| D06 + Q06 | Footer-Neuspezifikation (ersetzt den T7/PF-11-Stand): Navigations-Keys raus, Reihenfolge `tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking`, Taste TEAL/Aktionswort subtext-grau, KEIN `:` mehr (Farbtrennung ersetzt den Doppelpunkt, gilt einheitlich auch für die 4 Header-Globals aus D04). `Blocking` wird von `B` auf `r` umbelegt (`r` seit PF-14 frei, `B` wird frei). Backlogs bestehender `Sort`(`S`)-Footer-Eintrag bleibt zusätzlich erhalten (Backlog-exklusiv, von Q06s Liste nicht berührt — Planner-Entscheidung, kein Entzug ohne PO-Anweisung). | `keymap.go`, `view_browse_repo.go` (`browseRepoLocalBindings`), `view_browse_backlog.go` (`backlogLocalBindings`) |
+| D08 | Tag-Management-Page (`bt-6oyy`) → v1.1, B14 ist die v1-Minimal-Lösung. Bereits als Body-Nachtrag auf `bt-6oyy` dokumentiert (Grilling-Abschluss 2026-07-15) — kein weiterer Schritt nötig. | — |
+
+**PF-13-Pfeil-Revision (B01):** PF-13 (oben) beschrieb `left` bei
+`detailLevel==0` als gültigen, dokumentierten Rückweg zum Tree
+(„Rückweg bis zum Tree"). B01 nimmt das zurück: Pfeiltasten sind ab sofort
+REIN Navigation (Sektion/Feld wechseln), NIE Fokus-Wechsel — einzig
+`tab`/`shift+tab` (weiterhin PF-13) ändern `m.detailFocus`. Grund (PO
+verbatim): Pfeil-rechts führte nie in den Detail-Fokus hinein, Pfeil-links
+aber heraus — asymmetrisch, „für Nutzer murks" (dieselbe Formulierung, die
+PF-13 selbst ursprünglich motivierte). `left` bei `detailLevel==0` wird zum
+No-Op; der Rückweg zum Tree läuft danach über `shift+tab` (deterministisch,
+PF-13) oder die neue `esc`-Kaskade (D03, oben).
+
+**US-04-Revision (B13, design-spec §10):** US-04s Akzeptanzkriterium
+„Aktionen + Bean-Treffer gemischt, kontextabhängige Einträge zuerst" wird
+per B13 bewusst zurückgenommen — das Command-Center zeigt AUSSCHLIESSLICH
+Commands, Bean-Treffer entfallen ersatzlos (Bean-Suche ist exklusiv `/`s
+Aufgabe, design-spec §6 V2/V3). Dies revidiert die ursprüngliche E4-Design-
+Entscheidung (§6 V5, „Bean-Suche (Bleve) in einem" mit den Aktionen) — neuer
+US-04-Wortlaut: „ctrl+k, fuzzy NUR über Commands, enter dispatcht,
+kontextabhängige Einträge (fokussiertes Bean) zuerst." E6/US-04-Validierung
+muss künftig gegen diesen neuen Wortlaut laufen, nicht den alten.
+
 ### Offene, NICHT umgesetzte Punkte
 
 - **Q03 (PO-Nachtrag 3):** zentrale Tag-Definition über eigene Page — bereits als
@@ -646,4 +730,8 @@ Punkt geführt.
 
 Stand 2026-07-15: PF-1…PF-14 vollständig entschieden, keine offenen Q-Marker mehr
 (Q03 bewusst außerhalb E7, Q04 gelöst).
-Realisierungsplan: `docs/plans/v1-port/epic-E7-plan.md`.
+Realisierungsplan (PF-1…PF-14): `docs/plans/v1-port/epic-E7-plan.md`.
+
+Stand 2026-07-15 (Grilling R2): PF-15/PF-16 (D01-D06, D08, B01-B14)
+vollständig entschieden, PO-Freigabe erteilt (bean `bt-ntoz`). Realisierungsplan:
+`docs/plans/v1-port/epic-E8-plan.md`.
