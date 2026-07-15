@@ -1,11 +1,11 @@
 ---
 # bt-7dfj
 title: E5 T8 — E5-Abschluss
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T09:04:38Z
-updated_at: 2026-07-15T12:34:44Z
+updated_at: 2026-07-15T13:22:25Z
 parent: bt-5h4d
 ---
 
@@ -46,3 +46,8 @@ reviewClickRow (mouse.go) dupliziert die Zeilenstruktur von reviewQueueRows als 
 ## Notiz aus T6-Review (I02, low, kein v1-Handlungsbedarf)
 
 In-flight repoMetricsCmd-Aufrufe eines früheren Lobby-Open laufen bei erneutem Öffnen weiter (kein Cancel-Guard) — redundante beans-list-Subprozesse, pfadgekeyt, keine Datenverwechslung. Bewusst akzeptiert für v1; bei vielen Repos später Kontext-Cancel. Nur im Abschluss-/Known-Issues-Text erwähnen.
+
+
+## Notiz aus T7-Review (I01, low, vorbestehend seit E3)
+
+Parent-Picker (EligibleParents, hierarchy.go) + Blocking-Picker (buildBlockingItems) filtern nicht nach showArchived/Status — archivierte/completed/scrapped Beans bleiben als Relationsziele wählbar. Keine Regression, Plan schweigt. In T8 entscheiden + dokumentieren: entweder bewusste Design-Entscheidung ('Picker zeigen alle gültigen Relationsziele') im README/Known-Issues festhalten ODER Mini-Fix (Status-Filter im Picker). Empfehlung: dokumentieren, kein Fix (v1-Scope).
