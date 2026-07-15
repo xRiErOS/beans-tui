@@ -375,7 +375,7 @@ func metaSectionBody(b *data.Bean, bodyW int, active bool, fieldIdx int) string 
 func detailHeaderBlock(b *data.Bean, w int) string                             // NEU, Kopfblock
 ```
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `TestBeanSectionsAlwaysFourFixedSections`: Titel-Assertions auf
     `META`/`BODY`/`RELATIONS`/`HISTORY`.
   - `TestBeanSectionsMetaRendersStatusTypePriorityTags` → umbauen zu
@@ -398,8 +398,8 @@ func detailHeaderBlock(b *data.Bean, w int) string                             /
     NICHT-aktive Header-Zeile hat identische Breite in beiden.
   - NEU `TestFieldStripGutterWidthStable` (PF-12, analog für
     Beziehungen-Feldliste).
-- [ ] **Step 2:** `command go test ./internal/tui/...` → FAIL.
-- [ ] **Step 3: Implement `accordion.go`.**
+- [x] **Step 2:** `command go test ./internal/tui/...` → FAIL.
+- [x] **Step 3: Implement `accordion.go`.**
   - `relationField` +`kind`-Feld, Doc-Kommentar korrigieren.
   - `renderAccordion`: `isOpen := n == open || n == 1` (PF-1). Gutter-Fix
     (PF-12): inaktiv `" " + truncate(marker+title+hint, w-1)`, aktiv
@@ -408,7 +408,7 @@ func detailHeaderBlock(b *data.Bean, w int) string                             /
     0`.
   - `fieldStrip`: Gutter-Fix — inaktiv `" " + theme.Muted.Render(f.label)`,
     aktiv unverändert.
-- [ ] **Step 4: Implement `view_detail_bean.go`.**
+- [x] **Step 4: Implement `view_detail_bean.go`.**
   - Sektionstitel-Konstanten `META`/`BODY`/`RELATIONS`/`HISTORY`.
   - `metaFields(b *data.Bean) []relationField`: 6 Einträge, `label` je
     Eintrag formatiert (title=`b.Title`, status/type/priority via
@@ -425,29 +425,29 @@ func detailHeaderBlock(b *data.Bean, w int) string                             /
   - `beanSections(idx, b, bodyW, focused bool, activeIdx, fieldIdx int)
     []accordionSection`: Meta nutzt `fields: metaFields(b)`, `body:
     metaSectionBody(b, bodyW, focused && activeIdx==0, fieldIdx)`.
-- [ ] **Step 5: Implement `view_browse_repo.go` (`renderAccordionPane`).**
+- [x] **Step 5: Implement `view_browse_repo.go` (`renderAccordionPane`).**
   Vor `beanSections`-Aufruf: `rows = append(rows,
   strings.Split(detailHeaderBlock(b, accW), "\n")...)`. `beanSections`-Aufruf
   auf neue Signatur: `beanSections(idx, b, bodyW, focused, secCursor,
   fieldCursor)`.
-- [ ] **Step 6:** `command go test ./internal/tui/...` → PASS.
-- [ ] **Step 7: Golden-Regen** (3 Goldens, s. Golden-Strategie). Beide
+- [x] **Step 6:** `command go test ./internal/tui/...` → PASS.
+- [x] **Step 7: Golden-Regen** (3 Goldens, s. Golden-Strategie). Beide
   ändern sich stark (Kopfblock + neue Meta-Feldliste + Section-1-immer-
   offen). Vorher/Nachher explizit beschreiben.
-- [ ] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
-- [ ] **Step 9:** Commit `feat(tui): PF-1/PF-3/PF-4/PF-12 Meta-Layout +
+- [x] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
+- [x] **Step 9:** Commit `feat(tui): PF-1/PF-3/PF-4/PF-12 Meta-Layout +
   Kopfblock + Gutter-Stabilität`.
 
 **Akzeptanz-Checkliste:**
-- [ ] Kopfblock (ID/Titel/type-status-prio) rendert über der Accordion in
+- [x] Kopfblock (ID/Titel/type-status-prio) rendert über der Accordion in
   Tree UND Backlog
-- [ ] Meta-Sektion zeigt IMMER ihren Body, unabhängig von `open`
-- [ ] Meta-Feldliste: 6 Zeilen, `▷`/`▶`-Cursor funktional, `created_at`/
+- [x] Meta-Sektion zeigt IMMER ihren Body, unabhängig von `open`
+- [x] Meta-Feldliste: 6 Zeilen, `▷`/`▶`-Cursor funktional, `created_at`/
   `updated_at` NICHT editierbar (kind `readonly`)
-- [ ] PF-12-Gutter-Tests grün (Sektionsköpfe UND `fieldStrip` UND
+- [x] PF-12-Gutter-Tests grün (Sektionsköpfe UND `fieldStrip` UND
   Meta-Feldliste)
-- [ ] Sektionstitel `META`/`BODY`/`RELATIONS`/`HISTORY`
-- [ ] Goldens regeneriert + Vorher/Nachher je Datei
+- [x] Sektionstitel `META`/`BODY`/`RELATIONS`/`HISTORY`
+- [x] Goldens regeneriert + Vorher/Nachher je Datei
 
 ---
 
