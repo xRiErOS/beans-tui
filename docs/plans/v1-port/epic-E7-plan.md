@@ -173,7 +173,7 @@ gleiche Risikolage: aufruferlos seit diesem Task, pure/read-only, kein TUI-Coupl
 
 **Referenz-Tabellen:** design-spec.md §15 PF-6 (verbindlich).
 
-- [ ] **Step 1: Failing tests (TDD).** `theme_test.go` auf die NEUEN
+- [x] **Step 1: Failing tests (TDD).** `theme_test.go` auf die NEUEN
   Erwartungen umschreiben:
   - `TestStatusColorMapping`: Tabelle → `draft` Blue / `todo` Green /
     `in-progress` Yellow / `completed` Subtext / `scrapped` Subtext.
@@ -188,38 +188,38 @@ gleiche Risikolage: aufruferlos seit diesem Task, pure/read-only, kein TUI-Coupl
   - `TestPriorityColorMapping`: Tabelle → critical Red / high Yellow /
     normal Text / low Subtext / deferred Subtext. `Priority("critical")`
     enthält `"‼"`, NICHT mehr das Wort `"critical"`.
-- [ ] **Step 2:** `command go test ./internal/theme/...` → FAIL.
-- [ ] **Step 3: Implement `theme.go`.** `statusColor`-Map auf neue Farben;
+- [x] **Step 2:** `command go test ./internal/theme/...` → FAIL.
+- [x] **Step 3: Implement `theme.go`.** `statusColor`-Map auf neue Farben;
   NEUE `statusLetter`-Map (`d`/`t`/`i`/`c`/`s`); `StatusIcon` liefert
   `StatusStyle(status).Render(statusLetter[status])` +
   `fallbackGlyph()`-Fallback (unverändert). `statusGlyph`/
   `statusGlyphASCII`-Konstanten entfernen — der DD2-176-zitierende
   Doc-Kommentar wird ERSETZT (PF-6 hebt diesen Grundsatz explizit auf,
   Begründung aus design-spec §15 PF-6 übernehmen).
-- [ ] **Step 4: Implement `icons.go`.** `typeIcon`-Map → Buchstaben
+- [x] **Step 4: Implement `icons.go`.** `typeIcon`-Map → Buchstaben
   (`M`/`E`/`F`/`T`/`B`); `typeColor`-Map → neue Farben. `typeIconASCII`
   entfällt komplett (Buchstaben bereits ASCII/EAW-Neutral). `TypeIcon`/
   `TypeStyle`-Signaturen UNVERÄNDERT (Drop-in an den 3 Call-Sites).
-- [ ] **Step 5: Priorität-Glyphen in `theme.go`.** NEUE Maps
+- [x] **Step 5: Priorität-Glyphen in `theme.go`.** NEUE Maps
   `priorityGlyph`/`priorityGlyphASCII` (critical `‼`/`!!`, high `!`/`!`,
   normal `·`/`.`, low `↓`/`v`, deferred `→`/`>`). `priorityColor`
   umschreiben (critical Red, high **Yellow**, normal Text, low
   **Subtext**, deferred **Subtext**). `Priority(p string) string` liefert
   künftig den Glyph statt des Worts, `Bold(true)` für critical/high bleibt.
-- [ ] **Step 6:** `command go test ./internal/theme/...` → PASS.
-- [ ] **Step 7: Golden-Regen** (s. Golden-Strategie). Erwartete Änderungen:
+- [x] **Step 6:** `command go test ./internal/theme/...` → PASS.
+- [x] **Step 7: Golden-Regen** (s. Golden-Strategie). Erwartete Änderungen:
   `tree.golden`/`backlog.golden` (Status-/Type-Icons jeder Zeile).
   `chrome.golden` voraussichtlich UNVERÄNDERT (Chrome rendert keine
   Bean-Zeilen) — trotzdem Regressionslauf, im Commit-Body als
   „unverändert" vermerken.
-- [ ] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
-- [ ] **Step 9:** Commit `feat(theme): PF-6 Glyphen-Ersatz
+- [x] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
+- [x] **Step 9:** Commit `feat(theme): PF-6 Glyphen-Ersatz
   (Typ/Status/Priorität)`.
 
 **Akzeptanz-Checkliste:**
-- [ ] Alle 4 `theme_test.go`-Funktionen grün gegen die NEUEN Tabellen
-- [ ] `StatusIcon`/`TypeIcon` liefern Buchstaben, `Priority()` liefert Glyph
-- [ ] Goldens regeneriert + Vorher/Nachher je Datei (`chrome.golden`
+- [x] Alle 4 `theme_test.go`-Funktionen grün gegen die NEUEN Tabellen
+- [x] `StatusIcon`/`TypeIcon` liefern Buchstaben, `Priority()` liefert Glyph
+- [x] Goldens regeneriert + Vorher/Nachher je Datei (`chrome.golden`
   explizit als „unverändert" oder verändert vermerkt)
 
 ---
