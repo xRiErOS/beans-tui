@@ -359,14 +359,25 @@ type model struct {
 	// Command-Center (E4 Task 1, bean bt-jpgn, design decisions a/b/h):
 	// paletteOpen is a full-capture floating-overlay state, same precedent
 	// as filterOpen (handleKey capture order, design decision h). palQuery
-	// drives BOTH candidate pools (actions here in T1, beans in T2) -- ONE
-	// shared input, design decision b. palList is the cursor over the
-	// COMBINED already-filtered result list (palFiltered, rebuilt every
-	// keystroke). Task 2 (bean bt-yo60) adds palBleveIDs/palBleveFor/
-	// palBleveLoading alongside these once the bean-search half lands.
+	// drives BOTH candidate pools (actions T1, beans T2) -- ONE shared
+	// input, design decision b. palList is the cursor over the COMBINED
+	// already-filtered result list (palFiltered, rebuilt every keystroke).
 	paletteOpen bool
 	palQuery    string
 	palList     listState
+
+	// Command-Center bean-search half (E4 Task 2, bean bt-yo60, design
+	// decision b): palette-SCOPED copies of the Bleve staleness-guard
+	// triplet `/`'s own searchBleveIDs/searchBleveFor/searchBleveLoading
+	// already establish above -- kept SEPARATE (own fields, own Msg type
+	// paletteBleveResultMsg, messages.go) so opening ctrl+k can never
+	// clobber an active Tree/Backlog `/` search session, or vice versa.
+	// Same wholesale-replace convention as searchBleveIDs: always REPLACED
+	// with a fresh map on a fresh (non-stale) result, never mutated in
+	// place -- no cloneBoolMap (I01) needed.
+	palBleveIDs     map[string]bool
+	palBleveFor     string
+	palBleveLoading bool
 }
 
 // newModel builds the initial (pre-load) App-Shell state.

@@ -8,6 +8,7 @@ package tui
 // not weaken.
 
 import (
+	"fmt"
 	"testing"
 
 	"beans-tui/internal/data"
@@ -248,6 +249,244 @@ func TestHandleKeyCtrlKOpensPaletteEvenWithOverlayOpen(t *testing.T) {
 	m = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlK})
 	if m.paletteOpen {
 		t.Fatal("ctrl+k opened the palette while an overlay was open -- capture order violated")
+	}
+}
+
+// --- palFilteredBeans: bean-search half (E4 Task 2, bean bt-yo60, design decision b) ---
+
+// TestPalFilteredBeansEmptyQueryNone guards that T2 does not weaken T1's
+// TestPalFilteredEmptyQueryReturnsAllActionsNoBeans contract: an empty query
+// yields zero paletteKindBean items.
+func TestPalFilteredBeansEmptyQueryNone(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.palQuery = ""
+
+	items := m.palFilteredBeans()
+	if len(items) != 0 {
+		t.Fatalf("palFilteredBeans with empty query = %d items, want 0", len(items))
+	}
+}
+
+// TestPalFilteredBeansLocalSubstringBelowThreshold guards the <3-char local
+// fallback (mirrors beanMatchesSearch's own bifurcation, view_browse_repo.go):
+// "tk" ID-substring-matches both tk-1/tk-2 without any Bleve round-trip.
+func TestPalFilteredBeansLocalSubstringBelowThreshold(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.palQuery = "tk"
+
+	items := m.palFilteredBeans()
+	if len(items) != 2 {
+		t.Fatalf("len(palFilteredBeans) = %d, want 2 (tk-1, tk-2 ID substring match)", len(items))
+	}
+	for _, it := range items {
+		if it.kind != paletteKindBean {
+			t.Fatalf("palFilteredBeans returned a non-bean item: %+v", it)
+		}
+		if it.bean == nil {
+			t.Fatal("palFilteredBeans item has a nil bean")
+		}
+	}
+}
+
+// fixtureManyBeans builds n flat, parentless beans sharing the title token
+// "manybean" -- used by the cap/sort tests below, which need a matching set
+// larger than paletteBeanResultCap.
+func fixtureManyBeans(n int) []data.Bean {
+	beans := make([]data.Bean, n)
+	for i := 0; i < n; i++ {
+		beans[i] = data.Bean{
+			ID:       fmt.Sprintf("mb-%02d", i),
+			Title:    fmt.Sprintf("Manybean %02d", i),
+			Status:   "todo",
+			Type:     "task",
+			Priority: "normal",
+		}
+	}
+	return beans
+}
+
+// TestPalFilteredBeansCappedAt20 guards the paletteBeanResultCap ceiling
+// (design decision b: prevents a broad query like "e" from flooding the
+// modal) -- 30 matching fixture beans, only paletteBeanResultCap survive.
+func TestPalFilteredBeansCappedAt20(t *testing.T) {
+	m := fixtureModel(t, fixtureManyBeans(30))
+	m.palQuery = "manybean"
+
+	items := m.palFilteredBeans()
+	if len(items) != paletteBeanResultCap {
+		t.Fatalf("len(palFilteredBeans) = %d, want %d (cap)", len(items), paletteBeanResultCap)
+	}
+}
+
+// TestPalFilteredBeansSortedCanonically guards that the bean pool is
+// canonically ordered (data.SortBeans, I03) -- not left in map-iteration
+// (nondeterministic) order.
+func TestPalFilteredBeansSortedCanonically(t *testing.T) {
+	m := fixtureModel(t, fixtureManyBeans(6))
+	m.palQuery = "manybean"
+
+	items := m.palFilteredBeans()
+	if len(items) != 6 {
+		t.Fatalf("setup: len(palFilteredBeans) = %d, want 6", len(items))
+	}
+	got := make([]*data.Bean, len(items))
+	for i, it := range items {
+		got[i] = it.bean
+	}
+	want := append([]*data.Bean{}, got...)
+	data.SortBeans(want)
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("palFilteredBeans order[%d] = %s, want %s (data.SortBeans order)", i, got[i].ID, want[i].ID)
+		}
+	}
+}
+
+// TestPalFilteredOrderActionsBeforeBeans guards that a query matching BOTH an
+// action AND a bean returns every paletteKindAction item before any
+// paletteKindBean item (design decision b: "Aktionen zuerst", NO score-based
+// interleaving).
+func TestPalFilteredOrderActionsBeforeBeans(t *testing.T) {
+	beans := append(fixtureBeans(), data.Bean{
+		ID: "bckl-1", Title: "Something Unrelated", Status: "todo", Type: "task", Priority: "normal",
+	})
+	m := fixtureModel(t, beans)
+	// "bckl" fuzzy-subsequence-matches the "go to: backlog" action label
+	// (TestPalFilteredActionsFuzzyFiltered precedent above) AND ID-substring-
+	// matches bckl-1.
+	m.palQuery = "bckl"
+
+	items := m.palFiltered()
+	sawBean := false
+	for _, it := range items {
+		if it.kind == paletteKindBean {
+			sawBean = true
+			continue
+		}
+		if sawBean {
+			t.Fatalf("action item %+v found AFTER a bean item -- actions must always precede beans (design decision b)", it)
+		}
+	}
+	if !sawBean {
+		t.Fatal("test setup invalid: no bean item matched the query")
+	}
+}
+
+// TestDispatchPaletteBeanJumpsCursorAndSwitchesToBrowse guards dispatchPalette
+// on a paletteKindBean item: cursor jumps to the bean, view switches to
+// viewBrowseRepo (even from viewBacklog), and the bean's ancestors expand so
+// the jump target is actually visible in the next visibleNodes() call
+// (expandAncestorsOf, same call shape as keyDetailFocus's relation-jump,
+// update.go).
+func TestDispatchPaletteBeanJumpsCursorAndSwitchesToBrowse(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.view = viewBacklog
+
+	target := m.idx.ByID["tk-2"] // parent ep-1
+	nm, _ := m.dispatchPalette(paletteItem{kind: paletteKindBean, bean: target, label: relationRow(target)})
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("dispatchPalette did not return a model, got %T", nm)
+	}
+
+	if mm.paletteOpen {
+		t.Fatal("dispatchPalette must close the palette")
+	}
+	if mm.cursorID != "tk-2" {
+		t.Fatalf("cursorID = %q, want tk-2", mm.cursorID)
+	}
+	if mm.view != viewBrowseRepo {
+		t.Fatalf("view = %v, want viewBrowseRepo", mm.view)
+	}
+	if !mm.expanded["ep-1"] {
+		t.Fatal("dispatchPalette must expand tk-2's ancestors (ep-1) so the jump target is visible in the tree")
+	}
+}
+
+// --- Palette-scoped Bleve half (palBleveIDs/palBleveFor/palBleveLoading) ---
+
+// TestKeyPaletteDispatchesBleveOnQueryGrowth guards that keyPalette's
+// rune-typing path dispatches a paletteSearchCmd once palQuery reaches the
+// Bleve threshold (mirrors TestSearchBleveFiresOnlyAtThreeOrMoreChars,
+// search_test.go, but routed through keyPalette directly instead of
+// Update()/keySearchInput).
+func TestKeyPaletteDispatchesBleveOnQueryGrowth(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	nm, _ := m.openPalette()
+	m = nm.(model)
+
+	nm, _ = m.keyPalette(runeMsg('a'))
+	m = nm.(model)
+	nm, _ = m.keyPalette(runeMsg('b'))
+	m = nm.(model)
+	if m.palBleveLoading {
+		t.Fatal("2 chars must not dispatch a palette Bleve search yet")
+	}
+
+	nm, cmd := m.keyPalette(runeMsg('c'))
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("keyPalette did not return a model, got %T", nm)
+	}
+	if cmd == nil {
+		t.Fatal("the keystroke reaching 3 chars must dispatch a palette Bleve search (paletteSearchCmd)")
+	}
+	if !mm.palBleveLoading {
+		t.Fatal("palBleveLoading must be set once the palette Bleve search is dispatched")
+	}
+}
+
+// TestApplyPaletteBleveResultDiscardsStaleQuery guards the staleness guard
+// (mirrors TestSearchBleveStaleResultDiscardedWhenQueryChangedMeanwhile,
+// search_test.go): a paletteBleveResultMsg tagged for a query that no longer
+// matches m.palQuery must be a no-op.
+func TestApplyPaletteBleveResultDiscardsStaleQuery(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.palQuery = "abcd" // query has already moved on past "abc"
+
+	m = step(t, m, paletteBleveResultMsg{query: "abc", ids: []string{"tk-1"}})
+
+	if m.palBleveFor != "" {
+		t.Fatalf("stale result must not update palBleveFor, got %q", m.palBleveFor)
+	}
+	if m.palBleveIDs != nil {
+		t.Fatalf("stale result must not update palBleveIDs, got %v", m.palBleveIDs)
+	}
+}
+
+// TestApplyPaletteBleveResultAppliedWhenQueryStillCurrent is the positive
+// counterpart (mirrors TestSearchBleveResultAppliedWhenQueryStillCurrent).
+func TestApplyPaletteBleveResultAppliedWhenQueryStillCurrent(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.palQuery = "abc"
+	m.palBleveLoading = true
+
+	m = step(t, m, paletteBleveResultMsg{query: "abc", ids: []string{"tk-1"}})
+
+	if m.palBleveFor != "abc" {
+		t.Fatalf("palBleveFor = %q, want \"abc\"", m.palBleveFor)
+	}
+	if !m.palBleveIDs["tk-1"] {
+		t.Fatal("palBleveIDs must contain tk-1 from the applied result")
+	}
+	if m.palBleveLoading {
+		t.Fatal("applying a (non-stale) result must clear palBleveLoading")
+	}
+}
+
+// TestPaletteSearchCmdTagsResultWithQuery guards paletteSearchCmd's message
+// tagging directly (mirrors TestSearchCmdTagsResultWithQuery, search_test.go
+// -- no beans binary required either way, data.Client.Search tags the query
+// on both its success and its error path).
+func TestPaletteSearchCmdTagsResultWithQuery(t *testing.T) {
+	c := &data.Client{RepoDir: t.TempDir()}
+	msg := paletteSearchCmd(c, "abc")()
+	res, ok := msg.(paletteBleveResultMsg)
+	if !ok {
+		t.Fatalf("paletteSearchCmd()() = %T, want paletteBleveResultMsg", msg)
+	}
+	if res.query != "abc" {
+		t.Errorf("paletteBleveResultMsg.query = %q, want \"abc\"", res.query)
 	}
 }
 
