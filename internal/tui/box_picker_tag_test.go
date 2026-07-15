@@ -298,6 +298,72 @@ func TestTagPickerEnterTargetVanishedClosesGracefully(t *testing.T) {
 	}
 }
 
+// --- inherited PFLICHT findings from the E3-T2 review (bt-8v69 body),
+// closed out here as part of E3 Task 3 (bean bt-p1uz) per its own bean
+// body's "Übernommene Findings" section ---
+
+// TestTagPickerEscFromInputKeepsPickerOpenPendingIntact is PFLICHT I1a: esc
+// while the free-text new-tag input (m.tagInputActive) is open must close
+// ONLY that input sub-mode (keyTagInput's own esc case) -- the OUTER
+// Tag-Picker overlay stays open (overlayTagPicker, not overlayNone) and
+// whatever was already toggled into tagPending before "n" was pressed must
+// survive untouched.
+func TestTagPickerEscFromInputKeepsPickerOpenPendingIntact(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2") // tags: urgent
+	m = step(t, m, runeMsg('t'))
+	m = tagPickerCursorTo(t, m, "backend")
+	m = step(t, m, runeMsg(' ')) // toggle backend on in pending, BEFORE opening the input
+
+	m = step(t, m, runeMsg('n'))
+	if !m.tagInputActive {
+		t.Fatal("setup: n did not open the new-tag input")
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEsc))
+	nm := tm.(model)
+	if nm.tagInputActive {
+		t.Fatal("esc must close the new-tag input sub-mode")
+	}
+	if nm.overlay != overlayTagPicker {
+		t.Fatalf("overlay = %v, want overlayTagPicker (esc-from-input must NOT close the outer picker)", nm.overlay)
+	}
+	if cmd != nil {
+		t.Fatal("esc-from-input must not fire a mutation Cmd")
+	}
+	if !nm.tagPending["urgent"] || !nm.tagPending["backend"] {
+		t.Fatalf("tagPending = %v, want {urgent:true, backend:true} unchanged by esc-from-input", nm.tagPending)
+	}
+}
+
+// TestTagPickerToggleOffThenOnYieldsEmptyDiffNoMutation is PFLICHT I1b: a
+// tag toggled off and then back on nets out to the SAME state as
+// tagOriginal -- applyTagPickerDiff's add/remove diff must come out empty,
+// so enter closes the picker WITHOUT firing a Cmd, exactly like the
+// no-changes-at-all case (TestTagPickerEnterNoChangesNoMutation).
+func TestTagPickerToggleOffThenOnYieldsEmptyDiffNoMutation(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2") // tags: urgent
+	m = step(t, m, runeMsg('t'))
+
+	m = tagPickerCursorTo(t, m, "urgent")
+	m = step(t, m, runeMsg(' ')) // off
+	m = step(t, m, runeMsg(' ')) // back on -- net: unchanged vs. tagOriginal
+
+	if !m.tagPending["urgent"] {
+		t.Fatal("setup: urgent should be back in tagPending after toggling off then on")
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm := tm.(model)
+	if nm.overlay != overlayNone {
+		t.Fatal("enter must close the picker even when the toggle nets out to no change")
+	}
+	if cmd != nil {
+		t.Fatal("a toggle-off-then-on net-zero diff must not fire a mutation Cmd")
+	}
+}
+
 // --- capture-order guard (cheap follow-up from the T1 review, bt-8v69 body) ---
 
 // TestOverlayCaptureSwallowsQuitKeysWhileTagPickerOpen pins handleKey's

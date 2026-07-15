@@ -200,6 +200,17 @@ func (c *Client) RemoveTag(id, tag, etag string) error {
 // every added tag as a repeated `--tag` and every removed tag as a repeated
 // `--remove-tag`, so the whole diff lands atomically against a single etag.
 // AddTag/RemoveTag remain for genuine single-tag callers.
+//
+// I2 (E3-T2-Review PFLICHT, carried into bean bt-p1uz/E3 Task 3): if the
+// SAME tag appears in both add and remove (a caller bug, or a picker toggle
+// sequence that nets out to "no real change" but was diffed sloppily), the
+// remove wins -- empirically verified against beans 0.4.2's `update`
+// resolver, which applies `--remove-tag` after `--tag` regardless of flag
+// order on the command line. box_picker_tag.go's applyTagPickerDiff never
+// actually produces this input (a tag is either in add XOR remove by
+// construction, never both), but any other caller relying on SetTags
+// directly must know this ordering. SetBlocking (below) resolves its own
+// add/remove overlap the SAME way, verified the same way.
 func (c *Client) SetTags(id string, add, remove []string, etag string) error {
 	var args []string
 	for _, tag := range add {
@@ -261,6 +272,13 @@ func (c *Client) RemoveBlocking(id, target, etag string) error {
 // a single etag -- one bean, one etag, no cascade. AddBlocking/RemoveBlocking
 // remain for genuine single-target callers (symmetry with the BlockedBy
 // family).
+//
+// I2 (E3-T2-Review PFLICHT, same note as SetTags above): if the SAME target
+// appears in both add and remove, the remove wins (empirically verified
+// against beans 0.4.2's `update` resolver, `--remove-blocking` applied after
+// `--blocking` regardless of command-line flag order). Not reachable through
+// box_picker_blocking.go's own applyBlockingPickerDiff (a target is add XOR
+// remove by construction), documented here for any other direct caller.
 func (c *Client) SetBlocking(id string, add, remove []string, etag string) error {
 	var args []string
 	for _, target := range add {
