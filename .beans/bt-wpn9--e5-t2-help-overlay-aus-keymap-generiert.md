@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T09:04:24Z
-updated_at: 2026-07-15T09:50:47Z
+updated_at: 2026-07-15T09:57:05Z
 parent: bt-5h4d
 ---
 
@@ -44,5 +44,5 @@ Plan: docs/plans/v1-port/epic-E5-plan.md »Task 2«.
 
 
 ## Prelude aus E5-T1-Review (PFLICHT, vor Help-Arbeit)
-- [ ] B01: update.go:244 (applyCreateDone reopen-Branch) — showToast ergänzen (mechanisch identisch zu den anderen 8 Sites; wichtigster Fehlerpfad: aktiver Create abgelehnt) + Mini-Test
-- [ ] I01: bean bt-6dts Deviations-Sektion korrigieren (applyLoaded fehlt in Aufzählung, Zählung 6 vs 7)
+- [x] B01: update.go:244 (applyCreateDone reopen-Branch) — showToast ergänzt (toastError non-sticky, Muster der 8 anderen Sites) + Mini-Test (TestCreateConfirmEnterErrorPreservesDraftAndReopensForm erweitert, RED->GREEN bewiesen)
+- [x] I01: bean bt-6dts Deviations-Sektion korrigiert (surgical ## Korrektur-Append: applyLoaded ergänzt, Zählung auf 8 Stellen/6 Funktionen richtiggestellt)

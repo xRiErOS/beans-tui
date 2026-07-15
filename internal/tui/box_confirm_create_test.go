@@ -257,6 +257,16 @@ func TestCreateConfirmEnterErrorPreservesDraftAndReopensForm(t *testing.T) {
 	if fm.createDraft != nil {
 		t.Fatal("createDraft must be consumed (nil) once reopened into the form, same as the esc/n path")
 	}
+	// B01 (E5-T1-Review Prelude, PFLICHT): the reopen-branch is the ONE
+	// mutation-adjacent error path E5 Task 1's dual-write audit missed (it
+	// enumerated update.go's OTHER 8 showToast sites but not this one,
+	// since applyCreateDone's reopen branch returns through
+	// openCreateFormWithDraft rather than applyMutationResult's shared
+	// tail) -- same Kind/sticky convention as every other hard-error site
+	// (toastError, non-sticky, title mirrors m.err).
+	if fm.toast == nil || fm.toast.kind != toastError || fm.toast.title != fm.err {
+		t.Fatalf("toast = %+v, want a non-nil toastError mirroring m.err %q (B01: reopen-branch dual-write)", fm.toast, fm.err)
+	}
 
 	fm = advanceFieldsModel(t, fm, 7)
 	if !strings.Contains(fm.createLabel, "New Task") {

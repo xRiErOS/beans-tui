@@ -242,7 +242,17 @@ func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 			d := *m.createDraft
 			m.createDraft = nil
 			m.err = msg.err.Error()
-			return m.openCreateFormWithDraft(d)
+			// B01 (E5-T1-Review Prelude, PFLICHT): this reopen-branch was the
+			// one showToast site E5 Task 1's dual-write audit missed (it
+			// returns through openCreateFormWithDraft rather than
+			// applyMutationResult's shared tail, so the grep-driven audit of
+			// that tail's call sites never saw it) -- same convention as
+			// every other hard-error site (toastError, non-sticky, title
+			// mirrors m.err).
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+			formModel, formCmd := m.openCreateFormWithDraft(d)
+			return formModel, tea.Batch(toastCmd, formCmd)
 		}
 		m.createDraft = nil // busy (F1) or no draft to reopen from -- drop it either way
 		return m.applyMutationResult(msg.err)

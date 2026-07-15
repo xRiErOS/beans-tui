@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-15T09:04:24Z
-updated_at: 2026-07-15T09:38:08Z
+updated_at: 2026-07-15T09:56:48Z
 parent: bt-5h4d
 ---
 
@@ -208,3 +208,36 @@ Design-Entscheidung a eingehalten).
 - `toastHit`/`dismissToast` sind fertig fürs Task-4-Wiring (`handleMouse`s
   allererster Klick-Check) -- unverändert wie im Plan vorgesehen, keine
   Anpassung in T1 nötig gewesen.
+
+
+## Korrektur (I01, E5-T2-Review Prelude, bean bt-wpn9)
+
+Die Deviations-Sektion oben ("Scope der Dual-Write-Stellen") war an zwei
+Stellen ungenau:
+
+1. **Aufzählung unvollständig:** die Klammer-Liste nennt
+   `applyMutationResult x2, applyBleveResult, applyPaletteBleveResult,
+   applyEditorFinished x2, keyNodeAction`s `createInFlightNote`-Guard` --
+   `applyLoaded` fehlt darin komplett, obwohl sowohl die Akzeptanz-Liste
+   oben ALS AUCH die Summary-Sektion es korrekt als sechste Dual-Write-
+   Funktion nennen ("gleiche Signatur-Erweiterung, Lade-Fehler ->
+   toastError non-sticky").
+2. **Zählung inkonsistent:** die Prosa behauptet "exakt dieselben 6
+   Stellen", die Klammer-Liste selbst summiert (mit ihren `x2`-Vermerken,
+   OHNE das fehlende `applyLoaded`) aber auf 7, nicht 6.
+
+**Korrigierter Befund** (verifiziert per `grep -n "showToast(" update.go`
+gegen den T1-Commit-Stand, 5778e5a): 8 Aufrufstellen über 6 Funktionen --
+`applyMutationResult` x2 (Konflikt-Zweig sticky + genereller Fehler-Zweig
+non-sticky), `applyBleveResult` x1, `applyPaletteBleveResult` x1,
+`applyLoaded` x1, `applyEditorFinished` x2 (Prozessfehler + "Bean nicht
+mehr vorhanden"-Guard), `keyNodeAction`s `createInFlightNote`-Guard x1.
+Kein Code-Fix nötig -- die Implementierung selbst (Akzeptanz-Liste +
+Summary) war bereits korrekt, nur die Deviations-Prosa driftete davon ab.
+
+Nachtrag: E5 Task 2s Prelude (bean bt-wpn9, B01) hat inzwischen einen
+NEUNTEN Standort ergänzt (`applyCreateDone`s Reopen-Branch,
+`update.go:244`, das einzige `m.err = ...` außerhalb der geteilten
+`applyMutationResult`-Tail-Kette) -- ändert diese rückblickende T1-Zählung
+(8 Stellen, 6 Funktionen, zum T1-Abschlussstand) nicht rückwirkend,
+separat in bt-wpn9 dokumentiert.
