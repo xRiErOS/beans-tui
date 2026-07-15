@@ -28,6 +28,16 @@ type keyMap struct {
 	Left  keybind.Binding
 	Right keybind.Binding
 
+	// Detail-Focus toggle pair (PF-13, design-spec.md §15, E7 T6): tab keeps
+	// its existing bidirectional toggle (Tree<->Detail, backward-compat) --
+	// shift+tab is NEW, a deterministic one-way exit (Detail->Tree only,
+	// no-op when already in Tree). Together they satisfy the PO's "vollständig
+	// symmetrische Paare" requirement (Nachtrag 7) without removing tab's
+	// existing toggle behavior (Planner decision, lowest regression risk --
+	// see design-spec §15 PF-13 for the full Kollisionsanalyse).
+	FocusIn  keybind.Binding // tab — focus Tree<->Detail (toggle, backward-compat)
+	FocusOut keybind.Binding // shift+tab — deterministic focus back to Tree
+
 	// Activation / return / global.
 	Enter   keybind.Binding // enter — open/confirm
 	Back    keybind.Binding // esc — back
@@ -68,6 +78,9 @@ func newKeyMap() keyMap {
 		Down:  keybind.NewBinding(keybind.WithKeys("down", "k"), keybind.WithHelp("↓/k", "down")),
 		Left:  keybind.NewBinding(keybind.WithKeys("left", "j"), keybind.WithHelp("←/j", "back/out")),
 		Right: keybind.NewBinding(keybind.WithKeys("right", "l"), keybind.WithHelp("→/l", "in/expand")),
+
+		FocusIn:  keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "focus in/toggle")),
+		FocusOut: keybind.NewBinding(keybind.WithKeys("shift+tab"), keybind.WithHelp("shift+tab", "focus out")),
 
 		Enter:   keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "open/confirm")),
 		Back:    keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithHelp("esc", "back")),
@@ -111,7 +124,7 @@ type helpGroup struct {
 // a later task — the help view itself is out of scope here).
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
-		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section}},
+		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
 		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort}},
 	}

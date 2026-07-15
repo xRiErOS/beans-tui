@@ -61,6 +61,21 @@ func TestArrowsAlwaysAlias(t *testing.T) {
 	}
 }
 
+// TestFocusInFocusOutKeysBound guards PF-13 (design-spec.md §15, E7 T6):
+// FocusIn binds "tab" (backward-compat, existing bidirectional toggle),
+// FocusOut binds the NEW "shift+tab" (deterministic one-way exit) -- pins
+// keymap.go's own single source so a future re-binding accident surfaces
+// here instead of only as a runtime behavior regression.
+func TestFocusInFocusOutKeysBound(t *testing.T) {
+	k := newKeyMap()
+	if !bindHas(k.FocusIn, "tab") {
+		t.Errorf("FocusIn.Keys() = %v, want to contain %q", k.FocusIn.Keys(), "tab")
+	}
+	if !bindHas(k.FocusOut, "shift+tab") {
+		t.Errorf("FocusOut.Keys() = %v, want to contain %q", k.FocusOut.Keys(), "shift+tab")
+	}
+}
+
 // TestHelpGroupsCoverEveryBindingExactlyOnce is a drift guard (T7 follow-up
 // I02, bean bt-7jr8): reflects over every keybind.Binding field of keyMap and
 // asserts helpGroups() references each one exactly once -- a future added

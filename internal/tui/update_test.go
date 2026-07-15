@@ -744,6 +744,303 @@ func TestDetailFocusLeftAtSectionLevelExitsDetailFocus(t *testing.T) {
 	}
 }
 
+// --- E7 T6 (PF-2/PF-5/PF-13, bean bt-t1uy): shift+tab exit + enter-cascade. ---
+
+// TestKeyShiftTabExitsDetailFocus guards PF-13's new deterministic exit:
+// shift+tab flips m.detailFocus to false while leaving every other Detail-
+// Focus cursor field (secCursor/accOpen/detailLevel/fieldCursor) untouched --
+// unlike tab-IN (which resets all four), shift+tab is a pure focus-out, no
+// state reset (PO-Nachtrag 7: "vorhersagbare Paare", not a second reset path).
+func TestKeyShiftTabExitsDetailFocus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3')) // Relations
+	m = step(t, m, keyMsg(tea.KeyRight))
+	if m.secCursor != 2 || m.accOpen != 3 || m.detailLevel != 1 {
+		t.Fatalf("setup: secCursor=%d accOpen=%d detailLevel=%d, want 2/3/1", m.secCursor, m.accOpen, m.detailLevel)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	if m.detailFocus {
+		t.Fatal("shift+tab must exit detail focus")
+	}
+	if m.secCursor != 2 || m.accOpen != 3 || m.detailLevel != 1 {
+		t.Fatalf("shift+tab must not reset the Detail-Focus cursor state: secCursor=%d accOpen=%d detailLevel=%d, want 2/3/1 (unchanged)",
+			m.secCursor, m.accOpen, m.detailLevel)
+	}
+}
+
+// TestKeyShiftTabNoopWhenNotInDetailFocus guards the no-op case: shift+tab
+// while the Tree already has focus must not do anything surprising (no
+// panic, cursorID/view untouched).
+func TestKeyShiftTabNoopWhenNotInDetailFocus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	if m.detailFocus {
+		t.Fatal("setup: expected detail focus off")
+	}
+	before := m.cursorID
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	if m.detailFocus {
+		t.Fatal("shift+tab must stay a no-op when Tree already has focus")
+	}
+	if m.cursorID != before {
+		t.Fatalf("shift+tab moved cursorID from %q to %q while a no-op", before, m.cursorID)
+	}
+}
+
+// TestKeyTabStillTogglesBothDirections is a regression guard (PF-13): tab
+// keeps its existing bidirectional toggle behavior after the raw
+// `msg.String()=="tab"` comparison is replaced by keybind.Matches(msg,
+// keys.FocusIn) -- same key, same effect, now routed through the typed
+// binding.
+func TestKeyTabStillTogglesBothDirections(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("tab (1st press) did not enter detail focus")
+	}
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if m.detailFocus {
+		t.Fatal("tab (2nd press) did not exit detail focus")
+	}
+}
+
+// TestKeyDetailFocusEnterAtSectionLevelEntersFieldLevel guards PF-5's new
+// section-level enter alias: on Meta (which has fields, PF-4), enter behaves
+// exactly like right/l -- enters field level at fieldCursor 0.
+func TestKeyDetailFocusEnterAtSectionLevelEntersFieldLevel(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab)) // secCursor=0 (Meta), detailLevel=0
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	if m.detailLevel != 1 {
+		t.Fatal("enter on Meta (has fields) must enter field level")
+	}
+	if m.fieldCursor != 0 {
+		t.Fatalf("fieldCursor = %d, want 0", m.fieldCursor)
+	}
+	if !m.detailFocus {
+		t.Fatal("enter at section level must not exit detail focus")
+	}
+}
+
+// TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields guards the same
+// alias's guard condition: Body (section 2) carries no fields, so enter must
+// stay at section level (mirrors the existing right/l behavior for
+// fieldless sections).
+func TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('2')) // Body -- no fields
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	if m.detailLevel != 0 {
+		t.Fatal("enter on Body (no fields) must stay at section level")
+	}
+}
+
+// metaFieldCursorTo steps `down` n times from a just-entered Meta field level
+// (fieldCursor 0, title) to reach the field at index n -- mirrors metaFields'
+// fixed order (title/status/type/priority/created_at/updated_at).
+func metaFieldCursorTo(t *testing.T, m model, n int) model {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		m = step(t, m, keyMsg(tea.KeyDown))
+	}
+	if m.fieldCursor != n {
+		t.Fatalf("setup: fieldCursor = %d, want %d", m.fieldCursor, n)
+	}
+	return m
+}
+
+// TestKeyDetailFocusEnterOnStatusFieldOpensValueMenuSeededToStatus guards
+// PF-5's Meta field->Overlay dispatch: enter on the status field (index 1)
+// opens the combined Value-Menu seeded on the "status" group at the bean's
+// CURRENT status -- and, per design decision (epic-E7-plan.md Task 6 Step
+// 7), m.detailFocus stays true (the overlay lays on top, no exit).
+func TestKeyDetailFocusEnterOnStatusFieldOpensValueMenuSeededToStatus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // status=todo, type=task, priority=normal
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter)) // section -> field level, fieldCursor=0 (title)
+	m = metaFieldCursorTo(t, m, 1)       // status
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", m.overlay)
+	}
+	if m.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", m.mutTarget)
+	}
+	want := valueMenuCursorFor(m.menuItems, "status", "todo")
+	if m.menu.cursor != want {
+		t.Fatalf("menu.cursor = %d, want %d (status/todo)", m.menu.cursor, want)
+	}
+	if !m.detailFocus {
+		t.Fatal("detailFocus must stay true while the seeded overlay is open (design decision, Task 6 Step 7)")
+	}
+}
+
+// TestKeyDetailFocusEnterOnTypeFieldOpensValueMenuSeededToType is the "type"
+// group counterpart (field index 2).
+func TestKeyDetailFocusEnterOnTypeFieldOpensValueMenuSeededToType(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // type=task
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	m = metaFieldCursorTo(t, m, 2) // type
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", m.overlay)
+	}
+	want := valueMenuCursorFor(m.menuItems, "type", "task")
+	if m.menu.cursor != want {
+		t.Fatalf("menu.cursor = %d, want %d (type/task)", m.menu.cursor, want)
+	}
+}
+
+// TestKeyDetailFocusEnterOnPriorityFieldOpensValueMenuSeededToPriority is the
+// "priority" group counterpart (field index 3).
+func TestKeyDetailFocusEnterOnPriorityFieldOpensValueMenuSeededToPriority(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // priority=normal
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	m = metaFieldCursorTo(t, m, 3) // priority
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", m.overlay)
+	}
+	want := valueMenuCursorFor(m.menuItems, "priority", "normal")
+	if m.menu.cursor != want {
+		t.Fatalf("menu.cursor = %d, want %d (priority/normal)", m.menu.cursor, want)
+	}
+}
+
+// TestKeyDetailFocusEnterOnTitleFieldOpensEditTitleForm guards the "title"
+// kind dispatch: enter on the title field (index 0, the default fieldCursor
+// right after entering field level) opens the SAME Title-Edit-Form the `e`
+// key opens (openEditTitleForm).
+func TestKeyDetailFocusEnterOnTitleFieldOpensEditTitleForm(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter)) // field level, fieldCursor=0 (title)
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.form == nil {
+		t.Fatal("enter on the title field must open a form")
+	}
+	if m.formKind != "editTitle" {
+		t.Fatalf("formKind = %q, want editTitle", m.formKind)
+	}
+	if m.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", m.mutTarget)
+	}
+}
+
+// TestKeyDetailFocusEnterOnCreatedAtFieldNoop and ...UpdatedAtField... guard
+// the "readonly" kind: created_at/updated_at (indices 4/5) are cursor-
+// addressable (PF-4 mockup shows ▷ there too) but system-managed -- enter is
+// a no-op, no overlay/form opens, detailFocus/detailLevel/fieldCursor stay
+// exactly where they were.
+func TestKeyDetailFocusEnterOnCreatedAtFieldNoop(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	m = metaFieldCursorTo(t, m, 4) // created_at
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.overlay != overlayNone {
+		t.Fatalf("overlay = %v, want overlayNone (readonly field)", m.overlay)
+	}
+	if m.form != nil {
+		t.Fatal("enter on created_at must not open a form")
+	}
+	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 4 {
+		t.Fatalf("enter on created_at must be a pure no-op: detailFocus=%v detailLevel=%d fieldCursor=%d",
+			m.detailFocus, m.detailLevel, m.fieldCursor)
+	}
+}
+
+func TestKeyDetailFocusEnterOnUpdatedAtFieldNoop(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	m = metaFieldCursorTo(t, m, 5) // updated_at
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.overlay != overlayNone {
+		t.Fatalf("overlay = %v, want overlayNone (readonly field)", m.overlay)
+	}
+	if m.form != nil {
+		t.Fatal("enter on updated_at must not open a form")
+	}
+	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 5 {
+		t.Fatalf("enter on updated_at must be a pure no-op: detailFocus=%v detailLevel=%d fieldCursor=%d",
+			m.detailFocus, m.detailLevel, m.fieldCursor)
+	}
+}
+
+// TestKeyDetailFocusEnterOnRelationFieldStillJumps is a regression guard: the
+// Relations section's field kind ("", the default relationField zero value)
+// must still hit the unchanged jump branch after keyDetailFocus's enter-on-
+// field-level block becomes a kind-switch (already covered end-to-end by
+// TestDetailFocusEnterOnRelationJumpsCursorAndExitsToTree/
+// TestDetailFocusEnterOnUnresolvedRelationIsNoOp above -- this pins the same
+// invariant under the T6 test name the plan calls for).
+func TestKeyDetailFocusEnterOnRelationFieldStillJumps(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.width, m.height = 100, 30
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3')) // Relations
+	m = step(t, m, keyMsg(tea.KeyRight))
+	m = step(t, m, keyMsg(tea.KeyDown)) // fieldCursor 0 (ep-1) -> 1 (bean-b)
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.cursorID != "bean-b" {
+		t.Fatalf("cursorID after enter-jump = %q, want bean-b", m.cursorID)
+	}
+	if m.detailFocus {
+		t.Fatal("enter-jump must still exit detail focus (unchanged E2 behavior)")
+	}
+}
+
+// TestKeyDetailFocusDigitJumpUsesBeanSectionCount guards PF-2's robustness
+// fix: the digit-jump range check now compares against beanSectionCount (4)
+// instead of a hardcoded '4' literal -- digit 5 (out of range) must stay a
+// no-op, exactly as it already was before the refactor (regression pin, not
+// a behavior change).
+func TestKeyDetailFocusDigitJumpUsesBeanSectionCount(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, keyMsg(tea.KeyTab)) // secCursor=0, accOpen=1 (tab-in reset)
+
+	m = step(t, m, runeMsg('5'))
+
+	if m.secCursor != 0 || m.accOpen != 1 {
+		t.Fatalf("digit 5 (beyond beanSectionCount=%d) must stay a no-op: secCursor=%d accOpen=%d, want 0/1",
+			beanSectionCount, m.secCursor, m.accOpen)
+	}
+}
+
 // TestKeyDetailFocusOnOrphanRootExitsGracefully is a defensive nil-safety
 // test for focusedBean()'s orphan-guard: cursoring the synthetic
 // "(orphaned)" root itself (not a real bean) must never panic and must exit

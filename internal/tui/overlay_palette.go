@@ -212,7 +212,7 @@ func (m model) dispatchPaletteBleveIfDue() (tea.Model, tea.Cmd) {
 
 // dispatchPalette closes the palette and routes the selected item to the
 // matching handler -- action IDs mirror the existing single-key dispatch 1:1
-// (status -> m.openValueMenu(), etc.) so the Palette is a genuine second
+// (status -> m.openValueMenu("status"), etc.) so the Palette is a genuine second
 // entry point to the SAME handlers, never a parallel implementation (US-04's
 // "jede Aktion über die Command-Palette erreichbar").
 func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
@@ -244,7 +244,7 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 	case paletteKindAction:
 		switch it.actionID {
 		case "status":
-			return m.openValueMenu(), nil
+			return m.openValueMenu("status"), nil
 		case "tags":
 			return m.openTagPicker(), nil
 		case "parent":

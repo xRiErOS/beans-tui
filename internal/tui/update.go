@@ -536,7 +536,7 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			return true, m, nil // handled, silent no-op -- no node to act on
 		}
 		if keybind.Matches(msg, keys.Status) {
-			return true, m.openValueMenu(), nil
+			return true, m.openValueMenu("status"), nil
 		}
 		if keybind.Matches(msg, keys.TagAssign) {
 			return true, m.openTagPicker(), nil
@@ -831,7 +831,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "q":
 		return m.requestQuit()
-	case "tab": // Q01: view-local Tree<->Detail focus swap
+	}
+
+	// PF-13 (design-spec.md §15, E7 T6, bean bt-t1uy): FocusIn (tab) keeps its
+	// existing bidirectional toggle (Q01) -- FocusOut (shift+tab) is NEW, a
+	// deterministic one-way exit back to the Tree. Both replace the former raw
+	// `case "tab":` AT THE SAME dispatch point (still ahead of keyNodeAction/
+	// keyDetailFocus/keyBacklog/keyTree below) -- no new collision risk
+	// (Kollisionsanalyse, epic-E7-plan.md Task 6).
+	if keybind.Matches(msg, keys.FocusIn) {
 		m.detailFocus = !m.detailFocus
 		if m.detailFocus {
 			// enterDetailFocus-equivalent (devd view_detail_issue.go:236-243,
@@ -841,6 +849,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// section/field shape may differ) must never leak into this one.
 			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
 		}
+		return m, nil
+	}
+	if keybind.Matches(msg, keys.FocusOut) {
+		// Deterministic exit only -- no cursor-state reset (that only ever
+		// happens on tab-IN, above): a no-op when the Tree already has focus.
+		m.detailFocus = false
 		return m, nil
 	}
 
@@ -925,7 +939,7 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if s := msg.String(); len(s) == 1 && s[0] >= '1' && s[0] <= '4' {
+	if s := msg.String(); len(s) == 1 && s[0] >= '1' && s[0]-'0' <= byte(beanSectionCount) {
 		m.secCursor = int(s[0]-'0') - 1
 		m.accOpen = int(s[0] - '0')
 		m.detailLevel = 0
@@ -965,15 +979,47 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// PF-5 (design-spec.md §15, E7 T6, bean bt-t1uy): section-level enter is
+	// an ALIAS for right/l -- same guard (only sections that carry fields),
+	// entering field level at fieldCursor 0. tab remains the ONLY way to
+	// enter detail focus itself (D01 revidiert, PO-Nachtrag 3) -- this alias
+	// only fires once m.detailFocus is already true.
+	if keybind.Matches(msg, keys.Enter) && m.detailLevel == 0 {
+		if len(secs[m.secCursor].fields) > 0 {
+			m.detailLevel = 1
+			m.fieldCursor = 0
+		}
+		return m, nil
+	}
+
 	if keybind.Matches(msg, keys.Enter) && m.detailLevel == 1 {
 		f := secs[m.secCursor].fields[m.fieldCursor]
-		if f.beanID == "" {
-			return m, nil // unresolved reference -- nothing to jump to
+		// PF-5 field->Overlay dispatch (design-spec.md §15): status/type/
+		// priority open the combined Value-Menu seeded on that group; title
+		// opens the same Title-Edit-Form the `e` key opens; readonly
+		// (created_at/updated_at) is a no-op (system-managed); the default
+		// ("") is the Relations section's UNCHANGED E2 jump behavior.
+		switch f.kind {
+		case "status", "type", "priority":
+			// Design decision (Task 6 Step 7): m.detailFocus stays true here
+			// -- the overlay lays on top as its own capture state (a2), so
+			// closing it lands the user back on the SAME field (D02 "schnell/
+			// einfach"). Only the jump case below (a DIFFERENT bean) exits
+			// detail focus.
+			return m.openValueMenu(f.kind), nil
+		case "title":
+			return m.openEditTitleForm(b)
+		case "readonly":
+			return m, nil // created_at/updated_at -- system-managed, no-op
+		default: // "" -- Relations jump, unchanged E2 behavior
+			if f.beanID == "" {
+				return m, nil // unresolved reference -- nothing to jump to
+			}
+			m.expanded = expandAncestorsOf(m.idx, m.expanded, f.beanID) // I01: clone-based
+			m.cursorID = f.beanID
+			m.detailFocus = false
+			return m, nil
 		}
-		m.expanded = expandAncestorsOf(m.idx, m.expanded, f.beanID) // I01: clone-based
-		m.cursorID = f.beanID
-		m.detailFocus = false
-		return m, nil
 	}
 	return m, nil
 }

@@ -58,6 +58,33 @@ func TestOpenValueMenuBuildsGroupedItemsCursorOnCurrentStatus(t *testing.T) {
 	}
 }
 
+// TestOpenValueMenuSeedsOnGivenGroup guards T6's openValueMenu(group string)
+// signature change (design-spec.md §15 PF-5: the Meta field-level enter
+// cascade must be able to seed the combined menu on "type"/"priority", not
+// only the `s`-key's hardcoded "status"): calling m.openValueMenu("type")
+// against a bean with Type "bug" seeds the cursor onto the type/bug row, not
+// status.
+func TestOpenValueMenuSeedsOnGivenGroup(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "bug-1", Title: "A Bug", Status: "todo", Type: "bug", Priority: "normal"},
+	}
+	m := fixtureModel(t, beans)
+	m.cursorID = "bug-1"
+
+	m = m.openValueMenu("type")
+
+	if m.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", m.overlay)
+	}
+	want := valueMenuCursorFor(m.menuItems, "type", "bug")
+	if m.menu.cursor != want {
+		t.Fatalf("menu.cursor = %d, want %d (type/bug)", m.menu.cursor, want)
+	}
+	if got := m.menuItems[m.menu.cursor]; got.group != "type" || got.value != "bug" {
+		t.Fatalf("cursored item = %+v, want {type bug}", got)
+	}
+}
+
 // --- keyValueMenu: enter applies + closes ---
 
 // TestValueMenuEnterAppliesCursoredValueAndCloses guards the immediate-apply

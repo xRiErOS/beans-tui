@@ -87,12 +87,39 @@ func valueMenuIsCurrent(b *data.Bean, it valueMenuItem) bool {
 	return false
 }
 
-// openValueMenu opens the combined value menu on the focused bean (the
-// focusedBean()!=nil guard lives in the caller, keyNodeAction). mutTarget
-// captures WHICH bean the open overlay acts on; the ETag is deliberately NOT
-// captured here (design decision d, see beanETag in update.go) -- only the
-// ID, so a watch-reload between open and submit is automatically honored.
-func (m model) openValueMenu() model {
+// currentValueForGroup returns b's current value in the given group
+// (status/type/priority) -- the same empty-defaults-to-normal convention as
+// valueMenuIsCurrent. Used by openValueMenu(group) to seed the cursor on
+// whichever group the caller opens (T6, design-spec.md §15 PF-5: the Meta
+// field-level enter cascade seeds "type"/"priority" too, not only the
+// `s`-key's hardcoded "status"). Returns "" for an unrecognized group (falls
+// back to valueMenuCursorFor's own index-0 default, never panics).
+func currentValueForGroup(b *data.Bean, group string) string {
+	switch group {
+	case "status":
+		return b.Status
+	case "type":
+		return b.Type
+	case "priority":
+		p := b.Priority
+		if p == "" {
+			p = "normal"
+		}
+		return p
+	}
+	return ""
+}
+
+// openValueMenu opens the combined value menu on the focused bean, seeded on
+// group's current value (the focusedBean()!=nil guard lives in the caller,
+// keyNodeAction/keyDetailFocus/dispatchPalette). group is "status"/"type"/
+// "priority" (T6, design-spec.md §15 PF-5 -- was hardcoded to "status" before
+// the Meta field-level enter cascade needed to seed the other two groups as
+// well). mutTarget captures WHICH bean the open overlay acts on; the ETag is
+// deliberately NOT captured here (design decision d, see beanETag in
+// update.go) -- only the ID, so a watch-reload between open and submit is
+// automatically honored.
+func (m model) openValueMenu(group string) model {
 	b := m.focusedBean()
 	if b == nil {
 		return m
@@ -101,7 +128,7 @@ func (m model) openValueMenu() model {
 	m.menuItems = buildValueMenuItems()
 	m.menu = listState{}
 	m.menu.setLen(len(m.menuItems))
-	m.menu.cursor = valueMenuCursorFor(m.menuItems, "status", b.Status)
+	m.menu.cursor = valueMenuCursorFor(m.menuItems, group, currentValueForGroup(b, group))
 	m.overlay = overlayValueMenu
 	return m
 }
