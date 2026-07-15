@@ -540,12 +540,12 @@ Detail-Fokus bereits heute reine Section↔Field-Navigation inkl. Rückweg bis
 zum Tree (`left` bei `detailLevel==0` → `detailFocus=false`) — keine
 Code-Änderung an Pfeiltasten nötig, nur diese Verifikation als Nachweis.
 
-- [ ] **Step 1: Failing tests — `keymap_test.go`.**
+- [x] **Step 1: Failing tests — `keymap_test.go`.**
   `TestHelpGroupsCoverEveryBindingExactlyOnce` (bestehend) deckt die 2
   neuen Felder automatisch ab, sobald `helpGroups()` sie listet. NEU
   `TestFocusInFocusOutKeysBound`: `keys.FocusIn.Keys()` enthält `"tab"`,
   `keys.FocusOut.Keys()` enthält `"shift+tab"`.
-- [ ] **Step 2: Failing tests — `update_test.go`.**
+- [x] **Step 2: Failing tests — `update_test.go`.**
   - `TestKeyShiftTabExitsDetailFocus`: `m.detailFocus=true` → `shift+tab` →
     `m.detailFocus==false`, restlicher Cursor-Stand UNVERÄNDERT.
   - `TestKeyShiftTabNoopWhenNotInDetailFocus`.
@@ -564,25 +564,25 @@ Code-Änderung an Pfeiltasten nötig, nur diese Verifikation als Nachweis.
   - `TestKeyDetailFocusEnterOnRelationFieldStillJumps` (Regressionsschutz,
     unverändertes E2-Verhalten).
   - `TestKeyDetailFocusDigitJumpUsesBeanSectionCount`: Ziffer `5` → No-Op.
-- [ ] **Step 3: Failing tests — `box_menu_value_test.go`.**
+- [x] **Step 3: Failing tests — `box_menu_value_test.go`.**
   - `TestOpenValueMenuSeedsOnGivenGroup`: `m.openValueMenu("type")` mit
     Bean `Type: "bug"` → Cursor auf `type`/`bug`-Zeile.
   - Bestehenden `s`-Key-Test auf `m.openValueMenu("status")`-Call prüfen
     (Regressionsschutz, Verhalten bei `s`-Taste identisch).
-- [ ] **Step 4:** `command go test ./internal/tui/...` → FAIL.
-- [ ] **Step 5: Implement `keymap.go`.** `FocusIn keybind.Binding // tab —
+- [x] **Step 4:** `command go test ./internal/tui/...` → FAIL.
+- [x] **Step 5: Implement `keymap.go`.** `FocusIn keybind.Binding // tab —
   focus Tree<->Detail (toggle, backward-compat)`, `FocusOut
   keybind.Binding // shift+tab — deterministic focus back to Tree`.
   `newKeyMap()`: `FocusIn: NewBinding(WithKeys("tab"), WithHelp("tab","focus
   in/toggle"))`, `FocusOut: NewBinding(WithKeys("shift+tab"),
   WithHelp("shift+tab","focus out"))`. `helpGroups()`: beide in
   `"Navigation"`.
-- [ ] **Step 6: Implement `update.go` (`handleKey`).** `case "tab":`-Zweig
+- [x] **Step 6: Implement `update.go` (`handleKey`).** `case "tab":`-Zweig
   entfernen. Direkt danach: `if keybind.Matches(msg, keys.FocusIn) { ...
   bisherige Toggle-Logik unverändert ...; return m, nil }`, `if
   keybind.Matches(msg, keys.FocusOut) { m.detailFocus = false; return m,
   nil }`.
-- [ ] **Step 7: Implement `keyDetailFocus`.** Ziffern-Check: `s[0] >= '1'
+- [x] **Step 7: Implement `keyDetailFocus`.** Ziffern-Check: `s[0] >= '1'
   && s[0]-'0' <= byte(beanSectionCount)`. NEU vor dem bestehenden
   `detailLevel==1`-Enter-Block: `if keybind.Matches(msg, keys.Enter) &&
   m.detailLevel == 0 { if len(secs[m.secCursor].fields) > 0 { m.detailLevel
@@ -615,33 +615,33 @@ Code-Änderung an Pfeiltasten nötig, nur diese Verifikation als Nachweis.
   Nutzer wieder am selben Feld (PO-Leitprinzip D02 „schnell/einfach"). NUR
   beim `jump`-Fall bleibt `detailFocus=false` (Wechsel zu einem ANDEREN
   Bean).
-- [ ] **Step 8: Implement `box_menu_value.go`.** `openValueMenu(group
+- [x] **Step 8: Implement `box_menu_value.go`.** `openValueMenu(group
   string) model`. NEU `currentValueForGroup(b *data.Bean, group string)
   string` (status/type/priority-Switch, priority mit `""→"normal"`-Default).
   Cursor-Seeding: `valueMenuCursorFor(m.menuItems, group,
   currentValueForGroup(b, group))`.
-- [ ] **Step 9: Call-Site fixen.** `keyNodeAction`: `m.openValueMenu()` →
+- [x] **Step 9: Call-Site fixen.** `keyNodeAction`: `m.openValueMenu()` →
   `m.openValueMenu("status")`.
-- [ ] **Step 10:** `command go test ./internal/tui/...` → PASS.
-- [ ] **Step 11: Golden-Check (kein Golden-Update erwartet).** `command go
+- [x] **Step 10:** `command go test ./internal/tui/...` → PASS.
+- [x] **Step 11: Golden-Check (kein Golden-Update erwartet).** `command go
   test ./internal/tui/ -run
   "TestTreeGolden|TestBacklogGolden|TestChromeGolden"` OHNE `-update` →
   MUSS grün bleiben. Falls unerwartet FAIL: Ursache klären, nicht blind
   `-update`.
-- [ ] **Step 12:** `command go test ./... -short` grün, gofmt/vet leer.
-- [ ] **Step 13:** Commit `feat(tui): PF-2/PF-5/PF-13 Enter-Kaskade +
+- [x] **Step 12:** `command go test ./... -short` grün, gofmt/vet leer.
+- [x] **Step 13:** Commit `feat(tui): PF-2/PF-5/PF-13 Enter-Kaskade +
   Ziffern-Robustheit + Fokus-Symmetrie`.
 
 **Akzeptanz-Checkliste:**
-- [ ] `shift+tab` verlässt Detail-Fokus deterministisch, `tab` behält sein
+- [x] `shift+tab` verlässt Detail-Fokus deterministisch, `tab` behält sein
   bestehendes Toggle-Verhalten
-- [ ] `enter` auf Sektions-Ebene → Feld-Navigation; `enter` auf Feld →
+- [x] `enter` auf Sektions-Ebene → Feld-Navigation; `enter` auf Feld →
   passendes Edit-Overlay bzw. No-Op bzw. unverändertes Jump-Verhalten
-- [ ] `m.detailFocus` bleibt bei Overlay-Dispatch erhalten, nur bei Jump
+- [x] `m.detailFocus` bleibt bei Overlay-Dispatch erhalten, nur bei Jump
   auf `false`
-- [ ] Ziffern-Bereichs-Check nutzt `beanSectionCount`
-- [ ] Kollisionsanalyse vollständig, keine neue Tasten-Kollision
-- [ ] Kein Golden ändert sich (Step 11 grün ohne `-update`)
+- [x] Ziffern-Bereichs-Check nutzt `beanSectionCount`
+- [x] Kollisionsanalyse vollständig, keine neue Tasten-Kollision
+- [x] Kein Golden ändert sich (Step 11 grün ohne `-update`)
 
 ---
 
