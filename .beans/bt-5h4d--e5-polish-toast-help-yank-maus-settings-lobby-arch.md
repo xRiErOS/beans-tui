@@ -4,8 +4,10 @@ title: E5 Polish — Toast, Help, Yank, Maus, Settings, Lobby, Archiv
 status: in-progress
 type: epic
 priority: normal
+tags:
+    - to-review
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T09:04:43Z
+updated_at: 2026-07-15T13:47:17Z
 parent: bt-apmy
 blocked_by:
     - bt-tfqi
