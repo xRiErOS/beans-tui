@@ -514,6 +514,20 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyOverlay(msg)
 	}
 
+	// E4 Task 1 (bean bt-jpgn, design decision h): the Command-Center's own
+	// open state fully captures, same precedent as filterOpen/m.overlay
+	// above.
+	if m.paletteOpen {
+		return m.keyPalette(msg)
+	}
+	// E4 Task 1 (design decision h): ctrl+k/K opens the palette from ANY
+	// view -- checked here, ABOVE the (E4 Task 3) Review-Cockpit capture
+	// block that will land below this, so it also works from inside the
+	// Cockpit (design-spec §7: "von überall").
+	if keybind.Matches(msg, keys.Palette) {
+		return m.openPalette()
+	}
+
 	switch msg.String() {
 	case "ctrl+c": // immediate quit, no confirm (bean bt-7jr8: distinct from `q`)
 		return m, tea.Quit

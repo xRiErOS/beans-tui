@@ -584,6 +584,12 @@ func (m model) composeOverlays(out string, w, h int) string {
 	if m.form != nil {
 		out = placeOverlay(out, m.formChrome(), w, h)
 	}
+	// E4 Task 1 (bean bt-jpgn): the Command-Center -- a floating overlay
+	// like the ones above, painted BEFORE m.confirmQuit (quit stays the
+	// topmost layer, unchanged precedent).
+	if m.paletteOpen {
+		out = placeOverlay(out, m.paletteBox(), w, h)
+	}
 	if m.confirmQuit {
 		out = placeOverlay(out, m.quitBox(), w, h)
 	}
