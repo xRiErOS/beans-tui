@@ -352,9 +352,15 @@ unresolved relationFields, `beanID == ""`).
 **PF-5 — Enter-Kaskade INNERHALB des Detail-Fokus** (REVIDIERT durch PO-Nachtrag 3,
 2026-07-15 — D01 zurückgenommen: „KEIN enter als Detail-Fokus-Einstieg — der
 bestehende tab-Mechanismus gefällt dem PO und BLEIBT der Einstieg"). `tab` bleibt der
-EINZIGE Weg, den Detail-Fokus zu betreten — `keyTree`/`keyBacklog`s heutiges
-`enter`-Verhalten (Blatt-Knoten: No-Op: Knoten mit Kindern: expand/collapse-Toggle)
-bleibt **komplett unverändert**. Die Kaskade gilt ausschließlich INNERHALB eines
+EINZIGE Weg, den Detail-Fokus zu betreten — `keyTree`s heutiges `enter`-Verhalten
+(Blatt-Knoten: No-Op; Knoten mit Kindern: expand/collapse-Toggle) bleibt
+**komplett unverändert**. **ERRATUM/Präzisierung (T6-Review B01, bean `bt-t1uy`):**
+die frühere Fassung dieses Absatzes behauptete dasselbe pauschal auch für
+`keyBacklog` — FALSCH: `keyBacklog`s `enter` trug bis T6 noch das
+Vor-D01-Revisions-Verhalten (Detail-Fokus-Einstieg + Cursor-Reset). Korrektur:
+Backlog-`enter` ist ein handled **No-Op** (die flache Liste kennt kein
+Expand-Konzept — das Analogon zu `keyTree`s Blatt-No-Op); der Einstieg ist auch dort
+exklusiv `tab`. Die Kaskade gilt ausschließlich INNERHALB eines
 bereits aktiven Detail-Fokus (`m.detailFocus == true`, via `tab` erreicht):
 
 | Ebene | Taste | Wirkung |

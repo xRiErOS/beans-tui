@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-15T14:26:51Z
-updated_at: 2026-07-15T17:35:47Z
+updated_at: 2026-07-15T17:51:19Z
 parent: bt-heg9
 blocked_by:
     - bt-kyj5
@@ -216,3 +216,47 @@ Concrete actionable findings for T7, from this refactor:
    fully green baseline (goldens unchanged, confirmed above).
 
 Refs: bt-t1uy
+
+## Korrektur nach T6-Review (B01, 2026-07-15)
+
+Der Review fand ein High-Finding, das die obige Summary und die Notes for T7
+an einer Stelle FALSCH machte — Korrektur additiv, Original oben unverändert:
+
+**B01 (high, gefixt):** `keyBacklog`s `enter` (`view_browse_backlog.go`,
+ehem. Z. 295-302) setzte weiterhin direkt `m.detailFocus = true` +
+Cursor-Reset — das Vor-D01-Revisions-Verhalten. Mein T6-Smoke testete die
+Kaskade nur im Tree, nie den Backlog-Einstieg; die Aussage in Summary
+("keyTree/keyBacklog's own enter ... is untouched" als KORREKTHEITS-Claim)
+und in den Notes for T7 (Backlog-local: "`Enter` = expand/collapse toggle ...
+UNCHANGED" — der Backlog hatte nie ein Expand-Konzept, die Zeile übernahm
+die Tree-Beschreibung pauschal) war für den Backlog falsch.
+
+**Fix (Commit-Referenz unten):** Backlog-`enter` ist jetzt ein handled
+No-Op (Analogon zu `keyTree`s Blatt-No-Op; die flache Liste kennt kein
+Expand) — `tab` ist auch im Backlog der EINZIGE Detail-Fokus-Einstieg
+(PO-Nachtrag 3). RED→GREEN: neuer Regressionstest
+`TestBacklogEnterDoesNotEnterDetailFocus` (RED gegen den Alt-Code,
+Fehlermeldung "enter on a backlog row must NOT enter detail focus"),
+bestehender `TestBacklogAccordionReusesTask1SectionsViaFocusedBean` pinnte
+das falsche Verhalten und wurde auf tab-Einstieg umgeschrieben (der
+focusedBean()-Reuse-Kern des Tests bleibt erhalten). design-spec §15 PF-5
+um ERRATUM präzisiert ("komplett unverändert" galt nur für keyTree).
+
+**Korrigierte Notes-for-T7-Zeile (ersetzt die Backlog-local-Zeile oben):**
+Backlog-local (`m.detailFocus==false && m.view==viewBacklog`, `keyBacklog`):
+`Up`/`Down` = Listen-Nav, **`Enter` = handled No-Op (B01-Fix — KEIN
+Fokus-Einstieg, kein Expand-Konzept)**, `Sort`(S), `Search`(/), `Filter`(f),
+`FilterClear`(X), `Backlog`(b)/`Back`(esc) = zurück zum Tree.
+
+**I01 (Review, bewusst NICHT gefixt):** `esc` steppt in der Kaskade nicht
+Ebene für Ebene rückwärts (Feld→Sektion→raus) — offen gelassen für die
+T7/UX-Passe, keine Aktion in diesem Fix.
+
+**Smoke (Backlog, tmux 120x34, echte .beans/-Daten):** `b` → Backlog;
+`enter` auf Zeile = No-Op (kein ▌/▶, kein Fokuswechsel); `tab` → Fokus
+(▌ META, ▶ title); `enter`→`k`→`enter` → Value-Menu seeded status/todo
+(current) — Kaskade im Backlog identisch; `esc` → zurück aufs Feld;
+`shift+tab` → deterministischer Ausstieg; `q`→`enter` → sauberer Exit;
+`.beans/` unverändert (cancel-only, git status leer).
+
+Refs: bt-t1uy (T6-Review B01)

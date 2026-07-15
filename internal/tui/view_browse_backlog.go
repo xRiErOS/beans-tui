@@ -256,12 +256,15 @@ func (m model) viewBacklog() string {
 	return m.composeOverlays(out, w, h)
 }
 
-// keyBacklog drives the Backlog view: up/down move backlogList, enter opens
-// Detail focus on the selected bean, S cycles the sort mode, `/`/`f` open
-// the SAME shared search input/filter menu the Tree uses, `b`/esc return to
-// Tree. Detail focus (once entered) delegates to keyDetailFocus verbatim
-// (Task 2) -- focusedBean()'s viewBacklog case (update.go) is what makes
-// that reuse possible without a second Accordion-navigation implementation.
+// keyBacklog drives the Backlog view: up/down move backlogList, enter is a
+// handled no-op (T6-Review B01: TAB is the ONLY detail-focus entry,
+// PO-Nachtrag 3 / D01 revidiert -- the flat list has no expand concept, so
+// enter is the analog of keyTree's leaf no-op), S cycles the sort mode,
+// `/`/`f` open the SAME shared search input/filter menu the Tree uses,
+// `b`/esc return to Tree. Detail focus (once entered via tab) delegates to
+// keyDetailFocus verbatim (Task 2) -- focusedBean()'s viewBacklog case
+// (update.go) is what makes that reuse possible without a second
+// Accordion-navigation implementation.
 func (m model) keyBacklog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocus { // defensive: handleKey already routes detailFocus to keyDetailFocus first
 		return m.keyDetailFocus(msg)
@@ -293,13 +296,13 @@ func (m model) keyBacklog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = viewBrowseRepo
 		return m, nil
 	case keybind.Matches(msg, keys.Enter):
-		if m.focusedBean() != nil {
-			// enterDetailFocus-equivalent (Task 2's tab-handler, update.go):
-			// always re-enter the Accordion at Meta, section level, field
-			// cursor 0.
-			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
-			m.detailFocus = true
-		}
+		// T6-Review B01 (bean bt-t1uy, PO-Nachtrag 3 / D01 revidiert): enter
+		// is a handled no-op -- TAB is the ONLY detail-focus entry (handleKey,
+		// view-agnostic). Previously this case still carried the pre-revision
+		// entry behavior (detailFocus=true + cursor reset); the Backlog is a
+		// flat list with no expand concept, so its enter is the analog of
+		// keyTree's leaf no-op. Kept as an explicit handled case (not removed)
+		// so enter can't fall through to the nav-key switch below.
 		return m, nil
 	}
 

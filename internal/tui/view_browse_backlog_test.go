@@ -255,6 +255,10 @@ func TestBacklogMasterDetailFocusSwapMatchesD03BorderColors(t *testing.T) {
 // detail focus from the Backlog list drives m.focusedBean() to the SELECTED
 // backlog bean, not the (irrelevant, possibly stale) tree cursor -- proves
 // focusedBean()'s Task-2 dispatcher is genuinely reused, not reimplemented.
+// T6-Review B01 (bean bt-t1uy, PO-Nachtrag 3 / D01 revidiert): entry is via
+// TAB now (the ONLY detail-focus entry, view-agnostic in handleKey) -- this
+// test previously pinned the pre-revision enter-entry behavior; enter's own
+// no-op is pinned separately by TestBacklogEnterDoesNotEnterDetailFocus.
 func TestBacklogAccordionReusesTask1SectionsViaFocusedBean(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	m.view = viewBacklog
@@ -267,9 +271,40 @@ func TestBacklogAccordionReusesTask1SectionsViaFocusedBean(t *testing.T) {
 		t.Fatalf("focusedBean() = %v, want %s (the Backlog list's selected bean)", got, want.ID)
 	}
 
-	m = step(t, m, keyMsg(tea.KeyEnter))
+	m = step(t, m, keyMsg(tea.KeyTab))
 	if !m.detailFocus {
-		t.Fatal("enter on a focusable backlog row must enter detail focus")
+		t.Fatal("tab on a focusable backlog row must enter detail focus")
+	}
+	if got := m.focusedBean(); got == nil || got.ID != want.ID {
+		t.Fatalf("focusedBean() inside detail focus = %v, want %s (still the Backlog selection)", got, want.ID)
+	}
+}
+
+// TestBacklogEnterDoesNotEnterDetailFocus is the T6-Review B01 regression
+// guard (bean bt-t1uy, PO-Nachtrag 3 / D01 revidiert: "KEIN enter als
+// Detail-Fokus-Einstieg -- der bestehende tab-Mechanismus ... BLEIBT der
+// Einstieg"): enter on a Backlog row is a handled no-op (the Backlog is a
+// flat list, no expand concept -- the analog of keyTree's leaf no-op), it
+// must NOT flip detailFocus or reset the accordion cursor state. Before this
+// fix keyBacklog's enter case still carried the pre-revision entry behavior
+// (detailFocus=true + full cursor reset) -- Tree and Backlog had drifted
+// apart on the ONE rule PO-Nachtrag 3 made view-agnostic.
+func TestBacklogEnterDoesNotEnterDetailFocus(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	m.view = viewBacklog
+	m.backlogList.setLen(len(m.backlogVisible()))
+	m.backlogList.move(1) // a real, focusable row (bk-tsk2) -- the strongest case
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.detailFocus {
+		t.Fatal("enter on a backlog row must NOT enter detail focus (tab is the only entry, PO-Nachtrag 3)")
+	}
+	if m.view != viewBacklog {
+		t.Fatalf("enter must stay in the Backlog view, view = %v", m.view)
+	}
+	if m.backlogList.cursor != 1 {
+		t.Fatalf("enter must not move the backlog cursor, cursor = %d, want 1", m.backlogList.cursor)
 	}
 }
 

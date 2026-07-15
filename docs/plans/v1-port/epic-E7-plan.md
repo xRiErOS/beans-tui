@@ -469,7 +469,7 @@ func detailHeaderBlock(b *data.Bean, w int) string                             /
 Queue-Pane existiert seit T1 nicht mehr, ursprünglich der vierte
 Kandidat).
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `render_shared_test.go`: bestehende `renderPane`-Tests auf die neue
     Zeilenzahl umstellen (keine Titel+Trennlinie mehr). NEU
     `TestRenderPaneNoTitleLine`.
@@ -479,26 +479,26 @@ Kandidat).
     `TestBacklogClickRow*` (per `grep -n "^func Test.*ClickRow"
     internal/tui/*_test.go` ermitteln) — Klick-Y-Koordinaten um 2 nach
     oben verschieben.
-- [ ] **Step 2:** `command go test ./internal/tui/...` → FAIL.
-- [ ] **Step 3: Implement `render_shared.go`.** `renderPane`: die beiden
+- [x] **Step 2:** `command go test ./internal/tui/...` → FAIL.
+- [x] **Step 3: Implement `render_shared.go`.** `renderPane`: die beiden
   Titel/Trennlinien-`append`-Zeilen entfernen. `pane.title`-Feld entfernen
   (Compiler erzwingt Call-Site-Bereinigung).
-- [ ] **Step 4: Call-Sites bereinigen.** 2 Stellen `view_browse_repo.go`
+- [x] **Step 4: Call-Sites bereinigen.** 2 Stellen `view_browse_repo.go`
   (Tree, Detail), 1 Stelle `view_browse_backlog.go`.
-- [ ] **Step 5: Implement `mouse.go` (`clickPaneGeometry`).** `originY`-
+- [x] **Step 5: Implement `mouse.go` (`clickPaneGeometry`).** `originY`-
   Formel um die beiden `+1`-Terme kürzen. Doc-Kommentar korrigieren.
-- [ ] **Step 6:** `command go test ./internal/tui/...` → PASS.
-- [ ] **Step 7: Golden-Regen** (3 Goldens, `chrome.golden` NICHT betroffen
+- [x] **Step 6:** `command go test ./internal/tui/...` → PASS.
+- [x] **Step 7: Golden-Regen** (3 Goldens, `chrome.golden` NICHT betroffen
   — Chrome() nutzt `renderPane` nicht). Erwartete Änderung: Tree/Backlog-
   Panes um 2 Zeilen gewachsen, erste sichtbare Zeile ist Such-/Filterkopf.
-- [ ] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
-- [ ] **Step 9:** Commit `refactor(tui): PF-10 redundante Pane-Titel
+- [x] **Step 8:** `command go test ./... -short` grün, gofmt/vet leer.
+- [x] **Step 9:** Commit `refactor(tui): PF-10 redundante Pane-Titel
   entfernen`.
 
 **Akzeptanz-Checkliste:**
-- [ ] Kein Pane zeigt mehr Titel + Trennlinie (Tree, Backlog, Detail)
-- [ ] `clickPaneGeometry`/`*ClickRow`-Tests grün mit neuen Koordinaten
-- [ ] Goldens regeneriert + Vorher/Nachher je Datei
+- [x] Kein Pane zeigt mehr Titel + Trennlinie (Tree, Backlog, Detail)
+- [x] `clickPaneGeometry`/`*ClickRow`-Tests grün mit neuen Koordinaten
+- [x] Goldens regeneriert + Vorher/Nachher je Datei
 
 ---
 
