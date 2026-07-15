@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:14:59Z
+updated_at: 2026-07-15T14:19:49Z
 parent: bt-apmy
 ---
 
@@ -96,3 +96,8 @@ Konsistenz-Prüfauftrag an Planner: gleiche Logik für Review-Cockpit ('Review-Q
 **PF-11 — Keine Keybinding-Dopplung.** Header oben rechts zeigt die GLOBALEN Bindings: 'ctrl+r:Reload · ?:help · q:quit · esc:back · enter:open/confirm'. Footer zeigt AUSSCHLIESSLICH die view-lokalen Bindings der aktiven View — globale dort nicht duplizieren. (Nebeneffekt: entschärft VQA-I01 Footer-Umbruch, da Footer kürzer wird.)
 
 **Q04 (offen, PO):** 'Leertaste für das Auswählen (fehlt noch m.E.)' — Semantik unklar: (a) Multi-Select von Beans im Tree/Backlog (Markieren für Bulk-Aktionen — wäre NEUES Feature), oder (b) die bestehende space/x-Toggle-Auswahl in Filter-Menü/Pickern (existiert — dann nur Footer-Sichtbarkeit herstellen)? Nicht raten — bis PO-Antwort nur PF-11 umsetzen.
+
+
+## PO-Antwort Q04 (2026-07-15, GELÖST)
+
+Q04 = Variante (b): Gemeint ist die BESTEHENDE Space-Auswahl in Forms/Overlays (aufgefallen beim Facetten-Filter: space/x toggle). KEIN Multi-Select-Feature. Anforderung → Teil von PF-11: Wenn ein Form/Overlay aktiv ist, zeigt die lokale Keybinding-Zeile (Footer) dessen lokale Bindings — inkl. 'space: select/toggle'. Kontextsensitiver Footer: View-lokal im Normalzustand, Overlay-/Form-lokal wenn eines offen ist.
