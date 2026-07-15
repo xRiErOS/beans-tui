@@ -12,6 +12,7 @@ package tui
 // deterministic <500ms window instead of a real sleep.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -566,6 +567,118 @@ func TestMouseDetailClickDoubleClickOnBodySectionOpensEditor(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("double click on BODY's header must return a Cmd (the ExecProcess-wrapped editor suspend)")
+	}
+}
+
+// TestDetailClickKeyDisjointNumberSpaces pins the extracted detailClickKey
+// helper directly (I01, Fix-Runde 1): every possible Detail-Pane key --
+// section headers (fieldIdx -1) and the 7 Meta fields -- must sit at or
+// above detailClickKeyBase (disjoint from any realistic Tree/Backlog row
+// index) and all 4+7 keys must be pairwise distinct.
+func TestDetailClickKeyDisjointNumberSpaces(t *testing.T) {
+	seen := map[int]string{}
+	check := func(name string, key int) {
+		t.Helper()
+		if key < detailClickKeyBase {
+			t.Fatalf("%s: detailClickKey = %d, want >= %d (must never alias a Tree/Backlog row index, B01)", name, key, detailClickKeyBase)
+		}
+		if prev, dup := seen[key]; dup {
+			t.Fatalf("%s: detailClickKey = %d collides with %s", name, key, prev)
+		}
+		seen[key] = name
+	}
+	for sec := 0; sec < beanSectionCount; sec++ {
+		check(fmt.Sprintf("section %d header", sec), detailClickKey(sec, -1))
+	}
+	for fi := 0; fi < 7; fi++ { // metaFields' fixed 7 entries
+		check(fmt.Sprintf("meta field %d", fi), detailClickKey(metaSectionIdx, fi))
+	}
+}
+
+// TestMouseDetailClickTreeClickIndexDoesNotAliasFieldClickKey guards B01
+// (Fix-Runde 1, bean bt-duz7): the Detail-Pane clickKey lives in the SAME
+// shared m.lastClickIdx int the Tree/Backlog row indices use -- the key must
+// therefore occupy a GUARANTEED disjoint number space (detailClickKeyBase
+// offset, mouse.go). Reviewer-reproduced bug: a Tree click on row index 1
+// ("Epic One" here) followed <500ms by a FIRST click on the Detail pane's
+// "title:" field (whose UNOFFSET key was 0*10+0+1 == 1) aliased into a
+// false double click and opened the Title-Edit-Form without any prior
+// selection. A first click on a not-yet-selected field must ONLY select.
+func TestMouseDetailClickTreeClickIndexDoesNotAliasFieldClickKey(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true // nodes: ms-1(0) ep-1(1) tk-1(2) tk-2(3)
+	m.cursorID = "ms-1"
+	fixed := time.Unix(5000, 0)
+	m.clock = func() time.Time { return fixed }
+
+	// 1st click: Tree row "Epic One" (visibleNodes index 1 == the title:
+	// field's OLD, unoffset clickKey).
+	msg := treeClickAt(t, m, "Epic One")
+	tm, _ := m.handleMouse(msg)
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if m2.cursorID != "ep-1" || m2.lastClickIdx != 1 {
+		t.Fatalf("setup: cursorID=%q lastClickIdx=%d, want ep-1/1 (tree row index)", m2.cursorID, m2.lastClickIdx)
+	}
+
+	// 2nd click, same fixed time (<500ms): FIRST click on the Detail pane's
+	// title: row -- must ONLY select the field, never open a form/overlay.
+	msg2 := detailClickAt(t, m2, "title:")
+	tm2, _ := m2.handleMouse(msg2)
+	m3, ok := tm2.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm2)
+	}
+	if m3.form != nil {
+		t.Fatal("a Tree-row click must never alias a Detail-field clickKey: first click on title: opened the Title-Edit-Form (B01)")
+	}
+	if m3.overlay != overlayNone {
+		t.Fatalf("overlay = %v, want overlayNone (first field click selects only)", m3.overlay)
+	}
+	if !m3.detailFocus || m3.detailLevel != 1 || m3.fieldCursor != 0 {
+		t.Fatalf("detailFocus=%v detailLevel=%d fieldCursor=%d, want true/1/0 (title selected)", m3.detailFocus, m3.detailLevel, m3.fieldCursor)
+	}
+}
+
+// TestMouseDetailClickSecondClickOnSelectedFieldOpensOverlayOutsideWindow
+// guards B02 (Fix-Runde 1, bean bt-duz7): the PO wording names TWO triggers
+// -- "Doppelklick (oder Zweitklick auf ein bereits selektiertes Feld)". The
+// second trigger must fire INDEPENDENT of the 500ms double-click window
+// (the Enter-Kaskade it mirrors is windowless): select field X, wait
+// >doubleClickInterval (controlled clock, no real sleep), click X again ->
+// its overlay MUST open.
+func TestMouseDetailClickSecondClickOnSelectedFieldOpensOverlayOutsideWindow(t *testing.T) {
+	m := detailFocusModel(t)
+	current := time.Unix(6000, 0)
+	m.clock = func() time.Time { return current }
+
+	msg := detailClickAt(t, m, "tags:")
+	tm, _ := m.handleMouse(msg) // 1st click: selects tags (fieldCursor=4)
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if m2.overlay != overlayNone || m2.fieldCursor != 4 || m2.detailLevel != 1 {
+		t.Fatalf("setup: first click must select tags only (overlay=%v fieldCursor=%d detailLevel=%d)", m2.overlay, m2.fieldCursor, m2.detailLevel)
+	}
+
+	current = current.Add(800 * time.Millisecond) // OUTSIDE doubleClickInterval (500ms)
+
+	msg2 := detailClickAt(t, m2, "tags:")
+	tm2, _ := m2.handleMouse(msg2)
+	m3, ok := tm2.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm2)
+	}
+	if m3.overlay != overlayTagPicker {
+		t.Fatalf("overlay = %v, want overlayTagPicker -- a second click on an ALREADY-SELECTED field must open its overlay regardless of the double-click window (B02, PO wording)", m3.overlay)
+	}
+	if m3.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", m3.mutTarget)
 	}
 }
 

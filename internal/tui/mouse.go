@@ -359,30 +359,51 @@ func detailClickRow(m model, b *data.Bean, msg tea.MouseMsg) (secIdx, fieldIdx i
 	return 0, 0, false // past the last rendered section (renderPane's own line cap already excluded above, defensive)
 }
 
+// detailClickKeyBase offsets every Detail-Pane clickKey into a number space
+// GUARANTEED disjoint from any realistic Tree/Backlog row index (B01,
+// Fix-Runde 1, bean bt-duz7): all three click dispatchers share the ONE
+// m.lastClickIdx int (Architektur-Vorgabe #3, "KEIN zweites Zeitfenster-
+// Paar"), and without the offset a Tree click on row index N followed
+// <500ms by a FIRST click on the Detail field whose unoffset key was also N
+// (e.g. Tree row 1 -> title: field, 0*10+0+1 == 1) aliased into a false
+// double click that opened the field's overlay/form without any prior
+// selection (reviewer-reproduced).
+const detailClickKeyBase = 1000
+
+// detailClickKey folds a detailClickRow hit (secIdx, fieldIdx) into the one
+// shared m.lastClickIdx int (I01, Fix-Runde 1: named+testable instead of an
+// inline expression): section-header hits (fieldIdx == -1) land on
+// base+0/10/20/30, Meta field hits on base+1..base+7 -- disjoint from each
+// other AND (via detailClickKeyBase) from every Tree/Backlog row index.
+func detailClickKey(secIdx, fieldIdx int) int {
+	return detailClickKeyBase + secIdx*10 + fieldIdx + 1
+}
+
 // mouseDetailClick dispatches a Detail-Pane left-click (B07, design-spec.md
 // §15 PF-16, bean bt-duz7): resolves the clicked row via detailClickRow
 // (pure geometry, no side effect, above) then applies the SAME
 // lastClickIdx/lastClickAt Doppelklick machinery mouseTreeClick already uses
 // (Architektur-Vorgabe #3, "gleiche Felder auf model wiederverwenden, KEIN
-// zweites Zeitfenster-Paar"). clickKey folds (secIdx, fieldIdx) into ONE int
-// so a Meta field click and a Section-header click can never alias each
-// other (secIdx*10+fieldIdx+1: section hits land on the multiples of 10 --
-// 0/10/20/30, Meta field hits on 1..7); a genuine collision against a
-// Tree/Backlog row index sharing the SAME lastClickIdx int in the SAME
-// 500ms window remains a theoretical, explicitly-accepted edge case (the
-// bean's own "reuse, no new pair" directive), not a new bug introduced here.
+// zweites Zeitfenster-Paar") -- keys are folded via detailClickKey (above)
+// so they can alias neither each other nor a Tree/Backlog row index (B01).
 //
-// A single click ALWAYS selects (Fall a/b: activates+expands the section,
-// additionally enters field level for a Meta field) and NEVER opens an
-// overlay. A double click (or an immediately-repeated click on an
-// already-selected target, same window -- the two are the SAME event,
-// mirrors mouseTreeClick's own isDouble, not a second mechanism) on a Meta
-// field additionally calls activateDetailField (Fall c, identical to the
-// Enter-Kaskade, update.go). Per bt-y2iw's "Notes for bt-duz7" (BODY's
-// enter-cascade equivalent has no field to double-click), a double click on
-// the BODY section's OWN header instead opens $EDITOR via the SAME
-// openBodyEditor helper keyDetailFocus's enter-on-BODY branch uses
-// (update.go) -- never a duplicated editorTarget/editorETag assignment.
+// A single click on a NOT-yet-selected target ALWAYS selects (Fall a/b:
+// activates+expands the section, additionally enters field level for a Meta
+// field) and NEVER opens an overlay. Fall c has TWO triggers (PO wording
+// verbatim, "Doppelklick (oder Zweitklick auf ein bereits selektiertes
+// Feld)" -- B02, Fix-Runde 1): (1) a double click within
+// doubleClickInterval (mirrors mouseTreeClick's isDouble), and (2) a second
+// click on an ALREADY-selected field, which fires INDEPENDENT of the time
+// window -- the Enter-Kaskade it mirrors (activateDetailField, update.go)
+// is windowless, so "click the selected field again" must be too.
+// "Selected" is the same state the ▶ marker renders from (metaSectionBody,
+// view_detail_bean.go): m.detailFocus && detailLevel==1 && the cursor pair
+// matches -- a stale fieldCursor without detailFocus does NOT count. Per
+// bt-y2iw's "Notes for bt-duz7" (BODY's enter-cascade equivalent has no
+// field to double-click), a double click on the BODY section's OWN header
+// instead opens $EDITOR via the SAME openBodyEditor helper keyDetailFocus's
+// enter-on-BODY branch uses (update.go) -- never a duplicated
+// editorTarget/editorETag assignment.
 func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	b := m.focusedBean()
 	if b == nil {
@@ -393,9 +414,14 @@ func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	clickKey := secIdx*10 + fieldIdx + 1
+	clickKey := detailClickKey(secIdx, fieldIdx)
 	now := m.now()
 	isDouble := clickKey == m.lastClickIdx && now.Sub(m.lastClickAt) < doubleClickInterval
+	// B02 (Fix-Runde 1): capture BEFORE the state update below whether the
+	// clicked field was ALREADY the selected one -- the PO's second Fall-c
+	// trigger, windowless (see doc comment).
+	wasSelected := fieldIdx >= 0 && m.detailFocus && m.detailLevel == 1 &&
+		m.secCursor == secIdx && m.fieldCursor == fieldIdx
 	m.lastClickIdx = clickKey
 	m.lastClickAt = now
 
@@ -418,7 +444,7 @@ func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	m.detailLevel = 1
 	m.fieldCursor = fieldIdx
 
-	if isDouble {
+	if isDouble || wasSelected {
 		fields := metaFields(b)
 		if fieldIdx < len(fields) {
 			return m.activateDetailField(b, fields[fieldIdx])
