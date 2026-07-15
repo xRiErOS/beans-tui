@@ -28,6 +28,7 @@ package tui
 // (mouse_test.go) is the regression guard for this exact ordering.
 
 import (
+	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -193,7 +194,19 @@ func (m model) mouseTreeClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	nodes := m.visibleNodes()
 	idx, ok := treeClickRow(m, nodes, msg)
 	if !ok {
-		return m, nil
+		// B07 (design-spec.md §15 PF-16, bean bt-duz7): treeClickRow
+		// returns ok=false BOTH for a click outside the Tree pane's own
+		// column (right Detail pane) AND for one inside it that misses
+		// every rendered row (above the search line, or past the last
+		// node) -- delegating unconditionally to mouseDetailClick is safe
+		// for the latter case too: detailClickRow (mouse.go, below)
+		// independently re-checks msg.X against the Detail pane's OWN
+		// column span and rejects (ok=false, no-op) a click that is still
+		// inside the Tree's column, so no cross-pane leakage occurs.
+		// Implementer decision (bean bt-duz7 Architektur-Vorgabe #4,
+		// "saubersten Diff-Groesse"): the smallest possible diff over a
+		// second, independently-computed X-bounds pre-check here.
+		return m.mouseDetailClick(msg)
 	}
 	n := nodes[idx]
 	m.cursorID = n.id
@@ -225,9 +238,191 @@ func (m model) mouseBacklogClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	vis := m.backlogVisible()
 	idx, ok := backlogClickRow(m, vis, msg)
 	if !ok {
-		return m, nil
+		// B07: mirrors mouseTreeClick's own delegation above (same
+		// rationale -- backlogClickRow's ok=false covers BOTH "wrong pane"
+		// and "in-pane but no row hit", detailClickRow independently
+		// re-validates the X bounds either way).
+		return m.mouseDetailClick(msg)
 	}
 	m.backlogList.setLen(len(vis))
 	m.backlogList.cursor = idx
+	return m, nil
+}
+
+// detailClickRow maps a Detail-Pane click to either a Section-Header hit
+// (fieldIdx == -1) or a Meta field-row hit (secIdx == metaSectionIdx,
+// fieldIdx >= 0) -- B07 (design-spec.md §15 PF-16, bean bt-duz7), ANALOG
+// treeClickRow/backlogClickRow above: reconstructs the pane's geometry via
+// the SAME clickPaneGeometry + browseRepoChrome/backlogChrome helpers those
+// two use (Golden-Rule-Drift-Schutz) -- picks the caller's OWN chrome via
+// m.view, since the Detail pane renders identically from BOTH viewBrowseRepo
+// and viewBacklog (renderBeanAccordionPane, view_browse_repo.go), just
+// alongside a different left pane/footer.
+//
+// The row->section/field walk below is GROUNDED against the real render
+// pipeline, not a second, independently-maintained height formula: it reuses
+// the EXACT SAME state (m.detailFocus/m.secCursor/m.accOpen/m.fieldCursor/
+// m.detailLevel) and the EXACT SAME beanSections() call renderAccordionPane
+// itself makes (view_browse_repo.go), then walks secs with the IDENTICAL
+// isOpen/activeSec/fieldStrip-shown conditionals renderAccordion (accordion.
+// go) uses to build its own line-by-line output. Section-body line counts
+// are measured via lipgloss.Height on the SAME s.body string renderAccordion
+// hands to boxStyle.Render -- PaddingLeft alone never changes a line count,
+// so this is byte-equivalent without reconstructing boxStyle's own
+// Width/Padding here. A change to either function's algorithm is caught by
+// the render-grounded tests in mouse_test.go, which locate click coordinates
+// by searching the REAL m.View() output (mirrors treeClickAt/
+// leftPaneClickAt's own pattern) -- never by hand-deriving a row number (the
+// "selbst-referenzielle Geometrie-Test" trap E7 already hit once, this
+// task's own Architektur-Vorgabe #2 warns against repeating it).
+//
+// v1 simplification (bean bt-duz7 Architektur-Vorgabe #2, no PO-Wortlaut
+// requires more): ONLY Meta (metaSectionIdx) has a fixed, direct
+// Zeile->Feldindex mapping (Zeile 0 = title ... Zeile 6 = updated_at, per
+// metaFields' fixed order) -- a click landing inside an OPEN Body/Relations/
+// History section's body (or Relations' own fieldStrip row) resolves to
+// that section's OWN header hit (fieldIdx == -1), never a field index.
+func detailClickRow(m model, b *data.Bean, msg tea.MouseMsg) (secIdx, fieldIdx int, ok bool) {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+
+	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+
+	if msg.X < originX+lw || msg.X >= originX+lw+rw {
+		return 0, 0, false // left pane, or off-screen -- no Detail target
+	}
+	clickRow := msg.Y - originY
+	if clickRow < 0 || clickRow >= bodyH {
+		return 0, 0, false // above the pane, or past renderPane's own Golden-Rule-#1 line cap
+	}
+	if b == nil {
+		return 0, 0, false // "(no selection)" placeholder -- nothing to hit
+	}
+
+	// detailHeaderBlock (view_detail_bean.go) ALWAYS renders 5 fixed rows
+	// (ID/Title/blank/type-status-prio/blank) ahead of the Accordion --
+	// bt-duz7's own PO-Wortlaut ("Kopfblock-Offset 5 Zeilen beachten!").
+	const headerBlockLines = 5
+	if clickRow < headerBlockLines {
+		return 0, 0, false // Kopfblock -- never a Section-/Feld-Treffer
+	}
+	accordionRow := clickRow - headerBlockLines
+
+	bodyW := rw - 4
+	if bodyW < 1 {
+		bodyW = 1
+	}
+	secs := beanSections(m.idx, b, bodyW, m.detailFocus, m.secCursor, m.fieldCursor, m.detailLevel)
+
+	row := 0
+	for i, s := range secs {
+		n := i + 1
+		isOpen := n == m.accOpen || n == 1 // PF-1: Meta always open, mirrors renderAccordion
+		if accordionRow == row {
+			return i, -1, true // this section's own header row
+		}
+		row++
+		if !isOpen {
+			continue
+		}
+		activeSec := m.detailFocus && m.secCursor == i
+		if activeSec && i != 0 && len(s.fields) > 0 {
+			if accordionRow == row {
+				return i, -1, true // fieldStrip row -- v1: section-level hit
+			}
+			row++
+		}
+		bodyLines := lipgloss.Height(s.body)
+		if accordionRow >= row && accordionRow < row+bodyLines {
+			if i == metaSectionIdx {
+				if fi := accordionRow - row; fi >= 0 && fi < len(s.fields) {
+					return i, fi, true
+				}
+			}
+			return i, -1, true // Body/Relations/History body, or an out-of-range Meta row -- section-level hit
+		}
+		row += bodyLines
+	}
+	return 0, 0, false // past the last rendered section (renderPane's own line cap already excluded above, defensive)
+}
+
+// mouseDetailClick dispatches a Detail-Pane left-click (B07, design-spec.md
+// §15 PF-16, bean bt-duz7): resolves the clicked row via detailClickRow
+// (pure geometry, no side effect, above) then applies the SAME
+// lastClickIdx/lastClickAt Doppelklick machinery mouseTreeClick already uses
+// (Architektur-Vorgabe #3, "gleiche Felder auf model wiederverwenden, KEIN
+// zweites Zeitfenster-Paar"). clickKey folds (secIdx, fieldIdx) into ONE int
+// so a Meta field click and a Section-header click can never alias each
+// other (secIdx*10+fieldIdx+1: section hits land on the multiples of 10 --
+// 0/10/20/30, Meta field hits on 1..7); a genuine collision against a
+// Tree/Backlog row index sharing the SAME lastClickIdx int in the SAME
+// 500ms window remains a theoretical, explicitly-accepted edge case (the
+// bean's own "reuse, no new pair" directive), not a new bug introduced here.
+//
+// A single click ALWAYS selects (Fall a/b: activates+expands the section,
+// additionally enters field level for a Meta field) and NEVER opens an
+// overlay. A double click (or an immediately-repeated click on an
+// already-selected target, same window -- the two are the SAME event,
+// mirrors mouseTreeClick's own isDouble, not a second mechanism) on a Meta
+// field additionally calls activateDetailField (Fall c, identical to the
+// Enter-Kaskade, update.go). Per bt-y2iw's "Notes for bt-duz7" (BODY's
+// enter-cascade equivalent has no field to double-click), a double click on
+// the BODY section's OWN header instead opens $EDITOR via the SAME
+// openBodyEditor helper keyDetailFocus's enter-on-BODY branch uses
+// (update.go) -- never a duplicated editorTarget/editorETag assignment.
+func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	b := m.focusedBean()
+	if b == nil {
+		return m, nil
+	}
+	secIdx, fieldIdx, ok := detailClickRow(m, b, msg)
+	if !ok {
+		return m, nil
+	}
+
+	clickKey := secIdx*10 + fieldIdx + 1
+	now := m.now()
+	isDouble := clickKey == m.lastClickIdx && now.Sub(m.lastClickAt) < doubleClickInterval
+	m.lastClickIdx = clickKey
+	m.lastClickAt = now
+
+	m.detailFocus = true
+	m.secCursor = secIdx
+	m.accOpen = secIdx + 1
+
+	if fieldIdx < 0 {
+		m.detailLevel = 0
+		m.fieldCursor = 0
+		if isDouble && secIdx == bodySectionIdx {
+			return m.openBodyEditor(b)
+		}
+		return m, nil
+	}
+
+	// detailClickRow only ever returns fieldIdx >= 0 nested under
+	// i == metaSectionIdx (its own doc comment above) -- metaFields(b) is
+	// therefore the SAME fixed 7-entry slice s.fields already was.
+	m.detailLevel = 1
+	m.fieldCursor = fieldIdx
+
+	if isDouble {
+		fields := metaFields(b)
+		if fieldIdx < len(fields) {
+			return m.activateDetailField(b, fields[fieldIdx])
+		}
+	}
 	return m, nil
 }

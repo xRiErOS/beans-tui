@@ -1224,6 +1224,190 @@ func TestKeyDetailFocusEnterOnTagsFieldOpensTagPicker(t *testing.T) {
 	}
 }
 
+// --- B07 (design-spec.md §15 PF-16, bean bt-duz7, E8 Task 4):
+// activateDetailField extraction -- direct unit coverage for the extracted
+// helper itself (mirrors the 7 keyDetailFocus enter-cascade cases above,
+// now against the shared helper both keyDetailFocus AND mouse.go's
+// mouseDetailClick call, Architektur-Vorgabe #1). ---
+
+// TestActivateDetailFieldStatusOpensValueMenu guards the status/type/
+// priority group: activateDetailField opens the seeded Value-Menu, m.
+// detailFocus is left untouched by the helper itself (callers set it).
+func TestActivateDetailFieldStatusOpensValueMenu(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // status=todo
+	b := m.focusedBean()
+
+	tm, cmd := m.activateDetailField(b, relationField{kind: "status"})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+	if nm.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", nm.overlay)
+	}
+	if nm.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", nm.mutTarget)
+	}
+	want := valueMenuCursorFor(nm.menuItems, "status", "todo")
+	if nm.menu.cursor != want {
+		t.Fatalf("menu.cursor = %d, want %d (status/todo)", nm.menu.cursor, want)
+	}
+	if cmd != nil {
+		t.Fatal("activateDetailField(status) must not return a Cmd")
+	}
+}
+
+// TestActivateDetailFieldTypeOpensValueMenu is the "type" group counterpart.
+func TestActivateDetailFieldTypeOpensValueMenu(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // type=task
+	b := m.focusedBean()
+
+	tm, _ := m.activateDetailField(b, relationField{kind: "type"})
+	nm := tm.(model)
+	if nm.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", nm.overlay)
+	}
+	want := valueMenuCursorFor(nm.menuItems, "type", "task")
+	if nm.menu.cursor != want {
+		t.Fatalf("menu.cursor = %d, want %d (type/task)", nm.menu.cursor, want)
+	}
+}
+
+// TestActivateDetailFieldPriorityOpensValueMenu is the "priority" group
+// counterpart.
+func TestActivateDetailFieldPriorityOpensValueMenu(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // priority=normal
+	b := m.focusedBean()
+
+	tm, _ := m.activateDetailField(b, relationField{kind: "priority"})
+	nm := tm.(model)
+	if nm.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", nm.overlay)
+	}
+	want := valueMenuCursorFor(nm.menuItems, "priority", "normal")
+	if nm.menu.cursor != want {
+		t.Fatalf("menu.cursor = %d, want %d (priority/normal)", nm.menu.cursor, want)
+	}
+}
+
+// TestActivateDetailFieldTagsOpensTagPicker guards the "tags" kind.
+func TestActivateDetailFieldTagsOpensTagPicker(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	b := m.focusedBean()
+
+	tm, _ := m.activateDetailField(b, relationField{kind: "tags"})
+	nm := tm.(model)
+	if nm.overlay != overlayTagPicker {
+		t.Fatalf("overlay = %v, want overlayTagPicker", nm.overlay)
+	}
+	if nm.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", nm.mutTarget)
+	}
+}
+
+// TestActivateDetailFieldTitleOpensEditTitleForm guards the "title" kind.
+func TestActivateDetailFieldTitleOpensEditTitleForm(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	b := m.focusedBean()
+
+	tm, cmd := m.activateDetailField(b, relationField{kind: "title"})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+	if nm.form == nil || nm.formKind != "editTitle" {
+		t.Fatalf("form/formKind = %v/%q, want a non-nil form with formKind editTitle", nm.form, nm.formKind)
+	}
+	if nm.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", nm.mutTarget)
+	}
+	if cmd == nil {
+		t.Fatal("activateDetailField(title) must return the form's Init Cmd")
+	}
+}
+
+// TestActivateDetailFieldReadonlyIsNoop guards the "readonly" kind
+// (created_at/updated_at): no overlay/form opens, the model comes back
+// otherwise unchanged.
+func TestActivateDetailFieldReadonlyIsNoop(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	b := m.focusedBean()
+
+	tm, cmd := m.activateDetailField(b, relationField{kind: "readonly"})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+	if nm.overlay != overlayNone {
+		t.Fatalf("overlay = %v, want overlayNone", nm.overlay)
+	}
+	if nm.form != nil {
+		t.Fatal("readonly must not open a form")
+	}
+	if cmd != nil {
+		t.Fatal("activateDetailField(readonly) must not return a Cmd")
+	}
+}
+
+// TestActivateDetailFieldJumpMovesCursorAndExitsDetailFocus guards the
+// default ("") Relations-jump kind: unchanged E2 behavior, now reached via
+// the shared helper.
+func TestActivateDetailFieldJumpMovesCursorAndExitsDetailFocus(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.width, m.height = 100, 30
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a"
+	m.detailFocus = true
+	b := m.focusedBean()
+
+	tm, cmd := m.activateDetailField(b, relationField{kind: "", beanID: "bean-b"})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+	if nm.cursorID != "bean-b" {
+		t.Fatalf("cursorID = %q, want bean-b", nm.cursorID)
+	}
+	if nm.detailFocus {
+		t.Fatal("jump must exit detail focus")
+	}
+	if cmd != nil {
+		t.Fatal("activateDetailField(jump) must not return a Cmd")
+	}
+}
+
+// TestActivateDetailFieldJumpUnresolvedIsNoop guards the jump kind's
+// dangling-reference guard: an empty beanID (unresolved reference) must not
+// move the cursor or exit detail focus.
+func TestActivateDetailFieldJumpUnresolvedIsNoop(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m.detailFocus = true
+	b := m.focusedBean()
+
+	tm, cmd := m.activateDetailField(b, relationField{kind: "", beanID: ""})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+	if nm.cursorID != "tk-2" {
+		t.Fatalf("cursorID = %q, want unchanged tk-2", nm.cursorID)
+	}
+	if !nm.detailFocus {
+		t.Fatal("an unresolved jump target must not exit detail focus")
+	}
+	if cmd != nil {
+		t.Fatal("activateDetailField(unresolved jump) must not return a Cmd")
+	}
+}
+
 // TestKeyDetailFocusEnterOnRelationFieldStillJumps is a regression guard: the
 // Relations section's field kind ("", the default relationField zero value)
 // must still hit the unchanged jump branch after keyDetailFocus's enter-on-

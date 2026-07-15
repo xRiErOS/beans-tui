@@ -71,6 +71,56 @@ func treeClickAt(t *testing.T, m model, substr string) tea.MouseMsg {
 	return leftPaneClickAt(t, m, head, localKeys, substr)
 }
 
+// rightPaneClickAt mirrors leftPaneClickAt but scoped to the RIGHT Detail
+// pane's own column span (X >= originX+lw) -- B07 (design-spec.md §15
+// PF-16, bean bt-duz7)'s render-grounded click helper for the
+// mouseDetailClick dispatch path.
+func rightPaneClickAt(t *testing.T, m model, head, localKeys, substr string) tea.MouseMsg {
+	t.Helper()
+	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
+	boundary := originX + lw
+	for y, l := range screenLines(m) {
+		i := strings.Index(l, substr)
+		if i < 0 {
+			continue
+		}
+		col := ansi.StringWidth(l[:i])
+		if col < boundary {
+			continue // leftmost match is in the left pane
+		}
+		return tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: col, Y: y}
+	}
+	t.Fatalf("substr %q not found in the right Detail pane of the rendered View()", substr)
+	return tea.MouseMsg{}
+}
+
+// detailClickAt is rightPaneClickAt scoped to the Browse/Tree view's own
+// chrome (browseRepoChrome).
+func detailClickAt(t *testing.T, m model, substr string) tea.MouseMsg {
+	t.Helper()
+	head, localKeys := m.browseRepoChrome(m.width - 2)
+	return rightPaneClickAt(t, m, head, localKeys, substr)
+}
+
+// backlogDetailClickAt is rightPaneClickAt scoped to the Backlog view's own
+// chrome (backlogChrome) -- guards detailClickRow's m.view branch.
+func backlogDetailClickAt(t *testing.T, m model, substr string) tea.MouseMsg {
+	t.Helper()
+	head, localKeys := m.backlogChrome(m.width - 2)
+	return rightPaneClickAt(t, m, head, localKeys, substr)
+}
+
+// detailFocusModel builds a fixtureModel with tk-2 focused, ancestors
+// expanded (focusBean, box_menu_value_test.go), and a real terminal size --
+// shared setup for the detailClickRow/mouseDetailClick tests below (B07).
+func detailFocusModel(t *testing.T) model {
+	t.Helper()
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = focusBean(m, "tk-2")
+	return m
+}
+
 // --- Wheel: moves the active view's cursor (design decision f) ---
 
 func TestWheelUpDownMovesTreeCursor(t *testing.T) {
@@ -326,5 +376,245 @@ func TestClickPaneGeometryOriginYExcludesTitleAndSeparator(t *testing.T) {
 	want := 1 + lipgloss.Height(head) + 1 + 1
 	if originY != want {
 		t.Fatalf("originY = %d, want %d (outer border(1) + head(%d) + divider(1) + pane's own top border(1) -- PF-10 drops only the pane's title+separator lines)", originY, want, lipgloss.Height(head))
+	}
+}
+
+// --- B07 (design-spec.md §15 PF-16, bean bt-duz7, E8 Task 4): Maus im
+// Detail-Pane -- Sektionen + Meta-Felder klickbar ---
+
+// TestDetailClickRowAccountsForFiveLineHeaderOffset guards the Kopfblock
+// offset (bean bt-duz7 PO-Wortlaut, "Kopfblock-Offset 5 Zeilen beachten!"):
+// a click on the Kopfblock's own ID line (row 0 of the pane's content,
+// ABOVE the 5-line offset) must resolve to NO Section-/Feld-Treffer.
+func TestDetailClickRowAccountsForFiveLineHeaderOffset(t *testing.T) {
+	m := detailFocusModel(t)
+	b := m.focusedBean()
+
+	msg := detailClickAt(t, m, "tk-2") // Kopfblock row 0 (ID line)
+	_, _, ok := detailClickRow(m, b, msg)
+	if ok {
+		t.Fatal("a click on the Kopfblock's ID line must not resolve to a Section-/Feld-Treffer")
+	}
+}
+
+// TestDetailClickRowMapsSectionHeaderClick guards the Section-Header
+// mapping: a click on Section [3] RELATIONS's own header row resolves to
+// secIdx=2 (relationsSectionIdx), fieldIdx=-1.
+func TestDetailClickRowMapsSectionHeaderClick(t *testing.T) {
+	m := detailFocusModel(t)
+	b := m.focusedBean()
+
+	msg := detailClickAt(t, m, "[3]") // "> [3] RELATIONS" header marker
+	secIdx, fieldIdx, ok := detailClickRow(m, b, msg)
+	if !ok {
+		t.Fatal("click on the RELATIONS header must resolve")
+	}
+	if secIdx != relationsSectionIdx {
+		t.Fatalf("secIdx = %d, want %d (relationsSectionIdx)", secIdx, relationsSectionIdx)
+	}
+	if fieldIdx != -1 {
+		t.Fatalf("fieldIdx = %d, want -1 (Section-Header hit)", fieldIdx)
+	}
+}
+
+// TestDetailClickRowMapsMetaFieldClick guards the Meta field-row mapping
+// (T1/bt-e6q9's 7-line field list): a click on the "tags:" row resolves to
+// secIdx=metaSectionIdx, fieldIdx=4 (metaFields' fixed order: title/status/
+// type/priority/tags/created_at/updated_at).
+func TestDetailClickRowMapsMetaFieldClick(t *testing.T) {
+	m := detailFocusModel(t)
+	b := m.focusedBean()
+
+	msg := detailClickAt(t, m, "tags:")
+	secIdx, fieldIdx, ok := detailClickRow(m, b, msg)
+	if !ok {
+		t.Fatal("click on the tags: row must resolve")
+	}
+	if secIdx != metaSectionIdx {
+		t.Fatalf("secIdx = %d, want %d (metaSectionIdx)", secIdx, metaSectionIdx)
+	}
+	if fieldIdx != 4 {
+		t.Fatalf("fieldIdx = %d, want 4 (tags, metaFields' fixed order)", fieldIdx)
+	}
+}
+
+// TestMouseDetailClickSectionHeaderActivatesAndExpands guards Fall a (PO-
+// Wortlaut, bean bt-duz7): a click on a Section-Header activates AND
+// expands that section -- m.detailFocus=true, m.secCursor/m.accOpen set,
+// m.detailLevel reset to 0 (section level, not a stale field-level
+// carry-over).
+func TestMouseDetailClickSectionHeaderActivatesAndExpands(t *testing.T) {
+	m := detailFocusModel(t)
+	m.detailLevel = 1 // pre-existing field-level state must reset
+
+	msg := detailClickAt(t, m, "[3]")
+	tm, _ := m.handleMouse(msg)
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if !nm.detailFocus {
+		t.Fatal("a Section-Header click must set detailFocus=true")
+	}
+	if nm.secCursor != relationsSectionIdx {
+		t.Fatalf("secCursor = %d, want %d (relationsSectionIdx)", nm.secCursor, relationsSectionIdx)
+	}
+	if nm.accOpen != relationsSectionIdx+1 {
+		t.Fatalf("accOpen = %d, want %d", nm.accOpen, relationsSectionIdx+1)
+	}
+	if nm.detailLevel != 0 {
+		t.Fatal("a Section-Header click must reset detailLevel to 0 (section level)")
+	}
+}
+
+// TestMouseDetailClickSingleClickSelectsField guards Fall b: a single click
+// on a Meta field row SELECTS the field (detailLevel=1, fieldCursor set)
+// WITHOUT opening any overlay.
+func TestMouseDetailClickSingleClickSelectsField(t *testing.T) {
+	m := detailFocusModel(t)
+
+	msg := detailClickAt(t, m, "tags:")
+	tm, _ := m.handleMouse(msg)
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if !nm.detailFocus || nm.secCursor != metaSectionIdx {
+		t.Fatalf("detailFocus=%v secCursor=%d, want true/%d", nm.detailFocus, nm.secCursor, metaSectionIdx)
+	}
+	if nm.detailLevel != 1 || nm.fieldCursor != 4 {
+		t.Fatalf("detailLevel=%d fieldCursor=%d, want 1/4 (tags)", nm.detailLevel, nm.fieldCursor)
+	}
+	if nm.overlay != overlayNone || nm.form != nil {
+		t.Fatal("a single click on a Meta field must NOT open any overlay/form")
+	}
+}
+
+// TestMouseDetailClickDoubleClickOnFieldOpensOverlay guards Fall c: a
+// double click on an already-selected Meta field opens its Overlay --
+// identical to the Enter-Kaskade (activateDetailField). Mirrors
+// TestDoubleClickTogglesExpand's fixed-clock pattern (above).
+func TestMouseDetailClickDoubleClickOnFieldOpensOverlay(t *testing.T) {
+	m := detailFocusModel(t)
+	fixed := time.Unix(3000, 0)
+	m.clock = func() time.Time { return fixed }
+
+	msg := detailClickAt(t, m, "tags:")
+	tm, _ := m.handleMouse(msg) // 1st click: selects, no overlay
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if m2.overlay != overlayNone {
+		t.Fatal("setup: first click must not open an overlay")
+	}
+
+	msg2 := detailClickAt(t, m2, "tags:") // re-render, same field is now selected
+	tm2, _ := m2.handleMouse(msg2)        // 2nd click, same fixed time -> double
+	m3, ok := tm2.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm2)
+	}
+	if m3.overlay != overlayTagPicker {
+		t.Fatalf("overlay = %v, want overlayTagPicker (double click on tags field, identical to the Enter-Kaskade)", m3.overlay)
+	}
+	if m3.mutTarget != "tk-2" {
+		t.Fatalf("mutTarget = %q, want tk-2", m3.mutTarget)
+	}
+}
+
+// TestMouseDetailClickDoubleClickOnBodySectionOpensEditor guards the BODY
+// special case (bt-y2iw's "Notes for bt-duz7"): BODY has no field to
+// double-click, so a double click on its OWN Section-Header opens $EDITOR
+// via the SAME openBodyEditor helper `e`/enter already use (update.go) --
+// mirrors TestKeyDetailFocusEnterOnBodySectionOpensEditor's assertions
+// (update_test.go).
+func TestMouseDetailClickDoubleClickOnBodySectionOpensEditor(t *testing.T) {
+	beans := fixtureBeans()
+	for i := range beans {
+		if beans[i].ID == "tk-2" {
+			beans[i].ETag = "tk-2-etag"
+		}
+	}
+	m := fixtureModel(t, beans)
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = focusBean(m, "tk-2")
+	fixed := time.Unix(4000, 0)
+	m.clock = func() time.Time { return fixed }
+
+	msg := detailClickAt(t, m, "[2]") // "> [2] BODY" header marker
+	tm, _ := m.handleMouse(msg)       // 1st click: selects Section [2]
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if m2.secCursor != bodySectionIdx || m2.editorTarget != "" {
+		t.Fatal("setup: first click must only select Section [2], not open $EDITOR yet")
+	}
+
+	msg2 := detailClickAt(t, m2, "[2]")
+	tm2, cmd := m2.handleMouse(msg2) // 2nd click, same fixed time -> double
+	m3, ok := tm2.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm2)
+	}
+	if m3.editorTarget != "tk-2" {
+		t.Fatalf("editorTarget = %q, want tk-2", m3.editorTarget)
+	}
+	if m3.editorETag != "tk-2-etag" {
+		t.Fatalf("editorETag = %q, want tk-2-etag (captured at open, F2)", m3.editorETag)
+	}
+	if cmd == nil {
+		t.Fatal("double click on BODY's header must return a Cmd (the ExecProcess-wrapped editor suspend)")
+	}
+}
+
+// TestMouseDetailClickIgnoredWhenOverlayOpen is the Overlay-Guard
+// regression check (E5-T4 precedent, verified NOT rebuilt per bt-duz7
+// Architektur-Vorgabe #4): a click that would otherwise hit the Detail pane
+// is swallowed while an overlay is open, mirrors TestMouseIgnoredWhile
+// OverlayOpen (above) but for a Detail-Pane-shaped coordinate.
+func TestMouseDetailClickIgnoredWhenOverlayOpen(t *testing.T) {
+	m := detailFocusModel(t)
+	msg := detailClickAt(t, m, "[3]")
+	m.overlay = overlayValueMenu
+
+	tm, _ := m.handleMouse(msg)
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if nm.secCursor == relationsSectionIdx {
+		t.Fatal("a click while an overlay is open must not reach mouseDetailClick's dispatch")
+	}
+	if nm.overlay != overlayValueMenu {
+		t.Fatal("the pre-existing overlay must stay open")
+	}
+}
+
+// TestMouseDetailClickReachableFromBacklogView guards the Backlog wiring
+// (mouseBacklogClick's own delegation, mirrors mouseTreeClick's) AND
+// detailClickRow's m.view branch (backlogChrome instead of
+// browseRepoChrome) -- a click on the Detail pane while viewBacklog is
+// active must reach the SAME mouseDetailClick dispatch.
+func TestMouseDetailClickReachableFromBacklogView(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.view = viewBacklog
+	vis := m.backlogVisible()
+	if len(vis) == 0 {
+		t.Fatal("setup: need at least 1 backlog-visible bean")
+	}
+	m.backlogList.setLen(len(vis))
+	m.backlogList.cursor = 0
+
+	msg := backlogDetailClickAt(t, m, "[3]") // RELATIONS header
+	tm, _ := m.handleMouse(msg)
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse did not return a model, got %T", tm)
+	}
+	if !nm.detailFocus || nm.secCursor != relationsSectionIdx {
+		t.Fatalf("detailFocus=%v secCursor=%d, want true/%d (Backlog view Detail-Pane click)", nm.detailFocus, nm.secCursor, relationsSectionIdx)
 	}
 }

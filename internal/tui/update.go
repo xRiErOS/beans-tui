@@ -1036,40 +1036,49 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if keybind.Matches(msg, keys.Enter) && m.detailLevel == 1 {
 		f := secs[m.secCursor].fields[m.fieldCursor]
-		// PF-5 field->Overlay dispatch (design-spec.md §15): status/type/
-		// priority open the combined Value-Menu seeded on that group; title
-		// opens the same Title-Edit-Form the `e` key opens; readonly
-		// (created_at/updated_at) is a no-op (system-managed); the default
-		// ("") is the Relations section's UNCHANGED E2 jump behavior.
-		switch f.kind {
-		case "status", "type", "priority":
-			// Design decision (Task 6 Step 7): m.detailFocus stays true here
-			// -- the overlay lays on top as its own capture state (a2), so
-			// closing it lands the user back on the SAME field (D02 "schnell/
-			// einfach"). Only the jump case below (a DIFFERENT bean) exits
-			// detail focus.
-			return m.openValueMenu(f.kind), nil
-		case "tags":
-			// PF-15/D01 (design-spec.md §15, E8 Task 1, bean bt-e6q9): enter
-			// on the tags field opens the SAME Tag-Picker the `t` key opens
-			// -- m.detailFocus stays true, mirroring status/type/priority
-			// above (the overlay is its own capture state).
-			return m.openTagPicker(), nil
-		case "title":
-			return m.openEditTitleForm(b)
-		case "readonly":
-			return m, nil // created_at/updated_at -- system-managed, no-op
-		default: // "" -- Relations jump, unchanged E2 behavior
-			if f.beanID == "" {
-				return m, nil // unresolved reference -- nothing to jump to
-			}
-			m.expanded = expandAncestorsOf(m.idx, m.expanded, f.beanID) // I01: clone-based
-			m.cursorID = f.beanID
-			m.detailFocus = false
-			return m, nil
-		}
+		return m.activateDetailField(b, f)
 	}
 	return m, nil
+}
+
+// activateDetailField dispatches a Meta-/Relations-field kind onto its
+// matching Overlay/Form/Jump -- the SHARED helper between keyDetailFocus's
+// field-level enter (Tastatur, PF-5, above) and mouseDetailClick's
+// Doppelklick (Maus, B07, design-spec.md §15 PF-16, bean bt-duz7, mouse.go)
+// -- extracted verbatim from keyDetailFocus's former inline switch so there
+// is exactly ONE place that dispatches a field kind onto its overlay/form/
+// jump (bt-duz7 Architektur-Vorgabe #1 + Akzeptanz-Checkliste). status/type/
+// priority open the combined Value-Menu seeded on that group; tags opens the
+// Tag-Picker; title opens the Title-Edit-Form; readonly (created_at/
+// updated_at) is a no-op (system-managed); the default ("") is the Relations
+// section's UNCHANGED E2 jump behavior.
+func (m model) activateDetailField(b *data.Bean, f relationField) (tea.Model, tea.Cmd) {
+	switch f.kind {
+	case "status", "type", "priority":
+		// Design decision (Task 6 Step 7): m.detailFocus stays true here --
+		// the overlay lays on top as its own capture state (a2), so closing
+		// it lands the user back on the SAME field (D02 "schnell/einfach").
+		// Only the jump case below (a DIFFERENT bean) exits detail focus.
+		return m.openValueMenu(f.kind), nil
+	case "tags":
+		// PF-15/D01 (design-spec.md §15, E8 Task 1, bean bt-e6q9): enter on
+		// the tags field opens the SAME Tag-Picker the `t` key opens -- m.
+		// detailFocus stays true, mirroring status/type/priority above (the
+		// overlay is its own capture state).
+		return m.openTagPicker(), nil
+	case "title":
+		return m.openEditTitleForm(b)
+	case "readonly":
+		return m, nil // created_at/updated_at -- system-managed, no-op
+	default: // "" -- Relations jump, unchanged E2 behavior
+		if f.beanID == "" {
+			return m, nil // unresolved reference -- nothing to jump to
+		}
+		m.expanded = expandAncestorsOf(m.idx, m.expanded, f.beanID) // I01: clone-based
+		m.cursorID = f.beanID
+		m.detailFocus = false
+		return m, nil
+	}
 }
 
 // expandAncestorsOf returns a NEW expanded map (I01 copy-on-write) with every
