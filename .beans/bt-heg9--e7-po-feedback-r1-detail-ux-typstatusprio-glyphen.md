@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T14:22:44Z
+updated_at: 2026-07-15T14:27:21Z
 parent: bt-apmy
 ---
 
@@ -111,3 +111,21 @@ Q04 = Variante (b): Gemeint ist die BESTEHENDE Space-Auswahl in Forms/Overlays (
 ## PO-Nachtrag 7 (2026-07-15): Fokus-Wechsel-Symmetrie
 
 **PF-13 — tab/shift+tab und ←/→ konsistent paaren.** Ist-Zustand in Browse: tab wechselt den Fokus (Tree↔Detail), aber shift+tab macht NICHT den Rückweg — stattdessen geht's mit arrow-left zurück. PO: 'für Nutzer murks'. Soll: BEIDE Paare vollständig und symmetrisch: tab = Fokus vorwärts, shift+tab = Fokus rückwärts; arrow-right = nach rechts (in Detail), arrow-left = nach links (zurück in Tree) — jeweils in beide Richtungen funktionsfähig und in der lokalen Keybinding-Zeile (PF-11) korrekt ausgewiesen. Kollisionscheck: arrow-left/right haben heute ggf. Zweitbelegung (j/l-Äquivalent im Tree: collapse/expand) — Planner muss die Semantik sauber trennen (Fokus-Wechsel vs. Tree-Navigation) und in design-spec festhalten; PO-Intention: vorhersagbare Paare, kein Überraschungsverhalten.
+
+
+## PO-Nachtrag 8 (2026-07-15): Review-Cockpit ENTFERNEN
+
+**PF-14 — Review-Cockpit komplett raus (Feature-Removal).** PO wörtlich: 'widerspricht dem lean-stack Wesen und schafft wieder Zeremonie. Das Review-Cockpit ist Zauberei on-top und bitte raus nehmen. Das Review möchte ich in Zukunft direkt im Chat machen.'
+
+Scope des Removals:
+- viewReviewCockpit (View, view_review_cockpit.go) inkl. reviewState/reviewQueue/reviewGroup/reviewRework-Derivation, reviewCursor/reviewAccOpen-Modelfelder, clampReviewCursor
+- Keybinding R + Cockpit-lokale Keys (a/x/o, n/p-Override) aus keymap.go/helpGroups (Drift-Guard-Test zieht mit)
+- reviewStandMarkdown + Cockpit-y-Override (Yank-Review-Stand entfällt)
+- reviewClickRow + zugehöriger Locktest (T4-I01-Test fliegt mit)
+- Palette-Eintrag 'go to review cockpit'
+- Reject-Form (form_reject_review.go) + PassReview/RejectReview-Mutationen im Datenlayer: Datenlayer-Funktionen KÖNNEN bleiben (harmlos, CLI-nah), TUI-Verdrahtung raus — Planner entscheidet ob Datenlayer-Removal mit (YAGNI) oder ohne
+- 2 Cockpit-Goldens raus
+- design-spec: §5-Review-Flow umschreiben (Tag-Konvention bleibt: Agents setzen to-review; Sichtbarkeit über Tree/Filter/Suche; Abnahme = Chat + beans-CLI durch PO/Supervisor), US-08 entsprechend umdefinieren (nicht mehr 'Cockpit', sondern 'Review-Signal sichtbar')
+- E6-Auswirkung: US-08-Validierung gegen NEUE Definition
+
+Planner-Hinweis Reihenfolge: Removal FRÜH einplanen (idealerweise erster Task) — dann müssen Glyphen-/Footer-/String-Umbauten das Cockpit nicht mehr mitziehen (spart Arbeit in allen Folge-Tasks).
