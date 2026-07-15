@@ -98,10 +98,10 @@ Coverage dafür (falls vorhanden) bleibt ebenfalls unangetastet.
   (`reviewCursor`/`reviewAccOpen`-Felder + der Doc-Kommentar-Block
   `types.go:387-396` darüber) entfallen.
 
-- [ ] **Step 1: Baseline.** `command go test ./... -short` grün (Ausgangs-
+- [x] **Step 1: Baseline.** `command go test ./... -short` grün (Ausgangs-
   zustand bestätigen, bevor irgendetwas gelöscht wird).
-- [ ] **Step 2: Dateien löschen.** Die 5 Dateien aus „Files (Delete)" oben.
-- [ ] **Step 3: Compiler-gesteuerte Vollständigkeit.** `command go build
+- [x] **Step 2: Dateien löschen.** Die 5 Dateien aus „Files (Delete)" oben.
+- [x] **Step 3: Compiler-gesteuerte Vollständigkeit.** `command go build
   ./...` — JEDER Compile-Fehler zeigt eine verbliebene Referenz. Iterativ
   beheben:
   - `keymap.go`: `Reviews`-Feld aus `keyMap`-Struct + `newKeyMap()` +
@@ -121,40 +121,42 @@ Coverage dafür (falls vorhanden) bleibt ebenfalls unangetastet.
   - `overlay_palette.go`: den `"go to review cockpit"`-Action-Eintrag (Zeile
     ~75, `case "go_review":`-Dispatch) entfernen.
   - Wiederholen bis `command go build ./...` sauber durchläuft.
-- [ ] **Step 4: Test-Dateien bereinigen (kein Compile-Zwang, manuell).**
+- [x] **Step 4: Test-Dateien bereinigen (kein Compile-Zwang, manuell).**
   `grep -rln "ReviewCockpit\|reviewCursor\|reviewAccOpen\|viewReviewCockpit"
   internal/tui/*_test.go` — für jede gefundene Datei (u.a.
   `context_test.go`, `mouse_test.go`, `overlay_palette_test.go`,
   `view_lobby_test.go`) die Cockpit-spezifischen Testfälle/Assertions
   entfernen (NICHT die ganze Datei — diese testen auch andere Dinge).
-- [ ] **Step 5:** `command go test ./... -short` → FAIL erwartet an Stellen,
+- [x] **Step 5:** `command go test ./... -short` → FAIL erwartet an Stellen,
   die noch Cockpit-Testfälle referenzieren — iterieren bis grün.
-- [ ] **Step 6: Kommentar-Hygiene (optional, kein Akzeptanzkriterium).**
+- [x] **Step 6: Kommentar-Hygiene (optional, kein Akzeptanzkriterium).**
   `grep -rln "eview" internal/tui/*.go | grep -v _test.go` — verbliebene
   Doc-Kommentare (z.B. `context.go:12-13,122-123`,
   `view_browse_repo.go`/`view_browse_backlog.go`/`view_lobby.go`s narrative
   Erwähnungen) bei Gelegenheit mitziehen, kein Blocker.
-- [ ] **Step 7: Golden-Regen.** `command go test ./internal/tui/ -run
+- [x] **Step 7: Golden-Regen.** `command go test ./internal/tui/ -run
   "TestTreeGolden|TestBacklogGolden|TestChromeGolden" -update` — erwartet:
   alle DREI byte-identisch zum Vorzustand (Cockpit-Removal betrifft NICHT
   ihre Render-Pfade) — falls NICHT identisch, Ursache klären (unerwarteter
   Nebeneffekt), nicht blind akzeptieren.
-- [ ] **Step 8:** `command go test ./... -race` UND `-short` (2x) grün,
+- [x] **Step 8:** `command go test ./... -race` UND `-short` (2x) grün,
   `command gofmt -l .` leer, `command go vet ./...` leer.
-- [ ] **Step 9:** Commit `feat(tui)!: PF-14 Review-Cockpit entfernen —
+- [x] **Step 9:** Commit `feat(tui)!: PF-14 Review-Cockpit entfernen —
   Review läuft künftig im Chat` — Body zitiert PO-Begründung (Nachtrag 8)
   + Tag-Trio-Umstellung (design-spec §5) + YAGNI-Entscheidung
-  (`PassReview`/`RejectReview` bleiben im Datenlayer).
+  (`PassReview`/`RejectReview` bleiben im Datenlayer). Umgesetzt als
+  `refactor(tui)!:` statt `feat(tui)!:` (Removal, kein Feature-Zugewinn —
+  explizite Vorgabe des Supervisor-Prompts, Commit `a25b851`).
 
 **Akzeptanz-Checkliste:**
-- [ ] `viewReviewCockpit` (View, Konstante, Keybinding `R`, Modellfelder)
+- [x] `viewReviewCockpit` (View, Konstante, Keybinding `R`, Modellfelder)
   vollständig aus dem Produktionscode entfernt — `command go build ./...`
   sauber, kein toter Cockpit-Code übrig
-- [ ] `internal/data/mutations.go`s `PassReview`/`RejectReview` bewusst
+- [x] `internal/data/mutations.go`s `PassReview`/`RejectReview` bewusst
   BELASSEN (YAGNI, im Commit-Body begründet)
-- [ ] 2 Cockpit-Goldens gelöscht, verbleibende 3 Goldens UNVERÄNDERT
+- [x] 2 Cockpit-Goldens gelöscht, verbleibende 3 Goldens UNVERÄNDERT
   (Regressionsbeleg)
-- [ ] Voller Testlauf (inkl. `-race`) grün, gofmt/vet leer
+- [x] Voller Testlauf (inkl. `-race`) grün, gofmt/vet leer
 
 ---
 
