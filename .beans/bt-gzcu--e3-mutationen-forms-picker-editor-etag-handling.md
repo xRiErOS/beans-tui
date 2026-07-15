@@ -1,11 +1,11 @@
 ---
 # bt-gzcu
 title: E3 Mutationen — Forms, Picker, Editor, ETag-Handling
-status: todo
+status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T00:14:48Z
+updated_at: 2026-07-15T00:28:20Z
 parent: bt-apmy
 blocked_by:
     - bt-aq5s
