@@ -115,6 +115,57 @@ func TestPalFilteredActionsFuzzyFiltered(t *testing.T) {
 	}
 }
 
+// TestPalFilteredActionsFuzzyStatMatchesSetStatusAndSetParent guards T3-
+// review I01 (bean bt-kyj5 Prelude, carried into E7 T4): Plan-Step 4 of the
+// English-i18n task (bt-w9o8) claimed a fuzzy-regression test for the 5
+// word-reversed PF-8 labels ("status: setzen" -> "set status" etc.) but only
+// ever re-verified "bckl" -> "go to backlog", whose word order PF-8 left
+// UNCHANGED (lowest-risk case, doesn't exercise the reversal at all). This
+// test exercises a query against the ACTUALLY reversed "set ..." labels.
+// "stat" is verified (not assumed) to be a rune SUBSEQUENCE -- not a
+// contiguous substring, fuzzyMatch is a subsequence matcher (fuzzy.go) -- of
+// BOTH "set status" (s-t-a-t contiguous) AND "set parent" (s-t-a-...-t,
+// spanning "seT stAT" via the trailing "t" of "parent"): 2 matches, not the
+// single match the Prelude note's phrasing suggested was likely.
+func TestPalFilteredActionsFuzzyStatMatchesSetStatusAndSetParent(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // node actions ("set status"/"set parent") only exist with a focused bean
+	m.palQuery = "stat"
+
+	items := m.palFiltered()
+	wantIDs := []string{"status", "parent"}
+	if len(items) != len(wantIDs) {
+		t.Fatalf("len(palFiltered) = %d, want %d (%v) for query %q", len(items), len(wantIDs), wantIDs, m.palQuery)
+	}
+	for i, want := range wantIDs {
+		if items[i].actionID != want {
+			t.Fatalf("palFiltered[%d].actionID = %q, want %q", i, items[i].actionID, want)
+		}
+	}
+}
+
+// TestPalFilteredActionsFuzzyGoMatchesAllFourGoToEntries guards T3-review
+// I01 (bean bt-kyj5 Prelude): the 4 "go to <entity>" entries (backlog/
+// browse/repo picker/settings) share PF-8's UNCHANGED "go to X" shape -- a
+// plain "go" query must still fuzzy-match all 4 (not fewer, per the
+// Prelude's "genau die 4 'go to'-Einträge" requirement), in declaration
+// order, with no other action or bean leaking in.
+func TestPalFilteredActionsFuzzyGoMatchesAllFourGoToEntries(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.palQuery = "go"
+
+	items := m.palFiltered()
+	wantIDs := []string{"go_backlog", "go_browse", "repo_picker", "settings"}
+	if len(items) != len(wantIDs) {
+		t.Fatalf("len(palFiltered) = %d, want %d (%v) for query %q", len(items), len(wantIDs), wantIDs, m.palQuery)
+	}
+	for i, want := range wantIDs {
+		if items[i].actionID != want {
+			t.Fatalf("palFiltered[%d].actionID = %q, want %q", i, items[i].actionID, want)
+		}
+	}
+}
+
 // TestPalFilteredEmptyQueryReturnsAllActionsNoBeans pins the T1 contract T2
 // must not weaken: an empty query returns every action and NO bean items.
 func TestPalFilteredEmptyQueryReturnsAllActionsNoBeans(t *testing.T) {
