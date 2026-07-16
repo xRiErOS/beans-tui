@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: high
 created_at: 2026-07-16T20:20:40Z
-updated_at: 2026-07-16T22:24:35Z
+updated_at: 2026-07-16T22:41:25Z
 parent: bt-tct9
 ---
 
@@ -280,3 +280,41 @@ dem weiter offenen Voll-Verdeckungs-Platzhalter (Capture 3). 80x24 UND
   betroffen (keine Golden-Änderung nötig, kein bestehender Voll-
   Verdeckungs-Fixture)
 - [x] tmux-Smoke im Repro-Repo (Investigation-Setup) beider Fälle (plus Mix)
+
+## Fix-Runde R1 (Review CHANGES_REQUIRED, 2026-07-17)
+
+**Commit:** 3a79433 fix(tui): Cursor-Restore meidet Platzhalter
+
+**B01 (Pflicht, behoben):** applyLoaded (update.go) Cursor-Restore war nicht
+platzhalter-sicher:
+- (a) id-Match-Loop: `n.id == m.cursorID` ohne Ausschluss der id-losen
+  Platzhalter-Node -- bei `cursorID == ""` (z. B. nach leerem Load) matchte
+  der erste Platzhalter, cursorFound fälschlich true. Fix: Guard
+  `n.id != "" && n.id == m.cursorID`.
+- (b) positionaler oldPos-Fallback konnte auf einen Platzhalter-Index im
+  neuen gefilterten Baum clampen. Fix: `nodes[skipPlaceholder(nodes,
+  oldPos, 1)].id` (dieselbe Helper wie treeCursorMove).
+
+**RED→GREEN (gegen R0-Stand 09bb044, R1-Produktionsdiff gestasht):**
+```
+--- FAIL: TestApplyLoadedCursorRestoreSkipsPlaceholderOnEmptyCursorID
+    cursor restored onto the placeholder row (pos 1), want a real row
+--- FAIL: TestApplyLoadedOldPosFallbackSkipsPlaceholder
+    cursorID = "", want ep-full (oldPos fallback slid off the placeholder)
+```
+Nach stash pop (Fix aktiv): beide PASS. Repro-Pfad exakt nach Reviewer-
+Muster: applyLoaded(leer) -> applyLoaded(gleiche Beans), Epic expanded.
+
+**I01 (non-blocking, umgesetzt):** keyTree right/left/enter mit explizitem
+`n.placeholder`-Guard statt zufälliger Sicherheit via hasKids=false.
+Lock-Test `TestKeyTreeExpandKeysNoOpOnPlaceholder` (passt auch auf altem
+Code -- erwartungsgemäß, Härtung, kein Bug; hält den Vertrag fest, falls
+placeholder je hasKids-Semantik bekäme).
+
+**I02 (non-blocking, umgesetzt):** renderDetailPane prüft `placeholder`
+explizit neben `orphan` (Konsistenz zum focusedBean-Guard-Stil; Verhalten
+identisch, da placeholder.bean ohnehin nil -> "(no selection)").
+
+**Gates R1:** Build grün · `go test ./... -count=1` voll grün (internal/tui
+143s) · gofmt leer · vet leer · working tree clean · Branch unverändert
+fix/39cl-archiv-platzhalter.
