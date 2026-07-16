@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T06:26:05Z
+updated_at: 2026-07-16T06:27:44Z
 parent: bt-apmy
 ---
 
@@ -86,3 +86,18 @@ mit exaktem Ablauf (welcher Pfad, welche Eingabe) als Bug reaktivieren.
   Suchzeilen-Suffix '· sort <modus>' bleibt die sichtbare Zustandsanzeige.
 - **D01 BESTÄTIGT:** "egal an welcher stelle öffne ich mit 'e' das bean im $EDITOR" —
   e = Ganz-Bean-Editor überall (Tree, Backlog, Detail-View, jede Sektion/Feld-Ebene).
+
+
+## B06 (2026-07-16, PO nannte es B05 — hier B06, B05 ist Kopfblock-Tags)
+
+PO verbatim: "Das overlay für 'r' um die relations anzugeben ist viel zu schmal. So kann
+man die beans nicht sauber lesen und bearbeiten. Höhe passt. Aber die Breite muss viel
+weiter werden."
+
+Screenshot-Befund: Blocking-Picker (~48 Spalten) bricht Einträge mitten in der ID um
+('bt-' am Zeilenende, Rest nächste Zeile), Glyphen/IDs/Titel unlesbar verschränkt.
+
+Interpretation (gilt analog für den Parent-Picker 'a' — vermutlich gleiche Box-Breite,
+prüfen): Overlay-Breite deutlich erhöhen (Richtung ~80-90% der Terminalbreite bzw.
+inhaltsbasiert), Einträge einzeilig wo möglich; bei Umbruch hängender Einzug analog
+B04.3-Mockup (Meta-Spalten nie unterwandern). Höhe unverändert.
