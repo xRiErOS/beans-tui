@@ -1,11 +1,11 @@
 ---
 # bt-604w
 title: T3 — Tag-Definition anlegen (Create)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:30Z
-updated_at: 2026-07-16T15:44:30Z
+updated_at: 2026-07-16T17:18:22Z
 parent: bt-362n
 blocked_by:
     - bt-r92i
@@ -139,3 +139,9 @@ Inline-Fehlertext darf nicht truncaten ohne `…`.
   Input verwirft nur den Submodus · Goldens Gegenbeleg grün · tmux-Smoke
   120+80 belegt, Testdatei danach entfernt · voller Lauf grün · Commit
   `feat(tui): E10 Tag-Definition anlegen (Create)`.
+
+## PRELUDE aus T6-Review (2026-07-16, F01, low — Refactor vor Task-Start)
+
+Als erster eigener Commit: `tagRegistryRows` (view_tag_management.go:64-106) unterhält eine eigene, zu `collectTagCounts` (box_picker_tag.go, seit T6 mit defined-Primärschlüssel) strukturell fast identische Zähl-Schleife — echte Duplikation mit Drift-Risiko. Auf `collectTagCounts` umstellen (war in bt-r92i 'D10-ERRATUM-Notiz für T6' und bt-pqq3 'Notes for T3' bereits vorgezeichnet; T2/T6 liefen mit disjunktem Datei-Scope). Verhalten der Page darf sich NICHT ändern (bestehende T2-Tests bleiben grün = Beleg); D09-Sortierung der Page (definiert alpha, frei count-desc) vs. Picker-Sortierung (defined-first global) beachten — die Page-Gruppierung bleibt Page-Logik, nur die ZÄHLUNG wird geteilt.
+
+(T6-F02, nur Doku-Notiz: T6-bean-Zielabschnitt nennt Glyph '●', implementiert ist '✓' aus T2 — sachlich gewollt, Summary korrekt.)

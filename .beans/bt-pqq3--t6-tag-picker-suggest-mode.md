@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:35Z
-updated_at: 2026-07-16T17:08:53Z
+updated_at: 2026-07-16T17:18:22Z
 parent: bt-362n
 blocked_by:
     - bt-49hh
@@ -339,3 +339,7 @@ Ergänzung, keine Abweichung vom Spezifizierten.
   diesem Task vereinheitlicht, disjunkter Datei-Scope). Ein künftiger
   Task (T7 oder Fast-Follow) KÖNNTE `tagRegistryRows` auf `collectTagCounts`
   umstellen, ist aber nicht Teil dieses Tasks.
+
+## Review-Nachtrag (2026-07-16, T6-Review APPROVED)
+
+F02 (low, Doku): Ziel-Abschnitt oben nennt '●' als Marker-Glyph — final implementiert ist '✓' (tagManagementMarkerGlyph, aus T2 wiederverwendet, PF-12-Konsistenz). Summary deckt es sachlich ab; hier explizit als Abweichung vom ursprünglichen Plan-Text vermerkt. F01 (Zähl-Schleifen-Duplikat) → Prelude an T3 (bt-604w).
