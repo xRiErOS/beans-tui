@@ -1,11 +1,11 @@
 ---
 # bt-yqdy
 title: 'Command-Center: Bean-Suche entfernen + create-tag-Command'
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-15T21:10:08Z
-updated_at: 2026-07-15T23:53:56Z
+updated_at: 2026-07-16T00:14:57Z
 parent: bt-ntoz
 blocked_by:
     - bt-y2iw
@@ -76,11 +76,222 @@ Tag-Management-**Page** (bt-6oyy) bleibt bewusst v1.1 (D08, bereits als Body-Nac
 
 ## Akzeptanz-Checkliste
 
-- [ ] Command-Center zeigt bei JEDER Query AUSSCHLIESSLICH Commands, nie Bean-Treffer
-- [ ] paletteKindBean/palFilteredBeans/palBeanMatches/palBleve*-Unterbau vollstaendig entfernt, `command go build ./...` sauber
-- [ ] `/`s eigene Bleve-Suche (searchBleveIDs/searchBleveFor) unveraendert funktional (Regressionstest)
-- [ ] Tag-Picker-Footer zeigt "n:New tag" (vorher fehlend)
-- [ ] Command-Center bietet "create tag", oeffnet direkt den Neuanlage-Input im Tag-Picker
-- [ ] "create tag" ohne fokussiertes Bean ist ein sauberer No-Op (kein latenter tagInputActive-State)
-- [ ] Goldens regeneriert/verifiziert (voraussichtlich alle 3 unveraendert, im Commit-Body vermerkt)
-- [ ] Voller Testlauf (inkl. -race) gruen, gofmt/vet leer
+- [x] Command-Center zeigt bei JEDER Query AUSSCHLIESSLICH Commands, nie Bean-Treffer
+- [x] paletteKindBean/palFilteredBeans/palBeanMatches/palBleve*-Unterbau vollstaendig entfernt, `command go build ./...` sauber
+- [x] `/`s eigene Bleve-Suche (searchBleveIDs/searchBleveFor) unveraendert funktional (Regressionstest)
+- [x] Tag-Picker-Footer zeigt "n:New tag" (vorher fehlend)
+- [x] Command-Center bietet "create tag", oeffnet direkt den Neuanlage-Input im Tag-Picker
+- [x] "create tag" ohne fokussiertes Bean ist ein sauberer No-Op (kein latenter tagInputActive-State)
+- [x] Goldens regeneriert/verifiziert (voraussichtlich alle 3 unveraendert, im Commit-Body vermerkt)
+- [x] Voller Testlauf (inkl. -race) gruen, gofmt/vet leer
+
+## Summary
+
+B13 implemented: `overlay_palette.go`'s former bean-search half
+(`paletteKindBean`, `palFilteredBeans`/`palBeanMatches`,
+`paletteBeanResultCap`) removed; `palFiltered()` filters ONLY the action
+pool now; `paletteBox()` renders ONE `menuList` call (no split/separator);
+`keyPalette()`'s rune/backspace branches resync `palList` and return
+directly (no Bleve dispatch, `dispatchPaletteBleveIfDue` removed).
+`types.go` (`palBleveIDs`/`palBleveFor`/`palBleveLoading`),
+`messages.go` (`paletteBleveResultMsg`/`paletteSearchCmd`), `update.go`
+(`applyPaletteBleveResult`/`maybePaletteBleveCmd` + the `Update()` case)
+removed compiler-steered (production code first, `go build ./...` clean
+with zero further prod-code edits, THEN the now-obsolete
+`overlay_palette_test.go` sections). `/`'s own, fully separate Bleve
+search (`searchBleveIDs`/`searchBleveFor`, `search.go`) untouched --
+regression-verified by the full suite. `view_lobby.go`'s stray doc-comment
+reference to the now-removed `palFilteredBeans` updated (comment only, no
+behavior change).
+
+B14 implemented: (a) `keys.NewTag` (keymap.go, `n`, wired into
+`helpGroups()`'s Actions group) makes the Tag-Picker's pre-existing
+free-text new-tag sub-mode footer-renderable; `keyTagPicker`
+(box_picker_tag.go) switched from `msg.String() == "n"` to
+`keybind.Matches(msg, keys.NewTag)`; `tagPickerLocalBindings()`
+(footer_context.go) now includes it, so the OUTER Footer Zone 3 shows
+"n:New tag" (verified missing before, confirmed present after -- see
+Smoke). (b) `paletteActions()` gains a `create_tag` node action ("create
+tag", placed directly after "set tags" -- both tag-related, an
+implementer ordering decision the bean/plan left open); `dispatchPalette`'s
+`"create_tag"` case opens the Tag-Picker AND its new-tag input in one step
+(`m.openTagPicker().openTagInput()`), gated by a MANDATORY
+`focusedBean()==nil` guard -- `openTagPicker()` is itself already
+no-op-safe on a missing focused bean, but chaining `.openTagInput()`
+straight onto that would unconditionally set `tagInputActive=true` with
+no picker actually open (a latent, unreachable state) -- the guard
+short-circuits before that chain runs.
+
+## Test-Output
+
+RED (B13, echter Compiler-Beleg -- production code deleted first, tests
+still referenced the removed symbols):
+```
+$ command go vet ./...
+vet: internal/tui/overlay_palette_test.go:395:13: m.palFilteredBeans undefined (type model has no field or method palFilteredBeans)
+```
+GREEN after removing/renaming the obsolete test sections
+(`TestPalFilteredBeansEmptyQueryNone`, `TestPalFilteredBeansLocalSubstring
+BelowThreshold`, `fixtureManyBeans`, `TestPalFilteredBeansCappedAt20`,
+`TestPalFilteredBeansSortedCanonically`, `TestPalFilteredOrderActionsBeforeBeans`,
+`TestDispatchPaletteBeanJumpsCursorAndSwitchesToBrowse`,
+`TestDispatchPaletteBeanJumpResetsDetailFocus`,
+`TestKeyPaletteDispatchesBleveOnQueryGrowth`,
+`TestApplyPaletteBleveResultDiscardsStaleQuery`,
+`TestApplyPaletteBleveResultAppliedWhenQueryStillCurrent`,
+`TestPaletteSearchCmdTagsResultWithQuery` all deleted;
+`TestPalFilteredEmptyQueryReturnsAllActionsNoBeans` renamed to
+`TestPalFilteredEmptyQueryReturnsAllActions`):
+```
+$ command go vet ./...
+(clean)
+$ command go test ./internal/tui/... -run "TestPalette|TestPalFiltered|TestOpenPalette|TestKeyPalette|TestHandleKeyCtrlK|TestDispatchPalette" -v
+... (24 tests) ...
+PASS
+ok  	beans-tui/internal/tui	0.504s
+```
+
+RED (B14, `keys.NewTag` footer-hint, echter Compiler-Beleg -- tests written
+before the field existed):
+```
+$ command go vet ./...
+vet: internal/tui/footer_context_test.go:81:55: keys.NewTag undefined (type keyMap has no field or method NewTag)
+```
+GREEN after adding `keys.NewTag` + wiring `tagPickerLocalBindings()` +
+`helpGroups()`:
+```
+$ command go test ./internal/tui/... -run "TestNewTagKeyBound|TestTagPickerLocalBindingsIncludesNewTag|TestContextualLocalHintOverlayTagPickerShowsNewTag|TestHelpGroupsCoverEveryBindingExactlyOnce|TestGlobalBindingsExactSet|TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList|TestTagPickerNewTag" -v
+--- PASS: TestTagPickerNewTagValidatesRegex
+--- PASS: TestTagPickerNewTagAddsPendingItem
+--- PASS: TestTagPickerLocalBindingsIncludesNewTag
+--- PASS: TestContextualLocalHintOverlayTagPickerShowsNewTag
+--- PASS: TestNewTagKeyBound
+--- PASS: TestGlobalBindingsExactSet
+--- PASS: TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList
+--- PASS: TestHelpGroupsCoverEveryBindingExactlyOnce
+PASS
+```
+
+RED (B14, `dispatchPalette`'s `"create_tag"` case, echter Revert-Beleg --
+the case temporarily removed via a targeted Edit, then restored):
+```
+$ command go test ./internal/tui/... -run "TestDispatchPaletteCreateTag" -v
+=== RUN   TestDispatchPaletteCreateTagOpensTagPickerInputMode
+    overlay_palette_test.go:475: overlay = 0, want overlayTagPicker
+--- FAIL: TestDispatchPaletteCreateTagOpensTagPickerInputMode
+=== RUN   TestDispatchPaletteCreateTagNoFocusedBeanNoOp
+--- PASS: TestDispatchPaletteCreateTagNoFocusedBeanNoOp
+FAIL
+```
+(the guard test alone stayed green even against the reverted code, since
+its own focusedBean()==nil short-circuit is unaffected by the removed
+case -- confirming it exercises a DIFFERENT code path than the
+happy-path test, not a tautology)
+GREEN after restoring the case:
+```
+$ command go test ./internal/tui/... -run "TestDispatchPaletteCreateTag" -v
+--- PASS: TestDispatchPaletteCreateTagOpensTagPickerInputMode
+--- PASS: TestDispatchPaletteCreateTagNoFocusedBeanNoOp
+PASS
+```
+
+Golden-Gegenbeleg (OHNE `-update`, MUSS gruen bleiben -- Palette/Tag-Picker
+sind Overlays, kein Teil der 3 Basis-Goldens):
+```
+$ command go test ./internal/tui/ -run "TestTreeGolden|TestBacklogGolden|TestChromeGolden" -v
+--- PASS: TestChromeGolden
+--- PASS: TestTreeGolden
+--- PASS: TestTreeGoldenDeterministic
+--- PASS: TestBacklogGolden
+--- PASS: TestBacklogGoldenDeterministic
+PASS
+```
+`git status --short internal/tui/testdata/` leer -- kein Golden geaendert.
+
+Voll-Lauf (362 Testfunktionen in `internal/tui`, `go test -list` gezaehlt),
+DREI frische Prozesse: `command go test ./...` -> `ok beans-tui/internal/tui
+136.020s` (Lauf 1); `command go test ./... -count=1` -> `ok
+beans-tui/internal/tui 136.816s` (Lauf 2, alle Pakete cmd/config/data/theme
+ebenfalls PASS in beiden Laeufen); `command go test ./... -race` -> `ok
+beans-tui/internal/tui 139.622s`, keine DATA RACE. `gofmt -l .` leer.
+`command go vet ./...` leer. `command go build -o bin/bt .` clean.
+
+## Smoke
+
+Real in tmux gegen dieses Repo (`.beans/` echte Daten, `./bin/bt`),
+tmux 120x40, `tmux send-keys`/`capture-pane -p` als Beleg:
+
+- ctrl+k, `apmy` eingetippt (ID-Substring des fokussierten Beans `bt-apmy`,
+  haette VORHER einen Bean-Treffer gezeigt) -> "(no matches)", KEINE
+  Bean-Zeile.
+- ctrl+k, `devd` eingetippt (Titel-Wort-Substring, "beans-tui v1 — devd-TUI-
+  Port auf beans") -> ebenfalls "(no matches)", KEINE Bean-Zeile.
+- ctrl+k, `create` eingetippt -> "▸ create tag" (cursor-selektiert, node
+  action zuerst) UND "create bean" (global action) beide sichtbar, richtige
+  Reihenfolge.
+- enter auf "create tag" -> "New tag"-Modal oeffnet SOFORT (kein
+  Zwischenschritt über den Tag-Picker-Listenview) mit "enter:create
+  esc:cancel" + leerem Input "new tag (a-z0-9, hyphen-separated)".
+  Neuanlage NICHT durchgezogen (esc/esc zum Verwerfen) -- `git status
+  --short .beans/` davor UND danach leer, keine Mutation.
+- `t` gedrueckt (Tag-Picker öffnen) -> AEUSSERE Footer-Zeile (Zone 3, unten
+  im Terminal, NICHT die Picker-eigene Inline-Hint-Zeile im Modal) zeigt
+  jetzt "↑/i:up  ↓/k:down  space/x:Toggle facet  n:New tag  enter:open/
+  confirm  esc:back" -- "n:New tag" bestaetigt sichtbar, vorher fehlend.
+  Die Picker-eigene Inline-Hint-Zeile ("space/x:toggle  n:new tag
+  enter:save  esc:discard") war unveraendert bereits vorher da (T3-Fund,
+  nicht Teil dieses Fixes).
+- Session sauber beendet, `git status --short .beans/` final leer -- keine
+  Mutation ueber die gesamte Smoke-Session.
+
+## Deviations/ERRATA
+
+Keine ERRATA gegen bean/Plan -- Ist-Code (`paletteActions`/
+`dispatchPalette`-Signaturen, `openTagPicker`/`openTagInput`-Verhalten,
+`tagPickerLocalBindings`/`helpGroups`-Struktur) stimmte exakt mit den
+bean-Sketches ueberein; das B14-ERRATUM war bereits vom Planner verifiziert
+(bean-Text) und traf zu.
+
+Implementer-Entscheidungen (wie im Auftrag vorgesehen):
+
+1. **`create_tag`-Platzierung in `paletteActions()`**: direkt nach "set
+   tags" (im focused-bean-Block) -- der Plan spezifiziert NUR den Block,
+   nicht die exakte Position darin; "gruppiert mit der verwandten Aktion"
+   ist die niedrigste-Risiko-Lesart.
+2. **`paletteItemKind`-Typ NICHT entfernt**, obwohl nach B13 nur noch EIN
+   Wert (`paletteKindAction`) existiert -- der bean-Text nennt explizit nur
+   die `paletteKindBean`-KONSTANTE zur Entfernung, nicht den Typ selbst;
+   beibehalten als Vorbereitung fuer eine zukuenftige echte dritte Art,
+   analog der urspruenglichen Typ-Begruendung (T1/T2-Praezedenzfall).
+3. **`TestPalFilteredEmptyQueryReturnsAllActionsNoBeans` umbenannt** (nicht
+   dupliziert) zu `TestPalFilteredEmptyQueryReturnsAllActions` -- der
+   Qualifier "NoBeans" ist nach B13 keine query-abhaengige Eigenschaft mehr
+   (gilt jetzt IMMER, nicht nur bei leerer Query), die bean-TDD-Schritte
+   nannten genau diese Test-Pruefung+Umbenennungs-Option explizit.
+4. **Zwei zusaetzliche `dispatchPalette`-Tests** (`TestDispatchPaletteCreate
+   TagOpensTagPickerInputMode`, `TestDispatchPaletteCreateTagNoFocusedBean
+   NoOp`) ueber die im TDD-Schritte-Abschnitt namentlich genannte
+   `TestPaletteActionsIncludesCreateTag` hinaus ergaenzt -- die
+   Akzeptanz-Checkliste selbst verlangt sowohl das Oeffnen-Verhalten als
+   auch den No-Op-Guard, beide brauchten eigene Testabdeckung.
+
+## Notes for bt-d8kc
+
+- Der neue Footer-Hint lebt in `tagPickerLocalBindings()`
+  (`footer_context.go`) -- ein OVERLAY-lokaler Hint (Footer Zone 3's
+  `contextualLocalHint`-Dispatch ueber `overlayLocalBindings(overlayTagPicker)`),
+  NICHT der globale Footer/`globalBindings()`/`browseRepoLocalBindings()`/
+  `backlogLocalBindings()`, die bt-d8kc neu aufbaut. Kein Konflikt zu
+  erwarten -- bt-d8kc's D06-Neuspezifikation betrifft explizit nur die
+  VIEW-lokalen Listen (Browse/Backlog), nicht die Overlay-lokalen Sets in
+  `footer_context.go`.
+- `keys.NewTag` ist ein NEUES `keyMap`-Feld (keymap.go) -- bereits in
+  `helpGroups()`'s "Actions"-Gruppe verdrahtet (Drift-Guard
+  `TestHelpGroupsCoverEveryBindingExactlyOnce` deckt es ab, verifiziert
+  gruen). bt-d8kc's `globalBindings()`-Kuerzung auf 4 Items und der
+  `Blocking`-Remap (`B`->`r`) beruehren `keys.NewTag` nicht -- `n` ist in
+  keinem der beiden betroffenen Sets (Header-Globals, Footer-Q06-Liste)
+  vertreten, keine Kollision.
+- `create_tag` (Palette) ist ein neuer `dispatchPalette`-Case, der
+  `openTagPicker().openTagInput()` direkt aufruft -- KEIN neuer Key/keine
+  neue globale Keybinding, beruehrt bt-d8kc's Footer-/Header-Arbeit nicht.
