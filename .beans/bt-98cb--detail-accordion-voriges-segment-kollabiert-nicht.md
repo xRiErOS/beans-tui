@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-16T20:20:40Z
-updated_at: 2026-07-16T20:59:50Z
+updated_at: 2026-07-16T21:29:12Z
 parent: bt-tct9
 ---
 
@@ -76,3 +76,10 @@ Akzeptanz (ersetzt Repro-Akzeptanz):
 - [ ] Goldens bewusst regeneriert, Diff je Snapshot beschrieben
 - [ ] design-spec §15: PF-18-Nachtrag (PF-1 revidiert, nie stilles Umschreiben)
 - [ ] tmux-Smoke: Sektionswechsel Tastatur+Maus, Tree+Backlog+Vollbild
+
+
+## Prelude aus bt-lg68-Review (2026-07-16, non-blocking)
+
+I01: `mouse.go:308` — Kommentar grammatikalisch verschachtelt (Klammer schließt
+spät), rein kosmetisch. Beim ohnehin anstehenden Anfassen der Datei-Familie
+glätten. Quelle: Reviewer bt-lg68, APPROVED-Run.
