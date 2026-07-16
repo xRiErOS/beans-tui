@@ -579,7 +579,10 @@ func windowAround(rows []string, height, cursor int) []string {
 func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string {
 	pos := m.cursorPos(nodes)
 	var b *data.Bean
-	if pos >= 0 && pos < len(nodes) && !nodes[pos].orphan {
+	// I02 (bt-39cl Review R1): placeholder covered explicitly alongside
+	// orphan -- its bean is nil anyway (same "(no selection)" outcome), but
+	// the guard style stays consistent with focusedBean's own check.
+	if pos >= 0 && pos < len(nodes) && !nodes[pos].orphan && !nodes[pos].placeholder {
 		b = nodes[pos].bean
 	}
 	return m.renderBeanAccordionPane(b, w, h, focused)

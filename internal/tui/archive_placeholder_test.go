@@ -225,6 +225,89 @@ func TestTreeCursorMoveSkipsPlaceholderUpward(t *testing.T) {
 	}
 }
 
+// --- Fix-Runde R1 (Review B01): applyLoaded cursor-restore must be
+// placeholder-safe on BOTH paths ---
+
+// TestApplyLoadedCursorRestoreSkipsPlaceholderOnEmptyCursorID is the
+// reviewer's own repro (B01 path a): applyLoaded(empty) leaves
+// m.cursorID == "" -- a follow-up applyLoaded(same beans) with the epic
+// expanded must NOT "find" that empty cursorID on the id-less placeholder
+// row (old code: cursorFound=true against n.id == "", cursor bar parked on
+// the non-selectable row, Detail "(no selection)").
+func TestApplyLoadedCursorRestoreSkipsPlaceholderOnEmptyCursorID(t *testing.T) {
+	m := fixtureModel(t, placeholderFixtureBeans())
+	m.expanded["ep-full"] = true
+
+	m = step(t, m, beansLoadedMsg{beans: []data.Bean{}}) // -> cursorID = ""
+	if m.cursorID != "" {
+		t.Fatalf("setup: cursorID = %q after empty load, want \"\"", m.cursorID)
+	}
+	m = step(t, m, beansLoadedMsg{beans: placeholderFixtureBeans()})
+
+	nodes := m.visibleNodes()
+	pos := m.cursorPos(nodes)
+	if nodes[pos].placeholder {
+		t.Fatalf("cursor restored onto the placeholder row (pos %d), want a real row", pos)
+	}
+	if m.cursorID == "" {
+		t.Fatal("cursorID still \"\" after reload with non-empty tree, want a real bean ID")
+	}
+}
+
+// TestApplyLoadedOldPosFallbackSkipsPlaceholder covers B01 path b: the
+// positional oldPos fallback (cursored bean vanished in the reload) must
+// not land on a placeholder index in the NEW filtered tree. Old tree:
+// [ep-full, tk-open] with cursor on tk-open (pos 1); reload removes
+// tk-open and archives ep-full's remaining children -> new tree:
+// [ep-full, placeholder] -- oldPos 1 hits the placeholder exactly.
+func TestApplyLoadedOldPosFallbackSkipsPlaceholder(t *testing.T) {
+	before := []data.Bean{
+		{ID: "ep-full", Title: "Epic", Status: "in-progress", Type: "epic", Priority: "normal"},
+		{ID: "tk-open", Title: "Open Task", Status: "todo", Type: "task", Priority: "normal", Parent: "ep-full"},
+	}
+	after := []data.Bean{
+		{ID: "ep-full", Title: "Epic", Status: "in-progress", Type: "epic", Priority: "normal"},
+		{ID: "ch-1", Title: "Child One", Status: "completed", Type: "task", Priority: "normal", Parent: "ep-full"},
+	}
+	m := fixtureModel(t, before)
+	m.expanded["ep-full"] = true
+	m.cursorID = "tk-open"
+
+	m = step(t, m, beansLoadedMsg{beans: after})
+
+	nodes := m.visibleNodes()
+	if len(nodes) != 2 || !nodes[1].placeholder {
+		t.Fatalf("setup: new tree = %+v, want exactly [ep-full, placeholder]", nodes)
+	}
+	if m.cursorID != "ep-full" {
+		t.Fatalf("cursorID = %q, want ep-full (oldPos fallback slid off the placeholder)", m.cursorID)
+	}
+}
+
+// TestKeyTreeExpandKeysNoOpOnPlaceholder locks the I01 explicit guards
+// (keyTree right/left/enter): with the cursor position resolving to the
+// placeholder row (cursorID "" + id-less placeholder, the exact pre-B01
+// stale state), the expand keys must be pure no-ops -- no panic, no
+// expanded-map mutation.
+func TestKeyTreeExpandKeysNoOpOnPlaceholder(t *testing.T) {
+	m := fixtureModel(t, placeholderFixtureBeans())
+	m.expanded["ep-full"] = true
+	m.cursorID = "" // cursorPos resolves "" onto the id-less placeholder row
+
+	nodes := m.visibleNodes()
+	if !nodes[m.cursorPos(nodes)].placeholder {
+		t.Fatal("setup: cursorPos does not resolve to the placeholder row")
+	}
+	expandedBefore := len(m.expanded)
+
+	for _, key := range []tea.KeyMsg{runeMsg('l'), runeMsg('j'), keyMsg(tea.KeyEnter)} {
+		m2 := step(t, m, key)
+		if len(m2.expanded) != expandedBefore {
+			t.Fatalf("key %v on placeholder mutated m.expanded (%d -> %d), want no-op", key, expandedBefore, len(m2.expanded))
+		}
+	}
+}
+
 // TestMouseTreeClickOnPlaceholderIsNoOp guards the mouse-side counterpart of
 // the "nicht selektierbar" decision (mouse.go mouseTreeClick): a real click
 // (geometry-resolved via treeClickAt, mouse_test.go's own render-grounded
