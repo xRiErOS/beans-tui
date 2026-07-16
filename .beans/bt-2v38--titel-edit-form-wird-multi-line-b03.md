@@ -1,11 +1,11 @@
 ---
 # bt-2v38
 title: Titel-Edit-Form wird multi-line (B03)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:45Z
-updated_at: 2026-07-16T09:26:12Z
+updated_at: 2026-07-16T09:47:18Z
 parent: bt-tct9
 ---
 
@@ -78,15 +78,15 @@ den `GetString`-Zugriff theoretisch brechen, falls huh intern anders keyed).
 
 ## Akzeptanz-Checkliste
 
-- [ ] Titel-Edit-Form nutzt `huh.NewText()` mit `.Lines(3)`, nicht mehr `huh.NewInput()`
-- [ ] `.ExternalEditor(false)` gesetzt (keine Kollision mit D01s app-weitem `e`/`ctrl+e`)
-- [ ] Ein langer Titel bricht sichtbar mehrzeilig um, statt horizontal zu scrollen/
+- [x] Titel-Edit-Form nutzt `huh.NewText()` mit `.Lines(3)`, nicht mehr `huh.NewInput()`
+- [x] `.ExternalEditor(false)` gesetzt (keine Kollision mit D01s app-weitem `e`/`ctrl+e`)
+- [x] Ein langer Titel bricht sichtbar mehrzeilig um, statt horizontal zu scrollen/
       abzuschneiden
-- [ ] `nonEmpty`-Validierung funktioniert unverändert (leerer Titel wird abgelehnt)
-- [ ] Submit liefert den vollen, unveränderten String (kein Datenverlust durch den
+- [x] `nonEmpty`-Validierung funktioniert unverändert (leerer Titel wird abgelehnt)
+- [x] Submit liefert den vollen, unveränderten String (kein Datenverlust durch den
       Feldtyp-Wechsel)
-- [ ] Kein Golden ändert sich (Gegenbeleg grün)
-- [ ] Voller Testlauf grün, gofmt/vet leer
+- [x] Kein Golden ändert sich (Gegenbeleg grün)
+- [x] Voller Testlauf grün, gofmt/vet leer
 
 
 ## PRELUDE (2026-07-16, aus bt-6bgn-Review F05 — ZUERST erledigen, eigener Commit)
@@ -98,3 +98,90 @@ Toast-Title trivially true. Härtung: zusätzlich `nm.toast.title == ""` in die
 Fail-Bedingung aufnehmen (oder Title gegen die Note-Konstante pinnen). Als eigener
 kleiner Commit (`test(tui): harden vanished-target dual-write pin (F05)`,
 `Refs: bt-2v38`) VOR der eigentlichen B03-Arbeit.
+
+
+
+## Summary
+
+`buildEditTitleForm` (`internal/tui/form_edit_title.go`) tauscht `huh.NewInput()` gegen
+`huh.NewText().Key("title").Title("Title").Lines(3).ExternalEditor(false).Value(&v).Validate(nonEmpty)`
+— exakt der Code-Sketch aus der Architektur-Vorgabe. `.ExternalEditor(false)` verhindert die
+Kollision mit D01s app-weitem `e`/`ctrl+e`-Ganz-Bean-Editor. `submitForm`s `"editTitle"`-Case
+(`box_confirm_create.go`, `m.form.GetString("title")`) blieb unverändert — `huh.Text.GetValue()`
+liefert weiterhin einen reinen `string`, gegengeprüft via Test. Zwei neue Tests in
+`form_edit_title_test.go`: `TestBuildEditTitleFormUsesMultiLineText` (Feldtyp-Assertion
+`*huh.Text` + Zeilen-Delta-Vergleich gegen ein äquivalentes `*huh.Input` als Beweis für
+`.Lines(3)`, da `huh.Text` keinen exportierten Height-Getter hat) und
+`TestOpenEditTitleFormRoundTripsLongTitleUnchanged` (>60-Zeichen-Titel, unbearbeiteter Submit,
+`GetString("title")` exakt gleich + kein eingebettetes `\n`, plus echter `submitForm()`-Aufruf
+gegen einen nicht-existenten `RepoDir` als Dispatch-Beweis, Konvention dieser Testdatei).
+
+PRELUDE (F05, aus bt-6bgn-Review) zuerst erledigt: `TestEditorFinishedTargetVanishedSurfacesError`
+in `editor_test.go` härtet die Dual-Write-Assertion um einen expliziten
+`nm.toast.title == ""`-Check, da `strings.HasPrefix(nm.err, nm.toast.title)` für einen leeren
+Toast-Title trivially true wäre.
+
+## Test-Output
+
+RED (vor Implementierung, `command go test ./internal/tui/... -run "EditTitleForm" -v`):
+
+```
+=== RUN   TestBuildEditTitleFormUsesMultiLineText
+    form_edit_title_test.go:108: field type = *huh.Input, want *huh.Text (B03: huh.NewInput -> huh.NewText)
+--- FAIL: TestBuildEditTitleFormUsesMultiLineText (0.00s)
+...
+FAIL
+FAIL	beans-tui/internal/tui	0.471s
+FAIL
+```
+
+GREEN (nach Implementierung, dieselbe -run-Filterung):
+
+```
+=== RUN   TestEditTitleFormPrefilledAndNonEmptyValidated
+--- PASS: TestEditTitleFormPrefilledAndNonEmptyValidated (0.00s)
+=== RUN   TestBuildEditTitleFormUsesMultiLineText
+--- PASS: TestBuildEditTitleFormUsesMultiLineText (0.00s)
+=== RUN   TestOpenEditTitleFormRoundTripsLongTitleUnchanged
+--- PASS: TestOpenEditTitleFormRoundTripsLongTitleUnchanged (0.00s)
+=== RUN   TestKeyNodeActionEDoesNotOpenEditTitleFormAnymore
+--- PASS: TestKeyNodeActionEDoesNotOpenEditTitleFormAnymore (0.00s)
+=== RUN   TestKeyDetailFocusEnterOnTitleFieldOpensEditTitleForm
+--- PASS: TestKeyDetailFocusEnterOnTitleFieldOpensEditTitleForm (0.00s)
+=== RUN   TestActivateDetailFieldTitleOpensEditTitleForm
+--- PASS: TestActivateDetailFieldTitleOpensEditTitleForm (0.00s)
+PASS
+ok  	beans-tui/internal/tui	0.439s
+```
+
+Golden-Gegenbeleg (ohne `-update`, `command go test ./internal/tui/ -run "TestTreeGolden|TestBacklogGolden|TestChromeGolden"`): `PASS` alle 5 Subtests (Tree/TreeDeterministic/Backlog/BacklogDeterministic/Chrome), kein Golden geändert.
+
+Commit-Gate: `command go test ./...` → alle Packages `ok` (`internal/tui` 137.5s); `command go test ./internal/tui/ -race` → `ok` (140.0s); `gofmt -l .` → leer; `command go vet ./...` → leer.
+
+## Smoke
+
+tmux (100×30), `bin/bt` in diesem Repo, Bean `bt-apmy` (realer Titel ~40 Zeichen). `Tab` → `Enter`
+→ `Enter` (title-Feld, Index 0) öffnet das "Edit title"-Modal: sichtbar 3 reservierte Textarea-
+Zeilen (statt vormals 1 Input-Zeile). Zusätzlicher langer Text getippt → Titel bricht sichtbar
+über alle 3 Zeilen um (kein horizontales Scrollen/Abschneiden). `esc` bricht ab — `git status
+--short .beans/` bestätigt: keine Mutation am Repo (Draft korrekt verworfen, kein versehentlicher
+Save gegen echte Daten).
+
+## Deviations/ERRATA
+
+Keine. Umsetzung deckt sich 1:1 mit dem Code-Sketch aus der Architektur-Vorgabe; keine
+Design-Lücke, keine Abweichung von den TDD-Schritten.
+
+## Notes for T(n+1)
+
+- `huh.Text` hat keinen exportierten Height-Getter — falls künftige Tasks `.Lines(N)` an anderer
+  Stelle prüfen wollen: der robuste Weg ist der Zeilen-Delta-Vergleich gegen ein äquivalentes
+  `*huh.Input` (siehe `TestBuildEditTitleFormUsesMultiLineText`), nicht Reflection auf huhs
+  unexportiertes `textarea`-Feld.
+- `huh.Text`s Submit-Binding ist weiterhin plain `enter` (NewLine liegt separat auf
+  `alt+enter`/`ctrl+j`, `keymap.go` verifiziert) — bestehende `driveForm(f, enterMsg())`-Aufrufe
+  in diesem Testfile funktionieren dadurch unverändert, keine Testinfra-Anpassung nötig.
+- Diese Repo-Testdatei hat keinen PATH-gestubbten `beans`-Binary zum Abfangen echter CLI-Args —
+  Konvention ist der `strings.Contains(err, "beans update")`-Dispatch-Beweis gegen einen
+  nicht-existenten `RepoDir`. Für künftige Tasks, die exakte CLI-Argumente prüfen wollen, wäre
+  ein PATH-Stub ein separates, größeres Infra-Stück (hier bewusst nicht gebaut, außerhalb B03-Scope).
