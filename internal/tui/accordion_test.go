@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"beans-tui/internal/theme"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
@@ -67,6 +68,33 @@ func TestRenderAccordionNoChevronSuffix(t *testing.T) {
 	}
 	if strings.Contains(out, "▸") {
 		t.Error("B05: closed section header must no longer carry the '▸' chevron suffix")
+	}
+}
+
+// TestRenderAccordionClosedHeaderUsesTealNotMuted guards B06 (EXPERIMENT,
+// design-spec.md §15 PF-16, bean bt-ntoz/bt-czpf, 2026-07-16): a CLOSED
+// section's header title renders with theme.HeaderInactive's own ANSI
+// styling (Teal), not theme.Muted's (Hint-grey) any more -- render-grounded
+// so a regression in accordion.go's own render path (not just the token's
+// theme.go definition) is caught too. OPEN headers (theme.Header/Mauve) are
+// untouched by B06 -- only the closed/inactive branch changes.
+func TestRenderAccordionClosedHeaderUsesTealNotMuted(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	secs := []accordionSection{
+		{title: "Meta", body: "meta-body"},
+		{title: "Closed", body: "closed-body"},
+	}
+	out := renderAccordion(secs, 1, 60, false, 0, 0) // open=1 -- section 2 ("Closed") stays closed
+
+	wantTeal := theme.HeaderInactive.Render("Closed")
+	wantMuted := theme.Muted.Render("Closed")
+	if !strings.Contains(out, wantTeal) {
+		t.Errorf("B06: closed section header must render with theme.HeaderInactive (Teal) styling, got: %q", out)
+	}
+	if strings.Contains(out, wantMuted) {
+		t.Errorf("B06: closed section header must NOT still render with theme.Muted styling, got: %q", out)
 	}
 }
 

@@ -77,7 +77,10 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 		if isOpen {
 			title = theme.Header.Render(s.title)
 		} else {
-			title = theme.Muted.Render(s.title)
+			// B06 EXPERIMENT (same source): closed header title Teal
+			// (theme.HeaderInactive) instead of Muted/Hint-grey -- PO-Sign-
+			// off pending, one-line rollback to theme.Muted if rejected.
+			title = theme.HeaderInactive.Render(s.title)
 		}
 		// PF-12 (design-spec.md §15, E7 T4): BOTH branches now reserve
 		// exactly 1 gutter column (" " inactive, "▌" active) and truncate

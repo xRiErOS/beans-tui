@@ -176,3 +176,19 @@ func TestPriorityColorMapping(t *testing.T) {
 		t.Errorf("Priority(unknown) = %q, want contains fallback glyph %q", rendered, fallbackGlyphChar)
 	}
 }
+
+// TestHeaderInactiveStyleIsTeal guards B06 (EXPERIMENT, design-spec.md §15
+// PF-16, bean bt-ntoz/bt-czpf, 2026-07-16): the new HeaderInactive token --
+// used for the Accordion's CLOSED Section-Header title (accordion.go) --
+// must resolve to Teal (#8bd5ca), not the previous Hint-grey (Muted). PO
+// sign-off on the experiment is still PENDING (see bean bt-czpf); a
+// rejection is a one-line rollback (theme.HeaderInactive -> theme.Muted at
+// accordion.go's single call site).
+func TestHeaderInactiveStyleIsTeal(t *testing.T) {
+	if got := HeaderInactive.GetForeground(); got != Teal {
+		t.Errorf("HeaderInactive.GetForeground() = %v, want Teal %v", got, Teal)
+	}
+	if got := HeaderInactive.GetForeground(); got == Hint {
+		t.Errorf("HeaderInactive.GetForeground() = %v, must not still be Hint-grey (Muted's color)", got)
+	}
+}

@@ -61,8 +61,17 @@ var (
 	Select = lipgloss.Color("#fe640b")
 
 	Header = lipgloss.NewStyle().Bold(true).Foreground(Mauve)
-	Key    = lipgloss.NewStyle().Foreground(Sapphire) // IDs/Keys = Sapphire
-	Accent = lipgloss.NewStyle().Foreground(Mauve)
+	// HeaderInactive = B06 EXPERIMENT (design-spec.md §15 PF-16, bean
+	// bt-ntoz/bt-czpf, 2026-07-16): CLOSED Accordion-Section-Header title
+	// color (accordion.go), Teal instead of Muted/Hint-grey -- the closed-
+	// header color was visually indistinguishable from the Meta-Label-
+	// Spalte (view_detail_bean.go metaSectionBody, also Muted). PO-Sign-off
+	// PENDING (bean bt-czpf Akzeptanz-Checkliste) -- rollback to
+	// theme.Muted is a one-line change at accordion.go's single call site
+	// if the PO rejects the experiment.
+	HeaderInactive = lipgloss.NewStyle().Foreground(Teal)
+	Key            = lipgloss.NewStyle().Foreground(Sapphire) // IDs/Keys = Sapphire
+	Accent         = lipgloss.NewStyle().Foreground(Mauve)
 
 	Dim = lipgloss.NewStyle().Foreground(Overlay)
 	// Muted = Hinweis/Erklärung: Shortcuts, Sub-Label, Placeholder. Bewusst Hint
