@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-16T16:01:21Z
+updated_at: 2026-07-16T19:14:15Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
@@ -260,3 +260,7 @@ Volle Herleitung, Akzeptanzkriterien, TDD-/Golden-/tmux-Vorgaben je Task:
 ## Review-Merkposten aus T1 (2026-07-16, F04 — gilt für T3-T6)
 
 SaveTagDefs/Add|Remove|RenameTagDefName validieren bewusst NICHT gegen ValidTagName (nur LoadTagDefs filtert defensiv) — Validierung gehört an die Eingabegrenze (D11, bean bt-49hh Notes). PFLICHT für jeden T3-T6-Reviewer: sicherstellen, dass jeder neue Aufrufer vor SaveTagDefs tatsächlich validiert.
+
+## Q04 (2026-07-16, aus T5-Review F01 — PO-Frage, nicht blockierend)
+
+Soll Rename eines definierten Tags AUF den Namen eines existierenden freien Tags erlaubt sein (= Merge: Registry-Eintrag umbenennen + Sweep vereinigt beide Tag-Populationen)? Aktuell per Dedupe abgelehnt (T3-Erbe, Dedupe gegen ALLE Zeilennamen). data.RenameTagDefName erlaubt es auf Datenebene bereits ('Rename onto an unregistered name is allowed'). Empfehlung Supervisor: v-nächste-Iteration, nicht in E10 — Merge hat eigene Confirm-UX-Fragen (Populations-Vereinigung irreversibel).

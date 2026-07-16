@@ -1,11 +1,11 @@
 ---
 # bt-sohl
 title: T7 — Abschluss (Voll-Validierung, Spec, Epic to-review)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:39Z
-updated_at: 2026-07-16T15:44:39Z
+updated_at: 2026-07-16T19:14:15Z
 parent: bt-362n
 blocked_by:
     - bt-r92i
@@ -78,3 +78,9 @@ T1 transitiv ab, da T2 UND T6 beide an T1 hängen — mirrort E9s T9-Muster
   Epic verifiziert konsistent · `docs/SSTD.md`-Konsistenz geprüft · kein
   unentdeckter Golden-Drift · `git status --porcelain` am Ende leer
   (keine Scratch-/Test-Artefakte aus T1-T6 übrig).
+
+## PRELUDE aus T5-Review (2026-07-16, F01/F02, low)
+
+Als erster eigener Commit (string+test-only):
+- **T5-F01:** Dedupe-Fehlermeldung in keyTagMgmtInput (view_tag_management.go:452-453) sagt 'tag already defined: X' auch wenn X nur eine FREIE Zeile ist — faktisch falsch. Auf neutrales 'name already in use: X' präzisieren (beide Fälle korrekt); betroffene Tests nachziehen. Das implizite Verbot 'Rename auf existierenden freien Namen' selbst NICHT ändern (= Merge-Semantik, PO-Frage Q04 im Epic).
+- **T5-F02:** bt-y9my Deviations-Abschnitt um eine Zeile ergänzen: Commit-Titel wurde gegenüber Checklisten-Wortlaut auf ≤50 gekürzt ('feat(tui): E10 Tag-Definition umbenennen (Rename)', 49).
