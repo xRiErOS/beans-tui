@@ -290,19 +290,41 @@ func (m model) viewBacklog() string {
 	// for the numeric pane geometry (Golden-Rule-Drift-Schutz).
 	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	vis := m.backlogVisible()
-	// Same 1-header-row budget trade as the Tree's search head (Task 3):
-	// the search/filter summary line costs 1 line of the list pane's bodyH
-	// content budget, so the actual rows window to bodyH-1 (PF-10, bean
-	// bt-uyzf, widened from bodyH-3 now that renderPane no longer reserves
-	// its own title+separator lines).
-	// D02 (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): the Backlog-Sort-
-	// Indicator -- a dezent (theme.Muted) suffix on the search line showing
-	// the active Sort-Toggle mode.
-	searchLine := m.treeSearchLine(lw-2, "sort "+backlogSortDisplayLabel(m.backlogSort))
-	rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-1)...)
-	listBox := renderPane(pane{rows: rows}, lw, bodyH, !m.detailFocus)
-	detailBox := m.renderBacklogDetailPane(vis, rw, bodyH, m.detailFocus)
-	body := lipgloss.JoinHorizontal(lipgloss.Top, listBox, detailBox)
+
+	var body string
+	if m.fullscreen != fullscreenNone {
+		// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): Vollbild -- mirrors
+		// viewBrowseRepo's own new branch (view_browse_repo.go), symmetric for
+		// Backlog (m.view stays viewBacklog throughout, PO-Wortlaut: Vollbild
+		// is orthogonal to which view is active). paneW: see viewBrowseRepo's
+		// own doc comment for the full border-accounting rationale (ONE pane's
+		// content width is innerW-2, not innerW -- caught live via tmux smoke).
+		paneW := innerW - 2
+		var listRows []string
+		if m.fullscreen == fullscreenList {
+			searchLine := m.treeSearchLine(paneW-2, "sort "+backlogSortDisplayLabel(m.backlogSort))
+			listRows = append([]string{searchLine}, m.backlogRows(vis, true, bodyH-1)...)
+		}
+		var detailBean *data.Bean
+		if m.fullscreen == fullscreenDetail {
+			detailBean = m.focusedBean()
+		}
+		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel)
+	} else {
+		// Same 1-header-row budget trade as the Tree's search head (Task 3):
+		// the search/filter summary line costs 1 line of the list pane's bodyH
+		// content budget, so the actual rows window to bodyH-1 (PF-10, bean
+		// bt-uyzf, widened from bodyH-3 now that renderPane no longer reserves
+		// its own title+separator lines).
+		// D02 (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): the Backlog-Sort-
+		// Indicator -- a dezent (theme.Muted) suffix on the search line showing
+		// the active Sort-Toggle mode.
+		searchLine := m.treeSearchLine(lw-2, "sort "+backlogSortDisplayLabel(m.backlogSort))
+		rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-1)...)
+		listBox := renderPane(pane{rows: rows}, lw, bodyH, !m.detailFocus)
+		detailBox := m.renderBacklogDetailPane(vis, rw, bodyH, m.detailFocus)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, listBox, detailBox)
+	}
 
 	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
 	out := outerBorder(content, innerW, true)

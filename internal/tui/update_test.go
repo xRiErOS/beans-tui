@@ -843,6 +843,185 @@ func TestKeyDetailFocusEscNoopOutsideDetailFocus(t *testing.T) {
 	}
 }
 
+// --- F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): fullscreenDetail
+// integration with the EXISTING Detail-Fokus-Maschine (focusedBean's new
+// fullscreenDetail case, activateDetailField's new Relations-Sprung case,
+// keyDetailFocus's Back-case esc-exit rung). keyFullscreen itself + the
+// fullscreenList side are covered in view_fullscreen_test.go instead. ---
+
+// TestFocusedBeanResolvesFullscreenBeanID guards focusedBean()'s NEW,
+// vorrangig geprüften fullscreenDetail case: m.fullscreenBeanID wins over
+// whatever the Tree cursor currently points at (the two are deliberately
+// INDEPENDENT, design-spec.md §15).
+func TestFocusedBeanResolvesFullscreenBeanID(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.cursorID = "ms-1" // deliberately a DIFFERENT bean than fullscreenBeanID
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "tk-2"
+
+	b := m.focusedBean()
+	if b == nil || b.ID != "tk-2" {
+		t.Fatalf("focusedBean() = %v, want tk-2 (fullscreenBeanID takes precedence over the Tree cursor)", b)
+	}
+}
+
+// TestFocusedBeanFullscreenDetailUnknownBeanIDReturnsNil is a defensive
+// nil-safety guard: an unresolved fullscreenBeanID (e.g. a bean deleted
+// externally while the Vollbild was open) must not panic.
+func TestFocusedBeanFullscreenDetailUnknownBeanIDReturnsNil(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "does-not-exist"
+
+	if b := m.focusedBean(); b != nil {
+		t.Fatalf("focusedBean() = %v, want nil for an unresolved fullscreenBeanID", b)
+	}
+}
+
+// TestActivateDetailFieldJumpStaysInFullscreenDetail guards the ONE new case
+// activateDetailField's Relations-jump default gets: inside fullscreenDetail
+// a jump must NOT exit to the Split-Tree/Backlog (m.detailFocus stays
+// whatever it was) -- it re-targets fullscreenBeanID and reinitializes the
+// Detail-Fokus-Maschine, same reset shape as keyFullscreen's own
+// Listen-Vollbild-entry (view_fullscreen_test.go).
+func TestActivateDetailFieldJumpStaysInFullscreenDetail(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-a"
+	m.detailFocus = true
+	m.cursorID = "unrelated"
+	m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 2, 3, 1, 1
+	b := m.focusedBean()
+
+	tm, cmd := m.activateDetailField(b, relationField{kind: "", beanID: "bean-b"})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+	if nm.fullscreen != fullscreenDetail {
+		t.Fatalf("fullscreen = %v, want unchanged fullscreenDetail (Relations-Sprung must NOT exit Vollbild)", nm.fullscreen)
+	}
+	if nm.fullscreenBeanID != "bean-b" {
+		t.Fatalf("fullscreenBeanID = %q, want bean-b (jump target)", nm.fullscreenBeanID)
+	}
+	if nm.cursorID != "unrelated" {
+		t.Fatalf("cursorID = %q, want unchanged (fullscreenDetail jump must not touch the Tree/Backlog cursor)", nm.cursorID)
+	}
+	if !nm.detailFocus {
+		t.Fatal("detailFocus must stay unchanged (true) -- the fullscreenDetail jump branch never touches it")
+	}
+	if nm.secCursor != 0 || nm.accOpen != 1 || nm.detailLevel != 0 || nm.fieldCursor != 0 {
+		t.Fatalf("Detail-Fokus-Maschine not reset: secCursor=%d accOpen=%d detailLevel=%d fieldCursor=%d, want 0/1/0/0",
+			nm.secCursor, nm.accOpen, nm.detailLevel, nm.fieldCursor)
+	}
+	if cmd != nil {
+		t.Fatal("activateDetailField(fullscreenDetail jump) must not return a Cmd")
+	}
+}
+
+// TestKeyDetailFocusRoutesToDetailFocusMachineViaFullscreenAlone is a
+// regression guard for handleKey's own routing line (update.go): it must
+// fire on m.fullscreen == fullscreenDetail even when m.detailFocus is FALSE
+// -- inside the Vollbild-Detail, m.detailFocuss truth value is irrelevant to
+// the dispatch decision (design-spec.md §15), the Vollbild state itself is
+// the signal-giver.
+func TestKeyDetailFocusRoutesToDetailFocusMachineViaFullscreenAlone(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-a"
+	if m.detailFocus {
+		t.Fatal("setup: expected detailFocus false")
+	}
+
+	m = step(t, m, runeMsg('3')) // digit-jump -- only keyDetailFocus understands this
+
+	if m.secCursor != relationsSectionIdx || m.accOpen != relationsSectionIdx+1 {
+		t.Fatalf("digit-jump did not reach keyDetailFocus: secCursor=%d accOpen=%d, want %d/%d",
+			m.secCursor, m.accOpen, relationsSectionIdx, relationsSectionIdx+1)
+	}
+}
+
+// TestKeyDetailFocusEscFieldLevelStepsToSectionLevelInFullscreen is
+// TestKeyDetailFocusEscAtFieldLevelGoesToSectionLevel's regression pin under
+// fullscreenDetail (D03's first cascade rung, unchanged): field level steps
+// back to section level, staying inside the Vollbild.
+func TestKeyDetailFocusEscFieldLevelStepsToSectionLevelInFullscreen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-a"
+
+	m = step(t, m, runeMsg('3'))         // Relations section
+	m = step(t, m, keyMsg(tea.KeyRight)) // field level
+	if m.detailLevel != 1 {
+		t.Fatal("setup: expected field level")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+
+	if m.detailLevel != 0 {
+		t.Fatal("esc at field level must return to section level (D03, unchanged rung)")
+	}
+	if m.fullscreen != fullscreenDetail {
+		t.Fatal("esc at field level must NOT leave the Vollbild (one rung at a time, D03)")
+	}
+}
+
+// TestKeyDetailFocusEscSectionLevelExitsFullscreenToTree guards the NEW D03
+// rung (F01): esc at section level leaves fullscreenDetail entirely, syncs
+// the Tree cursor onto the last-shown Vollbild bean (PO: "mit dem AKTUELLEN
+// Bean selektiert") and expands its ancestors so it is actually visible.
+func TestKeyDetailFocusEscSectionLevelExitsFullscreenToTree(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-b" // Parent ep-2, under ms-1 -- both start collapsed
+	m.cursorID = "irrelevant"
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+
+	if m.fullscreen != fullscreenNone {
+		t.Fatalf("fullscreen = %v, want fullscreenNone", m.fullscreen)
+	}
+	if !m.detailFocus {
+		t.Fatal("esc-exit must leave the Split-Detail focused (PO: 'mit dem AKTUELLEN Bean selektiert')")
+	}
+	if m.cursorID != "bean-b" {
+		t.Fatalf("cursorID = %q, want bean-b (synced to the last-shown Vollbild bean)", m.cursorID)
+	}
+	if !m.expanded["ep-2"] {
+		t.Fatal("esc-exit must expand bean-b's ancestor (ep-2) so it is visible in the Split-Tree")
+	}
+}
+
+// TestKeyDetailFocusEscSectionLevelExitsFullscreenToBacklogWithCursorSynced
+// is the Backlog mirror: backlogList.cursor syncs onto the last-shown
+// Vollbild bean's index in backlogVisible() instead of the Tree cursor/
+// expand map.
+func TestKeyDetailFocusEscSectionLevelExitsFullscreenToBacklogWithCursorSynced(t *testing.T) {
+	m := fixtureModel(t, fullscreenBacklogBeans())
+	m.view = viewBacklog
+	vis := m.backlogVisible()
+	if len(vis) < 2 {
+		t.Fatalf("setup: need >=2 backlog-visible beans, got %d", len(vis))
+	}
+	target := vis[1]
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = target.ID
+	m.backlogList.setLen(len(vis))
+	m.backlogList.cursor = 0 // stale, must be synced onto target
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+
+	if m.fullscreen != fullscreenNone {
+		t.Fatalf("fullscreen = %v, want fullscreenNone", m.fullscreen)
+	}
+	if !m.detailFocus {
+		t.Fatal("esc-exit must leave the Split-Detail focused")
+	}
+	if m.backlogList.cursor != 1 {
+		t.Fatalf("backlogList.cursor = %d, want 1 (synced onto %s)", m.backlogList.cursor, target.ID)
+	}
+}
+
 // --- E7 T6 (PF-2/PF-5/PF-13, bean bt-t1uy): shift+tab exit + enter-cascade. ---
 
 // TestKeyShiftTabExitsDetailFocus guards PF-13's new deterministic exit:

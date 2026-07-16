@@ -75,6 +75,13 @@ type keyMap struct {
 	// Footer Zone 3 (tagPickerLocalBindings, footer_context.go) -- a raw
 	// msg.String() comparison cannot be rendered.
 	NewTag keybind.Binding // n — new tag (Tag-Picker free-text sub-mode)
+
+	// Fullscreen (F01 Kernmechanik, E9 Task 7, bean bt-13l7, design-spec.md
+	// §15): `v` (view) -- verified free against every OTHER binding above
+	// before wiring (no collision). Dispatch: keyFullscreen
+	// (view_fullscreen.go), handleKey's checkpoint NACH FocusIn/FocusOut, VOR
+	// keyNodeAction (update.go).
+	Fullscreen keybind.Binding // v — fullscreen
 }
 
 // newKeyMap returns the currently active keybinding set. The direction cross
@@ -119,6 +126,8 @@ func newKeyMap() keyMap {
 		Editor:    keybind.NewBinding(keybind.WithKeys("e", "ctrl+e"), keybind.WithHelp("e", "Edit")),
 
 		NewTag: keybind.NewBinding(keybind.WithKeys("n"), keybind.WithHelp("n", "New tag")),
+
+		Fullscreen: keybind.NewBinding(keybind.WithKeys("v"), keybind.WithHelp("v", "fullscreen")),
 	}
 }
 
@@ -137,7 +146,7 @@ type helpGroup struct {
 // a later task — the help view itself is out of scope here).
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
-		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut}},
+		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
 		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort, k.NewTag}},
 	}

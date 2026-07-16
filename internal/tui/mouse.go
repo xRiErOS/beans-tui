@@ -135,6 +135,19 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m.dismissToast()
 	}
 
+	// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): Maus im Vollbild --
+	// explizites Nicht-Ziel (v1, dokumentierter Scope-Cut). A click/wheel
+	// against the fullscreen single-pane geometry would otherwise be
+	// interpreted against the (WRONG) Split-Geometry clickPaneGeometry/
+	// treeClickRow/backlogClickRow/detailClickRow still compute -- this guard
+	// turns that into a safe no-op instead of a false hit against the wrong
+	// row/section. Placed directly after the Toast-Klick-Vorrang (that stays
+	// unconditional, design decision a) and BEFORE the pre-existing overlay
+	// guard below (same full-capture precedent).
+	if m.fullscreen != fullscreenNone {
+		return m, nil
+	}
+
 	// Modale/Overlays sind tastaturgesteuert -- Maus ignorieren (kein
 	// Fehlklick-Fokus), devd precedent update.go:470-474. m.view ==
 	// viewLobby closes the gap bt-mne6's own Notes-für-T6 flagged (T4 could

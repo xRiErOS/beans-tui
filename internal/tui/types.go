@@ -98,6 +98,21 @@ func cloneBoolMap(src map[string]bool) map[string]bool {
 	return out
 }
 
+// fullscreenMode enumerates F01's Vollbild-Navigation state (design-spec.md
+// §15 "F01 — Vollbild-Navigation", bean bt-13l7, E9 Task 7): ORTHOGONAL to
+// viewID (m.view) -- Vollbild changes only HOW the active view's Master-
+// Detail pair renders (one full-width pane instead of two side-by-side), it
+// never changes WHICH viewID is active. No new viewID value is added for
+// this (design decision, explicitly verified against the bean's own
+// Akzeptanz-Checkliste).
+type fullscreenMode int
+
+const (
+	fullscreenNone   fullscreenMode = iota
+	fullscreenList                  // Tree ODER Backlog-Liste (je nach m.view), Vollbreite
+	fullscreenDetail                // Detail-Accordion EINES Beans, Vollbreite
+)
+
 // model is the App-Shell state. T8 wires the read-only Tree (design-spec.md
 // §6 V2 basis) + async load/reload/watch; mutation state (forms, pickers,
 // menus) lands in E2/E3 as new fields on this same struct (devd port
@@ -508,6 +523,21 @@ type model struct {
 	// (T6-Note bug class: a toggle from repo A must not silently apply to
 	// repo B).
 	showArchived bool
+
+	// Vollbild `v` (F01 Kernmechanik, E9 Task 7, bean bt-13l7, design-spec.md
+	// §15): fullscreen is ORTHOGONAL to m.view (fullscreenMode doc-stamp
+	// above). fullscreenBeanID is the bean shown in fullscreenDetail --
+	// UNABHÄNGIG vom Tree-/Backlog-Cursor (a Relations-Sprung inside
+	// fullscreenDetail moves ONLY this field, never m.cursorID/
+	// m.backlogList.cursor -- those only sync back on esc-exit,
+	// keyDetailFocus's Back-case). navBack/navForward ([]string Bean-ID-
+	// Stacks) are declared here ALREADY but deliberately left empty/unused by
+	// this task (Task 8, bean bt-1vbp, fills them: the History-Stack
+	// ctrl+left/ctrl+right, `[`/`]` -- declaring the fields now avoids an
+	// otherwise-unnecessary struct diff in that follow-up task).
+	fullscreen          fullscreenMode
+	fullscreenBeanID    string
+	navBack, navForward []string
 
 	// repoMetrics is the Lobby's own "Open/Total" column per configured
 	// repo (design note, bean bt-zhwl: "Kosten/Latenz-Abwägung dokumentieren"

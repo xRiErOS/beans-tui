@@ -292,6 +292,29 @@ func TestMouseIgnoredWhileOverlayOpen(t *testing.T) {
 	}
 }
 
+// TestHandleMouseIgnoredWhenFullscreenActive guards F01's own documented
+// Scope-Cut (design-spec.md §15, E9 Task 7, bean bt-13l7): a click/wheel
+// against the fullscreen single-pane geometry would otherwise be
+// misinterpreted against the (wrong) Split-Geometry clickPaneGeometry/
+// treeClickRow/etc. still compute -- the guard turns it into a safe no-op,
+// mirroring TestMouseIgnoredWhileOverlayOpen's own pattern.
+func TestHandleMouseIgnoredWhenFullscreenActive(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.cursorID = "ms-1"
+	m.fullscreen = fullscreenList
+
+	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(wheel) did not return a model, got %T", tm)
+	}
+	if m2.cursorID != "ms-1" {
+		t.Fatalf("wheel while fullscreen is active moved the cursor: cursorID = %q, want unchanged (ms-1)", m2.cursorID)
+	}
+}
+
 // TestToastClickDismissesEvenWithFormOpen is the Cross-Feature-Fix
 // regression guard (design decision a, Port devd DD2-272/273): a Toast
 // click-dismiss must reach the PO even while a form is open. Goes through

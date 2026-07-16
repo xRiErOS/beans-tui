@@ -778,17 +778,50 @@ func (m model) viewBrowseRepo() string {
 	// head/localKeys strings above (Golden-Rule-Drift-Schutz).
 	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	nodes := m.visibleNodes()
-	// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
-	// pane's rows, costing 1 line of its bodyH content budget -- the actual
-	// tree rows window to bodyH-1 (PF-10, bean bt-uyzf, widened from bodyH-3
-	// now that renderPane no longer reserves its own title+separator lines)
-	// so the combined [searchLine, ...treeRows] slice still fits renderPane's
-	// own Golden-Rule-#1 line cap.
-	searchLine := m.treeSearchLine(lw-2, "") // D02: Tree never shows a sort suffix
-	treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-1)...)
-	treeBox := renderPane(pane{rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
-	detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)
-	body := lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
+
+	var body string
+	if m.fullscreen != fullscreenNone {
+		// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): Vollbild --
+		// checked BEFORE the Split's JoinHorizontal build below, a NEW
+		// render branch entirely (the Split path stays byte-for-byte
+		// unchanged for the golden fixtures, Basis-Goldens-Gegenbeleg).
+		// paneW is the SINGLE pane's own content-width param passed to
+		// renderPane/renderAccordionPane (mirrors masterDetailWidths' lw/rw
+		// contract, view.go: EVERY renderPane/renderAccordionPane caller's
+		// `w` is a CONTENT width, its OWN RoundedBorder adds +2 more --
+		// masterDetailWidths' lw+rw+4==innerW is exactly this same
+		// accounting for the TWO Split panes; here there is only ONE pane,
+		// so its content width is innerW-2, not innerW itself (bean
+		// bt-13l7's "innerW direkt als Pane-Breite" reads as the pane's
+		// TOTAL occupied width, i.e. what masterDetailWidths' RESULT already
+		// represents, not renderPane's raw `w` argument -- passing innerW
+		// unadjusted double-counts the border and overflows the outer frame
+		// by 2 columns, caught live via tmux smoke). bodyH is still the
+		// correct height source (unverändert wiederverwendet).
+		paneW := innerW - 2
+		var listRows []string
+		if m.fullscreen == fullscreenList {
+			searchLine := m.treeSearchLine(paneW-2, "") // D02: Tree never shows a sort suffix
+			listRows = append([]string{searchLine}, m.treeRows(nodes, true, bodyH-1)...)
+		}
+		var detailBean *data.Bean
+		if m.fullscreen == fullscreenDetail {
+			detailBean = m.focusedBean() // resolves via focusedBean's own fullscreenDetail case (update.go)
+		}
+		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel)
+	} else {
+		// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
+		// pane's rows, costing 1 line of its bodyH content budget -- the actual
+		// tree rows window to bodyH-1 (PF-10, bean bt-uyzf, widened from bodyH-3
+		// now that renderPane no longer reserves its own title+separator lines)
+		// so the combined [searchLine, ...treeRows] slice still fits renderPane's
+		// own Golden-Rule-#1 line cap.
+		searchLine := m.treeSearchLine(lw-2, "") // D02: Tree never shows a sort suffix
+		treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-1)...)
+		treeBox := renderPane(pane{rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
+		detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
+	}
 
 	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
 	out := outerBorder(content, innerW, true)

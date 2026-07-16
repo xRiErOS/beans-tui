@@ -951,6 +951,19 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): keyFullscreen's own
+	// dispatch checkpoint -- NACH FocusIn/FocusOut (same fokus-/Ansichts-
+	// Modus-Familie), VOR keyNodeAction (below). Handles `v` (entry/no-op),
+	// `enter` while m.fullscreen == fullscreenList (Listen-Vollbild ->
+	// Detail-Vollbild), and `esc` while m.fullscreen == fullscreenList
+	// (direct exit -- the fullscreenDetail esc-cascade lives in
+	// keyDetailFocus's own Back-case instead, reached via the m.detailFocus
+	// routing line below, since it needs m.detailLevel to decide which rung
+	// fires).
+	if handled, nm, cmd := m.keyFullscreen(msg); handled {
+		return nm, cmd
+	}
+
 	if keybind.Matches(msg, keys.Refresh) {
 		return m, loadCmd(m.client)
 	}
@@ -963,7 +976,16 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return nm, cmd
 	}
 
-	if m.detailFocus {
+	// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): m.fullscreen ==
+	// fullscreenDetail routes here TOO, not just m.detailFocus -- inside the
+	// Vollbild-Detail, m.detailFocuss truth value is irrelevant to the
+	// dispatch decision, the Vollbild state itself is the signal-giver (the
+	// entry point via listen-Vollbild `enter`, or a Relations-Sprung inside
+	// fullscreenDetail, never touches m.detailFocus at all). focusedBean()'s
+	// own new fullscreenDetail case (above) is what makes this reuse
+	// VERBATIM-safe: every field-kaskade already resolves against the
+	// correct (fullscreen) bean.
+	if m.detailFocus || m.fullscreen == fullscreenDetail {
 		return m.keyDetailFocus(msg)
 	}
 	if m.view == viewBacklog {
@@ -977,6 +999,23 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // view_detail_issue.go:20-35) -- view-agnostic so Task 5's Backlog view
 // (viewBacklog case below, bean bt-gzu6) reuses keyDetailFocus verbatim.
 func (m model) focusedBean() *data.Bean {
+	// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): fullscreenDetail's
+	// target is a VOLLBREITE, view-agnostic single bean (m.fullscreenBeanID),
+	// UNABHÄNGIG vom Tree-/Backlog-Cursor -- checked BEFORE the m.view switch
+	// below so keyDetailFocus (every Feld-Kaskade, PF-5) works VERBATIM in
+	// the Vollbild-Detail without a second, duplicated navigation
+	// implementation (same "one view-agnostic dispatcher" principle the
+	// m.view switch itself already establishes for Tree vs. Backlog).
+	if m.fullscreen == fullscreenDetail {
+		if m.idx == nil {
+			return nil
+		}
+		b, ok := m.idx.ByID[m.fullscreenBeanID]
+		if !ok {
+			return nil
+		}
+		return b
+	}
 	switch m.view {
 	case viewBacklog: // E2 Task 5: the Backlog list's own selection, NOT the (possibly stale/irrelevant) tree cursor
 		return m.backlogSelected()
@@ -1090,9 +1129,37 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if keybind.Matches(msg, keys.Back) {
 		if m.detailLevel == 1 {
 			m.detailLevel = 0
-		} else {
-			m.detailFocus = false
+			return m, nil
 		}
+		// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): a NEW rung in
+		// D03's "eine Ebene pro Druck" cascade -- section-level esc inside
+		// fullscreenDetail leaves the Vollbild ENTIRELY (IMMER direkt zu
+		// Browse/Backlog, NICHT schrittweise durch die Relations-Sprung-Kette
+		// -- die History-Rückwärtsnavigation ist Task 8s eigene Aufgabe,
+		// ctrl+left/`[`). The Split-Detail stays focused afterward (PO: "mit
+		// dem AKTUELLEN Bean selektiert" -- the just-shown Vollbild-Detail
+		// bean, not a jump back to the Tree/Backlog's own focus), and the
+		// Tree-/Backlog-cursor syncs onto m.fullscreenBeanID so Split-Modus
+		// shows the SAME bean the PO was just looking at.
+		if m.fullscreen == fullscreenDetail {
+			id := m.fullscreenBeanID
+			m.fullscreen = fullscreenNone
+			m.detailFocus = true
+			if m.view == viewBacklog {
+				vis := m.backlogVisible()
+				for i, bb := range vis {
+					if bb.ID == id {
+						m.backlogList.cursor = i
+						break
+					}
+				}
+			} else {
+				m.expanded = expandAncestorsOf(m.idx, m.expanded, id)
+				m.cursorID = id
+			}
+			return m, nil
+		}
+		m.detailFocus = false
 		return m, nil
 	}
 
@@ -1156,6 +1223,22 @@ func (m model) activateDetailField(b *data.Bean, f relationField) (tea.Model, te
 	default: // "" -- Relations jump, unchanged E2 behavior
 		if f.beanID == "" {
 			return m, nil // unresolved reference -- nothing to jump to
+		}
+		// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): the ONE new case
+		// this task adds here -- inside fullscreenDetail, a Relations-Sprung
+		// must NOT exit to the Split-Tree/Backlog (the branch below, m.
+		// detailFocus = false) -- it stays in fullscreenDetail, now showing
+		// the JUMP TARGET. History-Push (navBack/navForward) is explicitly
+		// Task 8's own job (bean bt-1vbp, "Notes for Task 8" in this bean) --
+		// this is ONLY the target switch, mirroring the SAME Detail-Fokus-
+		// Maschine reset keyFullscreen's own Listen-Vollbild-entry uses
+		// (Meta/section level, field cursor 0). The Split-Modus-Sprung branch
+		// below stays byte-for-byte unchanged -- no PO-Wortlaut requires
+		// History there either (design-spec.md §15).
+		if m.fullscreen == fullscreenDetail {
+			m.fullscreenBeanID = f.beanID
+			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+			return m, nil
 		}
 		m.expanded = expandAncestorsOf(m.idx, m.expanded, f.beanID) // I01: clone-based
 		m.cursorID = f.beanID
