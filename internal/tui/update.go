@@ -450,12 +450,14 @@ func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 // whatever defs slice keyTagMgmtInput happened to compute at dispatch time --
 // the on-disk file is the single source of truth this function trusts, same
 // D02 tolerant-missing philosophy as everywhere else this registry is read.
-// The cursor then lands on the just-created/renamed row by NAME (mirrors
-// applyLoaded's own cursor-refinding-by-ID pattern one layer up) -- the
-// input's OWN (still-unblurred) Value() at this point is exactly the name
-// that was just submitted, since nothing else can touch it between
-// keyTagMgmtInput's dispatch and this single Msg resolving (Update()
-// processes one Msg at a time).
+// The cursor then lands on msg.refindName's row by NAME (mirrors
+// applyLoaded's own cursor-refinding-by-ID pattern one layer up) -- the name
+// is passed EXPLICITLY by every dispatch site (Create: the new name; Delete:
+// the deleted target, T4 Fix-Runde 1 B01, bean bt-1lsu), NEVER read
+// implicitly from m.tagMgmtInput.Value() here: T3's esc-abort deliberately
+// leaves the typed text in the input, so an implicit read let an aborted
+// Create redirect the cursor after a completely unrelated Delete
+// (reviewer-verified repro, tagDefsSavedMsg's own doc-stamp, messages.go).
 func (m model) applyTagDefsSaved(msg tagDefsSavedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		var toastCmd tea.Cmd
@@ -463,7 +465,6 @@ func (m model) applyTagDefsSaved(msg tagDefsSavedMsg) (tea.Model, tea.Cmd) {
 		return m, toastCmd
 	}
 
-	name := strings.TrimSpace(m.tagMgmtInput.Value())
 	m.tagMgmtInputActive = false
 	m.tagMgmtInput.Blur()
 	m.tagMgmtInput.SetValue("")
@@ -477,7 +478,7 @@ func (m model) applyTagDefsSaved(msg tagDefsSavedMsg) (tea.Model, tea.Cmd) {
 	m.tagMgmtRows = tagRegistryRows(m.idx, defs)
 	m.tagMgmtCursor.setLen(len(m.tagMgmtRows))
 	for i, r := range m.tagMgmtRows {
-		if r.name == name {
+		if r.name == msg.refindName {
 			m.tagMgmtCursor.cursor = i
 			break
 		}

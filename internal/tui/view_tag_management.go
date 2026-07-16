@@ -435,7 +435,10 @@ func (m model) keyTagMgmtInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.tagMgmtInputMode {
 		case "create":
 			defs := definedTagNames(m.tagMgmtRows)
-			return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, name))
+			// refindName = the new name, explicitly (B01, Fix-Runde 1, bean
+			// bt-1lsu): applyTagDefsSaved no longer reads the input's Value()
+			// implicitly -- every dispatch site names its own cursor target.
+			return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, name), name)
 		}
 		return m, nil
 	}
@@ -516,7 +519,13 @@ func (m model) keyTagMgmtDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tagMgmtDeleteConfirm = false
 		m.tagMgmtDeleteTarget = ""
 		defs := definedTagNames(m.tagMgmtRows)
-		return m, saveTagDefsCmd(m.client, data.RemoveTagDefName(defs, target))
+		// refindName = the deleted target, explicitly (B01, Fix-Runde 1,
+		// bean bt-1lsu): a still-USED tag falls into the Free group and the
+		// cursor follows it there; an unused tag vanishes entirely, the
+		// name-search misses, and the cursor stays put -- and stale text in
+		// the (esc-aborted, never-cleared) Create input can no longer
+		// redirect the cursor, since applyTagDefsSaved no longer reads it.
+		return m, saveTagDefsCmd(m.client, data.RemoveTagDefName(defs, target), target)
 	case keybind.Matches(msg, keys.Back), msg.String() == "n":
 		m.tagMgmtDeleteConfirm = false
 		m.tagMgmtDeleteTarget = ""

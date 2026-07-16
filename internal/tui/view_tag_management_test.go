@@ -554,6 +554,14 @@ func TestKeyTagMgmtInputCapturesEveryKeyNoLeak(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2")
 	m.view = viewTagManagement
+	// I02 (T4-Review Runde 1): a DEFINED row must sit under the cursor,
+	// otherwise the tagMgmtDeleteConfirm assertion below is dead --
+	// openTagMgmtDeleteConfirm no-ops on an empty row list, so a leaked 'd'
+	// could never flip the bool and the assertion would stay green even with
+	// the input-capture guard removed (the exact dead-assertion trap the T2
+	// review's own F01 already documented for the focusedBean()==nil case).
+	m.tagMgmtRows = []tagRegistryRow{{name: "leak-probe", defined: true, count: 1}}
+	m.tagMgmtCursor.setLen(1)
 	m = step(t, m, runeMsg('n'))
 	if !m.tagMgmtInputActive {
 		t.Fatal("setup: want input active after 'n'")
@@ -564,8 +572,19 @@ func TestKeyTagMgmtInputCapturesEveryKeyNoLeak(t *testing.T) {
 	}
 	m = step(t, m, keyMsg(tea.KeyCtrlK))
 
+	// I02 (T4-Review Runde 1): the Delete-Confirm is D15's page-local BOOL
+	// (tagMgmtDeleteConfirm), never an overlayID case -- the former
+	// m.overlay assertion here was dead (mutation-probe-verified: it stayed
+	// green even with the input-capture guard removed, since keyTagManagement's
+	// Delete path never touches m.overlay). The live check is the bool
+	// itself; m.overlay is still asserted as a general no-overlay-opens
+	// guard (e.g. against a future regression routing 'd' to the GLOBAL
+	// keyNodeAction Delete-Confirm, which DOES use overlayDeleteConfirm).
+	if m.tagMgmtDeleteConfirm {
+		t.Fatal("'d' while typing must not open the page-local Delete-Confirm (D15 bool)")
+	}
 	if m.overlay != overlayNone {
-		t.Fatalf("'d' while typing must not open the Delete-Confirm, overlay = %v", m.overlay)
+		t.Fatalf("no overlay may open while typing, overlay = %v", m.overlay)
 	}
 	if m.helpOpen {
 		t.Fatal("'?' while typing must not open Help")
@@ -1187,6 +1206,112 @@ func TestFullDeleteFlowUnusedTagDisappearsEntirely(t *testing.T) {
 	}
 }
 
+// TestFullDeleteFlowIgnoresStaleAbortedCreateInputText is the B01
+// regression (T4-Review Runde 1, medium): applyTagDefsSaved used to re-find
+// the cursor via strings.TrimSpace(m.tagMgmtInput.Value()) -- safe while
+// Create was the ONLY saveTagDefsCmd caller, but T4's Delete path never
+// touches the input field, and T3's esc-abort deliberately does NOT clear
+// Value(). Repro (reviewer's own, verbatim shape): type a name into the
+// Create input, abort with esc, then run an UNRELATED Delete -- the cursor
+// must not jump onto the stale typed text's row. Fixed by tagDefsSavedMsg's
+// explicit refindName field (both callers pass the name explicitly, no
+// implicit input read).
+func TestFullDeleteFlowIgnoresStaleAbortedCreateInputText(t *testing.T) {
+	dir := t.TempDir()
+	client := &data.Client{RepoDir: dir}
+	if err := client.SaveTagDefs([]string{"alpha", "bravo", "charlie"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+	m := fixtureModel(t, fixtureBeans()) // no tags on any bean
+	m.client = client
+	m.repoDir = dir
+	m.view = viewTagManagement
+	nm, _ := m.openTagManagementPage()
+	m = nm.(model)
+	// rows: alpha, bravo, charlie (all defined, alpha-sorted, all count 0)
+
+	// Type "charlie" into the Create input, then abort with esc -- T3's esc
+	// closes the sub-mode but deliberately does NOT clear the typed text.
+	m = step(t, m, runeMsg('n'))
+	for _, r := range "charlie" {
+		m = step(t, m, runeMsg(r))
+	}
+	m = step(t, m, keyMsg(tea.KeyEsc))
+	if m.tagMgmtInputActive {
+		t.Fatal("setup: esc must close the input sub-mode")
+	}
+
+	// Cursor on alpha (index 0), delete it -- an operation completely
+	// unrelated to the aborted Create above.
+	m.tagMgmtCursor.cursor = 0
+	if m.tagMgmtRows[0].name != "alpha" {
+		t.Fatalf("setup: want row 0 = alpha, got %+v", m.tagMgmtRows)
+	}
+	m = step(t, m, runeMsg('d'))
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	m = tm.(model)
+	if cmd == nil {
+		t.Fatal("enter on the Confirm must return the saveTagDefsCmd Cmd")
+	}
+	tm2, _ := m.Update(cmd())
+	m = tm2.(model)
+
+	// rows now: bravo, charlie. The cursor must NOT land on "charlie" just
+	// because that text is still sitting in the aborted Create input.
+	if got := m.tagMgmtRows[m.tagMgmtCursor.cursor].name; got == "charlie" {
+		t.Fatalf("B01: cursor jumped to stale aborted-Create text %q after an independent Delete", got)
+	}
+	if m.tagMgmtCursor.cursor != 0 {
+		t.Fatalf("cursor = %d, want 0 (deleted row vanished entirely, no refind target left)", m.tagMgmtCursor.cursor)
+	}
+}
+
+// TestFullDeleteFlowCursorFollowsUsedTagIntoFreeGroup pins refindName's own
+// positive Delete-side behavior (B01 fix, T4-Review Runde 1): Delete passes
+// its TARGET as the refind name, so deleting a still-USED tag's Definition
+// moves the cursor along with the row as it falls into the Free group --
+// instead of silently pointing at whatever row inherited the old index.
+func TestFullDeleteFlowCursorFollowsUsedTagIntoFreeGroup(t *testing.T) {
+	dir := t.TempDir()
+	client := &data.Client{RepoDir: dir}
+	// "urgent" is used by tk-1+tk-2 (fixtureBeansTagged). Registry layout is
+	// picked so the deleted row's OLD index (0: defined group sorts urgent <
+	// zzz-last) and its NEW free-group position (1: after the one remaining
+	// defined row) genuinely differ -- a cursor that merely kept its old
+	// numeric index would land on "zzz-last", not follow "urgent".
+	if err := client.SaveTagDefs([]string{"urgent", "zzz-last"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+	m := fixtureModel(t, fixtureBeansTagged())
+	m.client = client
+	m.repoDir = dir
+	m.view = viewTagManagement
+	nm, _ := m.openTagManagementPage()
+	m = nm.(model)
+
+	found := false
+	for i, r := range m.tagMgmtRows {
+		if r.name == "urgent" && r.defined {
+			m.tagMgmtCursor.cursor = i
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("setup: want 'urgent' as a defined row, got %+v", m.tagMgmtRows)
+	}
+
+	m = step(t, m, runeMsg('d'))
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	m = tm.(model)
+	tm2, _ := m.Update(cmd())
+	m = tm2.(model)
+
+	got := m.tagMgmtRows[m.tagMgmtCursor.cursor]
+	if got.name != "urgent" || got.defined {
+		t.Fatalf("want cursor to follow 'urgent' into the Free group, got %+v", got)
+	}
+}
+
 // TestTagMgmtDeleteConfirmBoxShowsLiveCountAndName guards the Confirm
 // modal's own render contract (D12's own "zeigt trotzdem den LIVE-
 // Verwendungszähler VOR dem Löschen" wording): the box's text names the
@@ -1229,6 +1354,31 @@ func TestTagMgmtDeleteConfirmBoxZeroCountShorterText(t *testing.T) {
 	}
 	if strings.Contains(out, "Still used by") {
 		t.Errorf("zero-count text must not also render the 'Still used by' wording:\n%s", out)
+	}
+}
+
+// TestTagMgmtDeleteConfirmBoxSingularOneBean pins the count==1 singular
+// branch ("Still used by 1 bean — it keeps the tag ...") -- I01, T4-Review
+// Runde 1: this bug class has repo precedent (box_confirm_delete.go's own
+// I02 doc-stamp, "1 child(ren) lose" was grammatically wrong for count==1),
+// so the singular branch gets its own dedicated test exactly like the
+// count==0 and count==7 cases above/below it.
+func TestTagMgmtDeleteConfirmBoxSingularOneBean(t *testing.T) {
+	m := newModel(nil, "")
+	m.width = 80
+	m.tagMgmtRows = []tagRegistryRow{{name: "solo-tag", defined: true, count: 1}}
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "solo-tag"
+
+	out := m.tagMgmtDeleteConfirmBox()
+	if !strings.Contains(out, "Still used by 1 bean") {
+		t.Errorf("want the singular 'Still used by 1 bean' text, got:\n%s", out)
+	}
+	if strings.Contains(out, "beans") {
+		t.Errorf("count==1 must not render the plural 'beans' wording:\n%s", out)
+	}
+	if strings.Contains(out, "Not currently used") {
+		t.Errorf("count==1 must not render the zero-count text:\n%s", out)
 	}
 }
 

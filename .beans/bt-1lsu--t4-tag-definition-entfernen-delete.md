@@ -1,11 +1,11 @@
 ---
 # bt-1lsu
 title: T4 — Tag-Definition entfernen (Delete)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:30Z
-updated_at: 2026-07-16T18:19:13Z
+updated_at: 2026-07-16T18:25:56Z
 parent: bt-362n
 blocked_by:
     - bt-r92i
@@ -408,3 +408,55 @@ Sonst keine Abweichungen vom Bean-Body.
 - **I02 (low, view_tag_management_test.go:553-580):** TestKeyTagMgmtInputCapturesEveryKeyNoLeak prüft laut Kommentar 'd darf Delete-Confirm nicht öffnen' via m.overlay — die D15-Implementierung berührt overlay nie: Assertion tot (Mutations-Probe belegt). m.tagMgmtDeleteConfirm-Check ergänzen/ersetzen.
 
 Fix-Runde beim selben Implementer; Re-Review beim selben Reviewer.
+
+## Fix-Runde 1 (2026-07-16, alle drei Findings umgesetzt)
+
+**Commit:** `fix(tui): T4-R1 refindName statt Input-Read (B01)` — `internal/tui/{messages,update,view_tag_management,view_tag_management_test}.go` + dieses bean.
+
+### B01 (medium) — refindName-Feld (Reviewer-Empfehlung, NICHT die Minimal-Alternative)
+
+`tagDefsSavedMsg` um `refindName string` erweitert; `saveTagDefsCmd(c, defs, refindName)` reicht ihn unverändert durch. Beide Dispatch-Sites benennen ihr Cursor-Ziel jetzt EXPLIZIT: Create (`keyTagMgmtInput`) übergibt den neuen Namen, Delete (`keyTagMgmtDeleteConfirm`) das gelöschte Ziel. `applyTagDefsSaved` liest `msg.refindName` — der implizite `strings.TrimSpace(m.tagMgmtInput.Value())`-Read ist GESTRICHEN (Doc-Stamps an Msg-Typ, apply-Funktion und beiden Callern erklären das Warum). Positiver Nebeneffekt der Delete-Ziel-Wahl („Ziel-Default" laut Finding): der Cursor FOLGT einem noch benutzten Tag in die Frei-Gruppe (eigener Pin-Test, s.u.); ein unbenutztes Tag verschwindet, die Namenssuche verfehlt, der Cursor bleibt stehen (identische Miss-Semantik wie vorher). „Notes for T5: applyTagDefsSaved ist Mode-agnostisch" ist damit real — T5/Rename übergibt einfach den neuen Namen.
+
+RED (Pflicht-Regressionstest, wörtlich, VOR dem Fix — exakt das Reviewer-Repro):
+
+```
+=== RUN   TestFullDeleteFlowIgnoresStaleAbortedCreateInputText
+    view_tag_management_test.go:1243: B01: cursor jumped to stale aborted-Create text "charlie" after an independent Delete
+--- FAIL: TestFullDeleteFlowIgnoresStaleAbortedCreateInputText (0.00s)
+=== RUN   TestFullDeleteFlowCursorFollowsUsedTagIntoFreeGroup
+    view_tag_management_test.go:1292: want cursor to follow 'urgent' into the Free group, got {name:zzz-last count:0 defined:true}
+--- FAIL: TestFullDeleteFlowCursorFollowsUsedTagIntoFreeGroup (0.00s)
+FAIL
+```
+
+GREEN (nach dem Fix):
+
+```
+=== RUN   TestFullDeleteFlowIgnoresStaleAbortedCreateInputText
+--- PASS: TestFullDeleteFlowIgnoresStaleAbortedCreateInputText (0.00s)
+=== RUN   TestFullDeleteFlowCursorFollowsUsedTagIntoFreeGroup
+--- PASS: TestFullDeleteFlowCursorFollowsUsedTagIntoFreeGroup (0.00s)
+PASS
+```
+
+Der zweite Test ist ein bewusster Zusatz-Pin des positiven refindName-Delete-Verhaltens (Registry `{urgent, zzz-last}` so gewählt, dass alter Index (0) und neue Frei-Gruppen-Position (1) divergieren — ein numerisch stehenbleibender Cursor landete auf `zzz-last`, RED-Beleg oben zeigt genau das gegen den alten Code).
+
+### I01 (low) — Singular-Test count==1
+
+`TestTagMgmtDeleteConfirmBoxSingularOneBean` ergänzt (analog count==0/count==7): asserted „Still used by 1 bean", KEIN „beans", KEIN Zero-Count-Text. GRÜN gegen den bestehenden Code (der Singular-Zweig war korrekt implementiert, nur ungetestet — reines Coverage-Finding, kein RED nötig/möglich).
+
+### I02 (low) — tote m.overlay-Assertion
+
+In `TestKeyTagMgmtInputCapturesEveryKeyNoLeak`: `m.tagMgmtDeleteConfirm`-Check ERGÄNZT (die alte overlay-Assertion bleibt als allgemeiner „kein Overlay öffnet"-Guard mit korrigiertem Kommentar — der GLOBALE keyNodeAction-Delete-Pfad nutzt overlayDeleteConfirm ja durchaus). ZUSÄTZLICH (über das Finding hinaus, gleiche Dead-Assertion-Falle wie T2-Review-F01): das Test-Setup bekommt eine definierte Zeile unter dem Cursor (`leak-probe`) — ohne sie wäre auch die NEUE Assertion tot (openTagMgmtDeleteConfirm no-opt auf leerer Liste). Liveness per Mutations-Probe belegt: `if m.tagMgmtInputActive`-Guard temporär deaktiviert (`if false && ...`) →
+
+```
+=== RUN   TestKeyTagMgmtInputCapturesEveryKeyNoLeak
+    view_tag_management_test.go:584: 'd' while typing must not open the page-local Delete-Confirm (D15 bool)
+--- FAIL: TestKeyTagMgmtInputCapturesEveryKeyNoLeak (0.00s)
+```
+
+Guard restauriert → PASS.
+
+### Gates (Fix-Runde)
+
+`command gofmt -l .` leer · `command go vet ./...` leer · Goldens `-count=2` 10/10 PASS, `git diff --stat -- internal/tui/testdata/` leer · voller Lauf `command go test ./... -count=1` grün (alle Pakete ok). Kein Smoke-Re-Run nötig (reine Cursor-Refind-/Test-Änderung, beide E2E-Flows decken den geänderten Pfad durch `m.Update()`-Ketten ab).

@@ -346,16 +346,33 @@ func searchCmd(c *data.Client, query string) tea.Cmd {
 // is to mutationDoneMsg (messages.go doc-stamp above), one layer further:
 // each mutation family gets its own Msg exactly when its OWN completion tail
 // genuinely diverges from the shared one.
-type tagDefsSavedMsg struct{ err error }
+//
+// refindName (E10 Task 4 Fix-Runde 1, bean bt-1lsu B01): the row name
+// applyTagDefsSaved re-finds the cursor on after the rows rebuild -- passed
+// EXPLICITLY by every dispatch site (Create: the new name; Delete: the
+// deleted target, so the cursor follows a still-used tag into the Free
+// group) instead of implicitly read from m.tagMgmtInput.Value() at apply
+// time. The implicit read was safe while Create was the ONLY caller, but
+// T4's Delete never touches the input field AND T3's esc-abort deliberately
+// leaves the typed text in place -- an aborted Create followed by an
+// unrelated Delete re-found the cursor on the STALE typed text (reviewer-
+// verified repro, bean bt-1lsu Review-Findings Runde 1). A refindName with
+// no matching row leaves the cursor where it was (same miss semantics the
+// old name-search already had).
+type tagDefsSavedMsg struct {
+	err        error
+	refindName string
+}
 
 // saveTagDefsCmd wraps a single Tag-Registry SaveTagDefs write (a local,
 // synchronous file write, data/tagdefs.go) into an async Cmd -- CONSISTENCY
 // with every other state-changing call in this codebase demands a Cmd, never
 // a direct call inside the Update path, even though the underlying I/O is
 // fast enough it would not technically need one (mirrors mutateCmd's own
-// build shape, messages.go above).
-func saveTagDefsCmd(c *data.Client, defs []string) tea.Cmd {
+// build shape, messages.go above). refindName rides along untouched into
+// tagDefsSavedMsg (B01, doc-stamp there).
+func saveTagDefsCmd(c *data.Client, defs []string, refindName string) tea.Cmd {
 	return func() tea.Msg {
-		return tagDefsSavedMsg{err: c.SaveTagDefs(defs)}
+		return tagDefsSavedMsg{err: c.SaveTagDefs(defs), refindName: refindName}
 	}
 }
