@@ -967,8 +967,15 @@ func TestEditorFinishedTargetVanishedSurfacesError(t *testing.T) {
 	if nm.err == "" {
 		t.Fatal("a vanished target must surface a status-line error")
 	}
-	if nm.toast == nil || nm.toast.kind != toastWarn || nm.toast.title != nm.err {
-		t.Fatalf("toast = %+v, want a non-nil toastWarn mirroring m.err %q (E5 Task 1 Dual-Write)", nm.toast, nm.err)
+	// F04 (bean bt-6bgn) split the former title==m.err mirror: m.err now
+	// additionally carries the recovery tempfile's path (see
+	// TestApplyEditorFinishedVanishedTargetRecoversTempfile below), while
+	// the toast title stays the bare note -- same title/ctx split as the
+	// conflict branch and the F01 else branch (applyMutationResult,
+	// update.go). The Dual-Write contract (toast mirrors the status-line
+	// NOTE) holds as a prefix relation now.
+	if nm.toast == nil || nm.toast.kind != toastWarn || !strings.HasPrefix(nm.err, nm.toast.title) {
+		t.Fatalf("toast = %+v, want a non-nil toastWarn whose title prefixes m.err %q (E5 Task 1 Dual-Write, F04 title/ctx split)", nm.toast, nm.err)
 	}
 	if nm.editorTarget != "" {
 		t.Errorf("editorTarget = %q, want cleared even on the vanished-target path", nm.editorTarget)
@@ -978,5 +985,52 @@ func TestEditorFinishedTargetVanishedSurfacesError(t *testing.T) {
 	}
 	if nm.editorSnapshot != nil {
 		t.Errorf("editorSnapshot = %v, want cleared even on the vanished-target path", nm.editorSnapshot)
+	}
+}
+
+// TestApplyEditorFinishedVanishedTargetRecoversTempfile is F04's regression
+// test (bean bt-6bgn, T2-Re-Review-Fund -- same data-loss class as F01):
+// the vanished-target guard ("Bean no longer exists") used to discard the
+// FULL $EDITOR raw text with no recovery tempfile when the bean was deleted
+// externally during the editor session. Pikant: WITHOUT the guard the CLI
+// call would fail and F01's wrap (Commit 34c62c8) would recover -- the
+// guard actively PREVENTED the recovery. Same convention as the F01 fix
+// now: writeConflictTempFile(msg.content), path appended to the warn
+// message (m.err), toast ctx carries "Version saved:". Warn semantics
+// (toastWarn, not an error) stay unchanged -- that part is pinned by
+// TestEditorFinishedTargetVanishedSurfacesError above; THIS test pins the
+// recovery half: tempfile exists AND carries the full raw edited text.
+func TestApplyEditorFinishedVanishedTargetRecoversTempfile(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.editorTarget = "does-not-exist"
+	m.editorETag = "captured-etag"
+	m.editorSnapshot = &data.Bean{ID: "does-not-exist", Title: "Ghost", Status: "todo", Type: "task", Priority: "normal"}
+
+	fm := rawBeanFrontmatter{Title: "Ghost Edited", Status: "todo", Type: "task", Priority: "normal"}
+	raw := rawEditorText(t, fm, "edited body that must survive an externally deleted target")
+
+	tm, cmd := m.Update(editorFinishedMsg{content: raw, changed: true})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(editorFinishedMsg) did not return a model, got %T", tm)
+	}
+	if cmd == nil {
+		t.Fatal("a vanished target must still fire the warn-Toast's auto-dismiss Cmd")
+	}
+	if nm.toast == nil || nm.toast.kind != toastWarn {
+		t.Fatalf("toast = %+v, want a toastWarn (vanished target stays a warning, not an error -- F04 changes only the recovery half)", nm.toast)
+	}
+	const marker = "your version: "
+	idx := strings.Index(nm.err, marker)
+	if idx < 0 {
+		t.Fatalf("status line = %q, want it to carry the recovery tempfile's path (%q) -- F04: a vanished target must not lose the PO's edits", nm.err, marker)
+	}
+	path := strings.TrimSpace(nm.err[idx+len(marker):])
+	content, rerr := os.ReadFile(path)
+	if rerr != nil {
+		t.Fatalf("ReadFile(%q) error = %v (recovery tempfile missing)", path, rerr)
+	}
+	if string(content) != raw {
+		t.Fatalf("recovery tempfile content = %q, want the FULL raw edited text %q", content, raw)
 	}
 }

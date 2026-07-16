@@ -519,9 +519,23 @@ func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if _, ok := m.beanETag(id); !ok {
-		m.err = "Bean no longer exists — editor edit discarded"
+		// F04 (bean bt-6bgn, T2-Re-Review-Fund -- same data-loss class as
+		// F01): an externally deleted target used to discard the FULL
+		// $EDITOR text with no recovery -- pikant, WITHOUT this guard the
+		// CLI call would fail and F01's UpdateWhole-wrap below would
+		// recover; the guard actively prevented that. Same recovery
+		// convention as F01 now: kept tempfile, path appended to the
+		// status text, toast ctx carries it. Warn semantics (toastWarn,
+		// not an error) stay unchanged -- only the recovery half is new.
+		const note = "Bean no longer exists — editor edit discarded"
+		m.err = note
+		toastCtx := ""
+		if path, werr := writeConflictTempFile(msg.content); werr == nil {
+			m.err += " — your version: " + path
+			toastCtx = "Version saved: " + path
+		}
 		var toastCmd tea.Cmd
-		m, toastCmd = m.showToast(toastWarn, m.err, "", nil, false)
+		m, toastCmd = m.showToast(toastWarn, note, toastCtx, nil, false)
 		return m, toastCmd
 	}
 
