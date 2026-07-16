@@ -882,9 +882,22 @@ func TestOpenTagMgmtDeleteConfirmNoOpOnFreeTag(t *testing.T) {
 	m := newModel(nil, "")
 	m.view = viewTagManagement
 	m.tagMgmtRows = []tagRegistryRow{{name: "free-tag", defined: false, count: 3}}
-	nm, _ := m.openTagMgmtDeleteConfirm()
-	if nm.(model).tagMgmtDeleteConfirm {
-		t.Fatal("want no-op for a free (undefined) tag row")
+	nm, cmd := m.openTagMgmtDeleteConfirm()
+	mm := nm.(model)
+	if mm.tagMgmtDeleteConfirm {
+		t.Fatal("want no-op for a free (undefined) tag row -- no confirm opens, no Registry write")
+	}
+	// bt-ct3k (E11 Item 5): the no-op must no longer be SILENT -- a warn Toast
+	// replaces the former "nothing visibly happens" behavior (PO-Nebenbefund,
+	// US-Review Runde 7: felt like a broken keybind).
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast's auto-dismiss timeout) instead of a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast, got %+v", mm.toast)
+	}
+	if !strings.Contains(mm.toast.title, "Unregistered tag") {
+		t.Fatalf("toast.title = %q, want it to mention 'Unregistered tag'", mm.toast.title)
 	}
 }
 
@@ -955,8 +968,11 @@ func TestKeyTagManagementDeleteNoOpOnFreeRowViaFullDispatch(t *testing.T) {
 	if mm.tagMgmtDeleteConfirm {
 		t.Fatal("want no confirm opened for a free row")
 	}
-	if cmd != nil {
-		t.Fatalf("want nil Cmd, got %v", cmd)
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast), not a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast via the full dispatch, got %+v", mm.toast)
 	}
 }
 
@@ -1481,11 +1497,21 @@ func TestOpenTagMgmtRenameNoOpOnFreeTag(t *testing.T) {
 	m.tagMgmtCursor.setLen(1)
 
 	nm, cmd := m.openTagMgmtRename()
-	if nm.(model).tagMgmtInputActive {
-		t.Fatal("want no-op for a free (undefined) tag row")
+	mm := nm.(model)
+	if mm.tagMgmtInputActive {
+		t.Fatal("want no-op for a free (undefined) tag row -- no input opens, no Registry write")
 	}
-	if cmd != nil {
-		t.Fatalf("want nil Cmd, got %v", cmd)
+	// bt-ct3k (E11 Item 5): the no-op must no longer be SILENT -- a warn Toast
+	// replaces the former "nothing visibly happens" behavior (PO-Nebenbefund,
+	// US-Review Runde 7: felt like a broken keybind).
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast's auto-dismiss timeout) instead of a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast, got %+v", mm.toast)
+	}
+	if !strings.Contains(mm.toast.title, "Unregistered tag") {
+		t.Fatalf("toast.title = %q, want it to mention 'Unregistered tag'", mm.toast.title)
 	}
 }
 
@@ -1561,8 +1587,11 @@ func TestKeyTagManagementRenameNoOpOnFreeRowViaFullDispatch(t *testing.T) {
 	if mm.tagMgmtInputActive {
 		t.Fatal("want no input opened for a free row")
 	}
-	if cmd != nil {
-		t.Fatalf("want nil Cmd, got %v", cmd)
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast), not a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast via the full dispatch, got %+v", mm.toast)
 	}
 }
 

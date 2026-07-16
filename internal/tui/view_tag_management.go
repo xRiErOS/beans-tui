@@ -415,7 +415,13 @@ func (m model) openTagMgmtRename() (tea.Model, tea.Cmd) {
 	}
 	row := m.tagMgmtRows[m.tagMgmtCursor.cursor]
 	if !row.defined {
-		return m, nil
+		// bt-ct3k (E11 Item 5, PO-Review Runde 7/8): the former silent no-op
+		// read as a broken keybind -- a free row has no Registry Definition to
+		// rename, but the PO must be TOLD that instead of nothing visibly
+		// happening. toastWarn mirrors update.go's own existing warn-toast
+		// precedent (e.g. the conflict/in-flight notes there); the Registry
+		// itself stays untouched (no Cmd, no save).
+		return m.showToast(toastWarn, "Unregistered tag — modification not possible", "n to define first", nil, false)
 	}
 	return m.openTagMgmtInput("rename", row.name)
 }
@@ -540,7 +546,10 @@ func (m model) openTagMgmtDeleteConfirm() (tea.Model, tea.Cmd) {
 	}
 	row := m.tagMgmtRows[m.tagMgmtCursor.cursor]
 	if !row.defined {
-		return m, nil
+		// bt-ct3k (E11 Item 5): mirrors openTagMgmtRename's own toast fix one
+		// function up -- a free row has no Registry Definition to delete,
+		// surfaced now instead of a silent no-op.
+		return m.showToast(toastWarn, "Unregistered tag — modification not possible", "n to define first", nil, false)
 	}
 	m.tagMgmtDeleteConfirm = true
 	m.tagMgmtDeleteTarget = row.name

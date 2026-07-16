@@ -1,11 +1,11 @@
 ---
 # bt-ct3k
 title: 'Tag-Management: kein Feedback bei e/d auf freier Tag-Zeile'
-status: todo
+status: completed
 type: bug
 priority: normal
 created_at: 2026-07-16T20:31:51Z
-updated_at: 2026-07-16T20:47:11Z
+updated_at: 2026-07-16T21:15:18Z
 parent: bt-362n
 ---
 
@@ -64,3 +64,41 @@ externally"), Context leer ODER `"n to define first"` als Zweitzeile
 - Test: `keyTagManagement`-Tabellentest erweitert um Free-Row-Cases für
   beide Tasten, Toast-Zustand (`m.toast != nil`, `m.toast.kind ==
   toastWarn`) als Assertion.
+
+
+## Summary
+
+`openTagMgmtRename` und `openTagMgmtDeleteConfirm` (`internal/tui/view_tag_management.go`)
+zeigen bei `!row.defined` jetzt `m.showToast(toastWarn, "Unregistered tag — modification not
+possible", "n to define first", nil, false)` statt eines stillen No-Op. Registry/Bean-State
+bleibt unangetastet (kein Cmd, kein Save). Verhalten auf definierten Zeilen unverändert.
+
+## Test-Output
+
+RED (vor Fix, 4 Assertions):
+```
+--- FAIL: TestOpenTagMgmtDeleteConfirmNoOpOnFreeTag (0.00s)
+    want a non-nil Cmd (the warn Toast's auto-dismiss timeout) instead of a silent no-op
+--- FAIL: TestKeyTagManagementDeleteNoOpOnFreeRowViaFullDispatch (0.00s)
+    want a non-nil Cmd (the warn Toast), not a silent no-op
+--- FAIL: TestOpenTagMgmtRenameNoOpOnFreeTag (0.00s)
+    want a non-nil Cmd (the warn Toast's auto-dismiss timeout) instead of a silent no-op
+--- FAIL: TestKeyTagManagementRenameNoOpOnFreeRowViaFullDispatch (0.00s)
+    want a non-nil Cmd (the warn Toast), not a silent no-op
+```
+
+GREEN (nach Fix): `go test ./... -short` und voller `go test ./...` (ohne `-short`) beide grün,
+`go vet ./...` clean, `gofmt -l .` clean.
+
+## Smoke
+
+Echter tmux-Smoke (`bin/bt` im Worktree, Bean bt-6oyy testweise mit freiem Tag "smoke" getaggt,
+danach Mutation zurückgesetzt): Tag-Management-Page geöffnet, Cursor auf "smoke" (frei), `e`
+gedrückt → Toast "Unregistered tag — modification not possible" / "n to define first" erscheint.
+`d` auf derselben Zeile → identischer Toast. `.beans`-Testmutation vor Commit via
+`git checkout --` zurückgesetzt.
+
+## Deviations/ERRATA
+
+Keine — Zeilenreferenzen aus Plan/bean (412-421 bzw. 537-548) stimmten mit Ist-Code überein
+(minimal verschoben durch Docstrings, funktional identisch).
