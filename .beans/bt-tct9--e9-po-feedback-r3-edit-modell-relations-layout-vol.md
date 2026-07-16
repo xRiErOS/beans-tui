@@ -1,11 +1,11 @@
 ---
 # bt-tct9
 title: 'E9 — PO-Feedback R3: Edit-Modell, Relations-Layout, Vollbild-Navigation'
-status: todo
+status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T06:22:49Z
+updated_at: 2026-07-16T06:25:52Z
 parent: bt-apmy
 ---
 
@@ -64,3 +64,16 @@ nicht im Meta-Strip"). Neue Anforderung: Tags ZUSÄTZLICH im Kopfblock-Meta-Stri
 Fix-Ort: detailHeaderBlock (view_detail_bean.go, E8-B02-Padding beachten — tags als
 letzte Spalte, variable Breite unkritisch da Zeilenende; tagsInline wiederverwenden).
 Investigator-Auftrag auf B02 reduziert.
+
+
+## B02 Investigations-Ergebnis (2026-07-16, Investigator, HEAD 192f51a)
+
+NICHT reproduzierbar — alle drei New-Tag-Pfade live verifiziert funktionsfähig:
+(a) t-Picker: Footer 'n New tag' + Box-Hint, n öffnet Input (Placeholder 'New tag (a-z0-9, hyphen-separated)');
+(b) Feld-enter auf tags: identischer Overlay (ein openTagPicker-Pfad, keine Divergenz);
+(c) ctrl+k 'create tag' → direkt New-Tag-Input.
+Randnotiz: 'create tag' erscheint in der Palette NUR bei fokussiertem Bean (overlay_palette.go:61).
+Hypothesen für PO-Befund: stale Binary ODER Discoverability ODER Validierungs-Ablehnung
+(nur a-z0-9/Hyphen — Großbuchstaben/Leerzeichen werden abgelehnt).
+KEIN Code-Task — PO-Retest mit frischem bin/bt angefragt; falls Retest fehlschlägt,
+mit exaktem Ablauf (welcher Pfad, welche Eingabe) als Bug reaktivieren.
