@@ -248,6 +248,16 @@ func TestBlockingPickerBoxUsesWideModalWidth(t *testing.T) {
 	if maxW != wantW {
 		t.Errorf("blockingPickerBox max line width = %d, want %d (wideModalWidth(120)+2 border)", maxW, wantW)
 	}
+	// F02 (T5-Review, bean bt-4mo9): wantW above is self-referential (derived
+	// from the SAME wideModalWidth call under test) -- a bug inside
+	// wideModalWidth itself (e.g. a wrong percentage or clamp) would still
+	// pass. Pin an independent literal: wideModalWidth(120) = 120*85/100 =
+	// 102 (no floor-60/ceiling-(termW-4)/floor-24 clamp engages at this
+	// width) + 2 border = 104.
+	const wantLiteral = 104
+	if maxW != wantLiteral {
+		t.Errorf("blockingPickerBox max line width = %d, want %d (independent literal pin at m.width=120, T5-Review F02)", maxW, wantLiteral)
+	}
 }
 
 // TestBlockingPickerBoxLongTitleWrapsWithHangingIndent guards the actual
@@ -296,6 +306,87 @@ func TestBlockingPickerBoxLongTitleWrapsWithHangingIndent(t *testing.T) {
 	wantIndent := titleCol - 2
 	if gotIndent != wantIndent {
 		t.Errorf("continuation line indent = %d, want %d (title-start column on the ID's own line): %q", gotIndent, wantIndent, lines[idLine+1])
+	}
+}
+
+// TestBlockingPickerRowIndentJitterParityCursorVsNonCursor is the Jitter-
+// Parity regression test the T5-Review demanded (F03, bean bt-4mo9,
+// "wertvollste" finding, Mutation-Beweis D): the reviewer reverted the
+// non-cursor row's leading pad from 1 space back to 2 (byte-width parity
+// with the cursor bar "▌", which is also exactly 1 cell) and the FULL suite
+// stayed green -- nothing asserted that a wrapped row's hanging indent
+// stays IDENTICAL whether or not that row currently carries the cursor. A 1-
+// space regression there would shift the continuation line sideways every
+// time the cursor moves onto/off of a wrapped row (visible jitter). This
+// renders the SAME wrapped long-title row twice -- once as the cursor row,
+// once as a non-cursor row -- and asserts the indent doesn't move.
+func TestBlockingPickerRowIndentJitterParityCursorVsNonCursor(t *testing.T) {
+	longID := "bt-averylongidentifier99"
+	beans := []data.Bean{
+		{ID: "ep-1", Title: "Focus", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: longID, Title: "Hier steht ein langer Titel eines beans der so umbricht dass die Uebersicht gewahrt ist", Status: "todo", Type: "task", Priority: "normal"},
+		{ID: "bt-other", Title: "Short", Status: "todo", Type: "task", Priority: "normal"},
+	}
+
+	open := func(t *testing.T) model {
+		t.Helper()
+		m := fixtureModel(t, beans)
+		m.width = 70 // wideModalWidth(70)=60, forces the long title to wrap (mirrors TestBlockingPickerBoxLongTitleWrapsWithHangingIndent)
+		m = focusBean(m, "ep-1")
+		return step(t, m, runeMsg('r'))
+	}
+
+	// Locate the target row's index by content, not a hardcoded position --
+	// buildBlockingItems sorts via data.SortBeans, whose order this test
+	// must not have to predict.
+	setup := open(t)
+	targetIdx := -1
+	for i, it := range setup.blockItems {
+		if it.id == longID {
+			targetIdx = i
+			break
+		}
+	}
+	if targetIdx < 0 {
+		t.Fatalf("setup: blockItems missing %q, got %+v", longID, setup.blockItems)
+	}
+	otherIdx := -1
+	for i := range setup.blockItems {
+		if i != targetIdx {
+			otherIdx = i
+			break
+		}
+	}
+	if otherIdx < 0 {
+		t.Fatal("setup: need at least 2 blockItems to compare cursor vs. non-cursor indent")
+	}
+
+	indentAt := func(cursor int) int {
+		m := open(t)
+		m.menu.cursor = cursor
+
+		out := ansi.Strip(m.blockingPickerBox())
+		lines := strings.Split(out, "\n")
+		idLine := -1
+		for i, l := range lines {
+			if strings.Contains(l, longID) {
+				idLine = i
+				break
+			}
+		}
+		if idLine < 0 {
+			t.Fatalf("cursor=%d: blocking picker output missing the full intact ID %q: %q", cursor, longID, out)
+		}
+		if idLine+1 >= len(lines) {
+			t.Fatalf("cursor=%d: expected the long title to wrap onto a continuation line after line %d, got only %d lines: %q", cursor, idLine, len(lines), out)
+		}
+		return contentIndent(t, lines[idLine+1])
+	}
+
+	cursorIndent := indentAt(targetIdx)
+	nonCursorIndent := indentAt(otherIdx)
+	if cursorIndent != nonCursorIndent {
+		t.Errorf("row indent jitters between cursor state (%d) and non-cursor state (%d) -- want identical (T5-Review F03, Mutation-Beweis D)", cursorIndent, nonCursorIndent)
 	}
 }
 

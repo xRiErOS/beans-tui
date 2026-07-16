@@ -341,6 +341,17 @@ func TestParentPickerBoxUsesWideModalWidth(t *testing.T) {
 	if maxW != wantW {
 		t.Errorf("parentPickerBox max line width = %d, want %d (wideModalWidth(120)+2 border)", maxW, wantW)
 	}
+	// F02 (T5-Review, bean bt-4mo9): wantW above is self-referential (derived
+	// from the SAME wideModalWidth call under test) -- a bug inside
+	// wideModalWidth itself (e.g. a wrong percentage or clamp) would still
+	// pass. Pin an independent literal, mirrors the Blocking-Picker's own
+	// TestBlockingPickerBoxUsesWideModalWidth pin: wideModalWidth(120) =
+	// 120*85/100 = 102 (no floor-60/ceiling-(termW-4)/floor-24 clamp engages
+	// at this width) + 2 border = 104.
+	const wantLiteral = 104
+	if maxW != wantLiteral {
+		t.Errorf("parentPickerBox max line width = %d, want %d (independent literal pin at m.width=120, T5-Review F02)", maxW, wantLiteral)
+	}
 }
 
 // TestParentPickerBoxLongTitleWrapsWithHangingIndent guards the actual
@@ -394,5 +405,73 @@ func TestParentPickerBoxLongTitleWrapsWithHangingIndent(t *testing.T) {
 	wantIndent := titleCol - 2
 	if gotIndent != wantIndent {
 		t.Errorf("continuation line indent = %d, want %d (title-start column on the ID's own line): %q", gotIndent, wantIndent, lines[idLine+1])
+	}
+}
+
+// TestParentPickerRowIndentJitterParityCursorVsNonCursor mirrors
+// TestBlockingPickerRowIndentJitterParityCursorVsNonCursor
+// (box_picker_blocking_test.go, T5-Review F03, bean bt-4mo9, Mutation-Beweis
+// D): the SAME wrapped long-title row's continuation-line indent must not
+// shift depending on whether the row currently carries the cursor. Reuses
+// TestParentPickerBoxLongTitleWrapsWithHangingIndent's own fixture (cursor
+// seeds onto the "(No parent)" clear row at index 0, the long-title eligible
+// parent sits at index 1) so the non-cursor state is exercised for free at
+// setup, and adds the cursor-on-the-row state explicitly.
+func TestParentPickerRowIndentJitterParityCursorVsNonCursor(t *testing.T) {
+	longID := "ms-averylongidentifier99"
+	beans := []data.Bean{
+		{ID: longID, Title: "Hier steht ein langer Titel eines beans der so umbricht dass die Uebersicht gewahrt ist", Status: "todo", Type: "milestone", Priority: "normal"},
+		{ID: "ep-1", Title: "Focus", Status: "todo", Type: "epic", Priority: "normal"},
+	}
+
+	open := func(t *testing.T) model {
+		t.Helper()
+		m := fixtureModel(t, beans)
+		m.width = 70 // wideModalWidth(70)=60, forces the long title to wrap
+		m = focusBean(m, "ep-1")
+		return step(t, m, runeMsg('a'))
+	}
+
+	setup := open(t)
+	targetIdx := -1
+	for i, it := range setup.parentItems {
+		if it.id == longID {
+			targetIdx = i
+			break
+		}
+	}
+	if targetIdx < 0 {
+		t.Fatalf("setup: parentItems missing %q, got %+v", longID, setup.parentItems)
+	}
+	if targetIdx == 0 {
+		t.Fatal("setup: targetIdx must differ from the guaranteed non-cursor index 0 (the \"(No parent)\" clear row)")
+	}
+
+	indentAt := func(cursor int) int {
+		m := open(t)
+		m.menu.cursor = cursor
+
+		out := ansi.Strip(m.parentPickerBox())
+		lines := strings.Split(out, "\n")
+		idLine := -1
+		for i, l := range lines {
+			if strings.Contains(l, longID) {
+				idLine = i
+				break
+			}
+		}
+		if idLine < 0 {
+			t.Fatalf("cursor=%d: parent picker output missing the full intact ID %q: %q", cursor, longID, out)
+		}
+		if idLine+1 >= len(lines) {
+			t.Fatalf("cursor=%d: expected the long title to wrap onto a continuation line after line %d, got only %d lines: %q", cursor, idLine, len(lines), out)
+		}
+		return contentIndent(t, lines[idLine+1])
+	}
+
+	cursorIndent := indentAt(targetIdx)
+	nonCursorIndent := indentAt(0) // "(No parent)" clear row, always index 0
+	if cursorIndent != nonCursorIndent {
+		t.Errorf("row indent jitters between cursor state (%d) and non-cursor state (%d) -- want identical (T5-Review F03, Mutation-Beweis D)", cursorIndent, nonCursorIndent)
 	}
 }
