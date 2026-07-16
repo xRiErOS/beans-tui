@@ -1,11 +1,11 @@
 ---
 # bt-13l7
 title: Vollbild-Modus 'v' — Listen-/Detail-Vollbild, esc-Ausstieg (F01 Kernmechanik)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:55Z
-updated_at: 2026-07-16T12:59:56Z
+updated_at: 2026-07-16T13:31:51Z
 parent: bt-tct9
 blocked_by:
     - bt-b0w0
@@ -296,22 +296,22 @@ ist).
 
 ## Akzeptanz-Checkliste
 
-- [ ] `v` bei Tree-/Backlog-Fokus → Listen-Vollbild; bei Detail-Fokus → Detail-Vollbild
-- [ ] `v` im bereits aktiven Vollbild ist No-Op (kein Toggle)
-- [ ] `v` in der Lobby ist No-Op
-- [ ] `enter` auf einem Bean im Listen-Vollbild → Detail-Vollbild für dieses Bean
-- [ ] Alle bestehenden Feld-Kaskaden (status/type/priority/tags/title) funktionieren
+- [x] `v` bei Tree-/Backlog-Fokus → Listen-Vollbild; bei Detail-Fokus → Detail-Vollbild
+- [x] `v` im bereits aktiven Vollbild ist No-Op (kein Toggle)
+- [x] `v` in der Lobby ist No-Op
+- [x] `enter` auf einem Bean im Listen-Vollbild → Detail-Vollbild für dieses Bean
+- [x] Alle bestehenden Feld-Kaskaden (status/type/priority/tags/title) funktionieren
       unverändert im Detail-Vollbild
-- [ ] Relations-Sprung im Detail-Vollbild bleibt im Vollbild (zeigt das neue Zielbean),
+- [x] Relations-Sprung im Detail-Vollbild bleibt im Vollbild (zeigt das neue Zielbean),
       verlässt NICHT zum Split-Tree (Split-Modus-Sprungverhalten bleibt separat unverändert)
-- [ ] `esc` kaskadiert Feld→Sektion→Vollbild-Exit (Detail-Vollbild) bzw. direkt Exit
+- [x] `esc` kaskadiert Feld→Sektion→Vollbild-Exit (Detail-Vollbild) bzw. direkt Exit
       (Listen-Vollbild) — IMMER zurück zu Browse/Backlog, mit dem zuletzt gezeigten Bean
       selektiert
-- [ ] Symmetrisch für Browse (Tree) UND Backlog
-- [ ] Mausklicks im Vollbild sind No-Op (kein Fehlklick gegen falsche Geometrie)
-- [ ] Kein `viewID`-Enum-Wert hinzugefügt (Vollbild bleibt orthogonal zu `m.view`)
-- [ ] tmux-Smoke-Kaskade end-to-end belegt (Commit-Body)
-- [ ] Voller Testlauf grün, gofmt/vet leer
+- [x] Symmetrisch für Browse (Tree) UND Backlog
+- [x] Mausklicks im Vollbild sind No-Op (kein Fehlklick gegen falsche Geometrie)
+- [x] Kein `viewID`-Enum-Wert hinzugefügt (Vollbild bleibt orthogonal zu `m.view`)
+- [x] tmux-Smoke-Kaskade end-to-end belegt (Commit-Body)
+- [x] Voller Testlauf grün, gofmt/vet leer
 
 ## Notes for Task 8 (History-Stack)
 
@@ -335,3 +335,165 @@ geprüft. Härtung: synthetischer clickPaneGeometry-Test mit echtem mehrzeiligem
 (>=3-Zeilen) localKeys-String, der die Boundary-Auflösung (bodyH/footerY) asserted —
 beweist die Generalität des dynamischen Mechanismus unabhängig von View-Divergenz.
 Commit: `test(tui): clickPaneGeometry multi-line footH pin (T6-F01)`, `Refs: bt-13l7`.
+
+## Summary
+
+F01 Kernmechanik implementiert: `fullscreenMode`-Enum (`types.go`, orthogonal
+zu `m.view`) + `fullscreen`/`fullscreenBeanID`-Felder (`navBack`/`navForward`
+deklariert, leer, Task 8). `keys.Fullscreen` (`v`, `keymap.go`) + neue Datei
+`view_fullscreen.go` (`keyFullscreen`, `renderFullscreenBody`). `handleKey`
+(update.go) dispatcht `keyFullscreen` nach FocusIn/FocusOut, vor
+keyNodeAction; `focusedBean()` bekommt einen vorrangigen fullscreenDetail-
+Fall; `activateDetailField`s Relations-Sprung bleibt bei fullscreenDetail im
+Vollbild (neuer Fall); `keyDetailFocus`s Back-Case bekommt die neue
+D03-Ausstiegs-Rast (Vollbild verlassen + Cursor-Sync Tree/Backlog).
+`mouse.go` bekommt den Vollbild-Guard. `viewBrowseRepo()`/`viewBacklog()`
+rendern bei `m.fullscreen != fullscreenNone` einen neuen, einzelnen
+Vollbreite-Pane-Zweig VOR dem bestehenden Split-Aufbau (Split-Pfad
+unverändert).
+
+## Test-Output
+
+RED (Implementierung komplett entfernt via `git checkout --`/Datei
+verschoben, NUR Testdateien behalten):
+```
+# beans-tui/internal/tui [beans-tui/internal/tui.test]
+internal/tui/mouse_test.go:306:4: m.fullscreen undefined (type model has no field or method fullscreen)
+internal/tui/mouse_test.go:306:17: undefined: fullscreenList
+internal/tui/update_test.go:859:4: m.fullscreen undefined (type model has no field or method fullscreen)
+internal/tui/update_test.go:859:17: undefined: fullscreenDetail
+...
+FAIL	beans-tui/internal/tui [build failed]
+```
+
+GREEN (Implementierung wiederhergestellt, alle 21 neuen F01-Tests):
+```
+--- PASS: TestHandleMouseIgnoredWhenFullscreenActive
+--- PASS: TestFocusedBeanResolvesFullscreenBeanID
+--- PASS: TestFocusedBeanFullscreenDetailUnknownBeanIDReturnsNil
+--- PASS: TestActivateDetailFieldJumpStaysInFullscreenDetail
+--- PASS: TestKeyDetailFocusRoutesToDetailFocusMachineViaFullscreenAlone
+--- PASS: TestKeyDetailFocusEscFieldLevelStepsToSectionLevelInFullscreen
+--- PASS: TestKeyDetailFocusEscSectionLevelExitsFullscreenToTree
+--- PASS: TestKeyDetailFocusEscSectionLevelExitsFullscreenToBacklogWithCursorSynced
+--- PASS: TestKeyFullscreenEntersListModeWhenTreeFocused
+--- PASS: TestKeyFullscreenEntersDetailModeWhenDetailFocused
+--- PASS: TestKeyFullscreenNoOpWhenAlreadyFullscreenList
+--- PASS: TestKeyFullscreenNoOpWhenAlreadyFullscreenDetail
+--- PASS: TestKeyFullscreenNoOpInLobby
+--- PASS: TestKeyFullscreenEnterOnListEntersDetailMode
+--- PASS: TestKeyFullscreenEnterOnListEntersDetailModeBacklog
+--- PASS: TestKeyFullscreenEnterOnEmptyListIsNoOp
+--- PASS: TestKeyFullscreenEscExitsListModeToSplitView
+--- PASS: TestKeyFullscreenEscExitsListModeToSplitViewBacklog
+--- PASS: TestFullscreenNeverChangesViewID
+--- PASS: TestViewBrowseRepoFullscreenFitsOuterFrame
+--- PASS: TestViewBacklogFullscreenFitsOuterFrame
+PASS
+```
+
+Voller Lauf (2x, count=1): `go test ./... -short` grün (cmd/config/data/
+theme/tui). `go test ./... -race -count=1`: grün (tui-Paket 141-142s).
+`gofmt -l .` leer, `go vet ./...` leer.
+
+## Golden-Gegenbeleg
+
+`git diff --stat -- internal/tui/testdata/` -> leer (tree.golden/
+backlog.golden/chrome.golden byte-identisch, `TestTreeGolden`/
+`TestBacklogGolden`/`TestChromeGolden` grün ohne `-update`). Split-Renderpfad
+in `viewBrowseRepo()`/`viewBacklog()` strukturell unverändert (neuer Zweig
+NUR bei `m.fullscreen != fullscreenNone`, davor).
+
+Entscheidung eigene Vollbild-Goldens: NEIN. Begründung: `TestViewBrowseRepo
+FullscreenFitsOuterFrame`/`TestViewBacklogFullscreenFitsOuterFrame` (neu,
+render-grounded auf `m.View()`-Ebene, beide Vollbild-Spielarten x beide
+Views) + die 21 State-/Kaskaden-Unit-Tests + der komplette tmux-Live-Smoke
+decken Rendering UND Zustandsübergänge bereits ab; ein zusätzliches
+Golden-Fixture-Paar hätte hier primär Byte-Diffs bei jeder kosmetischen
+Änderung gepflegt, ohne einen Fehlerfall abzudecken, den die Breiten-/
+Höhen-Asserts nicht schon abdecken.
+
+## Smoke (tmux, Scratch-Repo /tmp/bt-smoke-f01, gelöscht nach Lauf)
+
+Fixture: Milestone -> Epic One -> Task A (blocking Task B), Epic Two ->
+Task B; + 2 parentlose Backlog-Beans A/B (A blocking B).
+
+**Tree-Kaskade** (100x30): `l`/`k`/`l` Tree expandieren, Cursor auf Task A ->
+`v` (Listen-Vollbild, Einzelpane volle Breite, Cursor weiterhin Task A) ->
+`enter` (Detail-Vollbild Task A, META offen) -> `3` (RELATIONS) -> `l`
+(Feld-Ebene, Parent) -> `k` (Blocking/Task B) -> `enter` (Feld-Ebene ->
+aktiviert -> Sprung, BLEIBT Vollbild, zeigt jetzt Task B) -> `esc`
+(Sektions-Ebene -> Vollbild verlassen) -> Split zeigt Tree-Cursor auf
+Task B, Epic Two automatisch expandiert, Detail-Pane zeigt Task B
+fokussiert. Zusätzlich `v`/`v` (zweites `v` im Vollbild = No-Op, Inhalt
+unverändert) und `v` in der Lobby (`p` -> `v` tippt "v" ins Repo-Filter,
+KEIN Vollbild-Effekt -- Lobby fängt Input vollständig ab, wie erwartet).
+
+**Backlog-Kaskade** (Backlog-Ansicht via `shift+tab`+`b`): Cursor auf
+Backlog Bean A -> `v` (Listen-Vollbild, `sort status`-Suffix erhalten) ->
+`enter` (Detail-Vollbild Bean A) -> `3` (RELATIONS, Blocking Bean B
+vorselektiert) -> `enter` (Feld-Ebene, kein Sprung) -> `enter` (aktiviert,
+Sprung -> Bean B, BLEIBT Vollbild) -> `esc` -> Backlog-Split zeigt
+`backlogList.cursor` auf Bean B, Detail-Pane Bean B fokussiert.
+
+**Bug live gefunden + gefixt:** erster Smoke-Lauf zeigte einen zerrissenen
+äußeren Rahmen (Bottom-Border wickelte auf eine eigene Zeile) -- Ursache:
+`renderFullscreenBody`-Aufruf reichte `innerW` statt `innerW-2` als
+Pane-Content-Breite durch (Border-Doppelzählung, 2 Spalten Überlauf).
+Diagnostiziert über einen `m.View()`-Zeilen/Breiten-Dump (nicht sichtbar in
+den isolierten `renderFullscreenBody`-Unit-Tests, die NUR die Funktion
+selbst prüften, nicht den Call-Site-Breiten-Vertrag). Gefixt (`paneW :=
+innerW - 2` an beiden Call-Sites) + Regressionstest
+`TestViewBrowseRepoFullscreenFitsOuterFrame`/`...Backlog...` auf
+`m.View()`-Ebene ergänzt. Nach Fix: sauberer Rahmen in allen obigen
+Captures, Breiten/Höhen exakt im 100x30- bzw. 80x24-Fenster.
+
+## Deviations/ERRATA
+
+**D01 (Implementierer-Entscheidung, kein Raten):** `keys.Fullscreen` NICHT
+zu `browseRepoLocalBindings()`/`backlogLocalBindings()` (Footer Zone 3)
+hinzugefügt -- abweichend vom bean-Wortlaut ("ergänzt nur keys.Fullscreen
+selbst zu den bestehenden ...-Listen"). Grund: 14 statt 13 Footer-Einträge
+brechen bei 80 Spalten von 2 auf 3 Zeilen um (gemessen:
+`renderBindings(browseRepoLocalBindings()+Fullscreen)` = 167 Zellen Inhalt
+gegen 78 Spalten -> 3 Zeilen; ohne Fullscreen 152 Zellen -> 2 Zeilen) --
+exakt die Regression, die D02 (bt-1e0t, Sort-Footer-Entzug) bereits einmal
+für den identischen 14-Entries-Fall gefixt hat ("D06 permits at most two").
+`TestDetailClickBacklogFooterAt80Cols`s Precondition (`footH == 2` für
+BEIDE Chromes bei 80 Spalten) hätte sofort gebrochen. Entscheidung: `v`
+bleibt voll funktional + in `helpGroups()` (Navigation-Gruppe,
+`TestHelpGroupsCoverEveryBindingExactlyOnce` grün) dokumentiert, NICHT im
+Footer -- mirrort D02s eigenen, PO-bestätigten Präzedenzfall 1:1
+(funktional aber Help-only, wenn das Footer-Budget überschritten würde).
+Kein Code-Regressionsrisiko, aber PO-Sichtbarkeits-Trade-off, den ein
+Planner/PO explizit bestätigen sollte, falls `v` doch im Footer sichtbar
+sein MUSS (dann müsste ein anderer Footer-Eintrag weichen).
+
+**B01 (im Zuge dieser Runde gefunden + gefixt, kein separater Bug-Report
+nötig):** die oben beschriebene Vollbild-Breiten-Überlauf (innerW vs.
+innerW-2) -- siehe Smoke-Abschnitt.
+
+## Notes for T8 (History-Stack, bean bt-1vbp)
+
+- `m.navBack`/`m.navForward` (`[]string`, `types.go`) sind bereits deklariert,
+  leer/ungenutzt.
+- Relations-Sprung-Zweig, der T8 den Push braucht: `activateDetailField`
+  (`update.go`), `default:`-Case, der NEUE `if m.fullscreen ==
+  fullscreenDetail { m.fullscreenBeanID = f.beanID; ... }`-Block -- History-
+  Push kommt DAVOR (`m.navBack = append(clone(m.navBack),
+  <bisheriges fullscreenBeanID>); m.navForward = nil`), bevor
+  `m.fullscreenBeanID` überschrieben wird.
+- Neue `keys.HistoryBack`/`keys.HistoryForward`-Bindings + eine
+  `fullscreenDetailLocalBindings()`-Footer-Ergänzung sind vollständig T8s
+  eigene Aufgabe (hier bewusst nicht vorgegriffen) -- ACHTUNG:
+  `browseRepoLocalBindings()`/`backlogLocalBindings()` liegen (D01 oben)
+  bereits an ihrem 2-Zeilen-Footer-Budget bei 80 Spalten, `[`/`]` müssten
+  in einem EIGENEN, kontextsensitiven Footer-Set landen (nur sichtbar
+  während `fullscreenDetail`), nicht in diesen beiden Listen.
+- `keyDetailFocus`s Back-Case (esc-Exit-Pfad) leert `navBack`/`navForward`
+  NICHT (design-spec.md: "werden beim Verlassen NICHT geleert") -- T8 muss
+  hier nichts nachrüsten, nur beachten.
+- `keyFullscreen` (`view_fullscreen.go`) ist der Ort für `ctrl+left`/`[`
+  bzw. `ctrl+right`/`]` -- mirrort den bestehenden
+  `m.fullscreen == fullscreenList`-Vorab-Check-Stil (neuer Block, NUR
+  wirksam bei `m.fullscreen == fullscreenDetail`).
