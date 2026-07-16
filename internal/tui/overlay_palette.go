@@ -93,6 +93,13 @@ func paletteActions(m model) []paletteItem {
 		// keys.Picker dispatch (openLobby, view_lobby.go) -- mirrors every
 		// other single-key binding's own Command-Center mirror above.
 		paletteItem{kind: paletteKindAction, actionID: "repo_picker", label: "go to repo picker"},
+		// E10 Task 2 (bean bt-r92i, epic bt-362n D05): the Tag-Management
+		// page has NO dedicated keybinding either (D05 mirrors the "go to
+		// settings" precedent immediately below -- Tastenraum bleibt knapp) --
+		// grouped directly BEFORE "settings" as the new last-but-one entry
+		// (Planner-Entscheidung, mirrors how "repo_picker" itself already
+		// sits directly before "settings").
+		paletteItem{kind: paletteKindAction, actionID: "go_tags", label: "go to tags"},
 		// E5 Task 5 (bean bt-0l8c): the Settings-Form has NO dedicated
 		// keybinding (design-spec §7 knows none) -- reachable exclusively
 		// through the Command-Center, appended last.
@@ -245,6 +252,11 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 			// genuine second entry point to the SAME handler, never a
 			// parallel implementation (dispatchPalette's own doc-stamp).
 			return m.openLobby()
+		case "go_tags":
+			// E10 Task 2 (bean bt-r92i, epic bt-362n D05): the Tag-Management
+			// page's ONLY entry point (no dedicated keybinding, same
+			// "Command-Center only" shape as "settings" just below).
+			return m.openTagManagementPage()
 		case "settings":
 			// E5 Task 5 (bean bt-0l8c): opens the Settings-Form
 			// (box_form_settings.go) -- same open-form shape as edit_title,

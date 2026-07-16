@@ -27,6 +27,10 @@ const (
 	viewBrowseRepo viewID = iota
 	viewBacklog           // V3 Backlog (E2 Task 5, bean bt-gzu6, design-spec.md §6 V3)
 	viewLobby             // V1 Lobby/Repo-Picker (E5 Task 6, bean bt-zhwl, design-spec.md §6 V1)
+	// viewTagManagement (E10 Task 2, bean bt-r92i, epic bt-362n D05): the
+	// Tag-Management page -- ALWAYS appended LAST (never resort the values
+	// above), see this const block's own doc comment above.
+	viewTagManagement
 )
 
 // orphanRootID is the synthetic node ID for the "(orphaned)" root that
@@ -571,6 +575,17 @@ type model struct {
 	fullscreen          fullscreenMode
 	fullscreenBeanID    string
 	navBack, navForward []string
+
+	// Tag-Management page (E10 Task 2, bean bt-r92i, epic bt-362n D05-D09):
+	// tagMgmtRows is the D09 Union row list (definierte Tags alpha-sortiert
+	// zuerst, dann freie/in-Verwendung-Tags Count-absteigend), built fresh at
+	// EVERY page-open (openTagManagementPage, D03 -- mirrors openLobby's own
+	// "reload from disk on open" convention). tagMgmtCursor is a plain
+	// listState cursor over that SAME row list (reuse, mirrors backlogList's
+	// index-based shape -- the page is a flat, non-hierarchical list, same
+	// rationale as Backlog's own doc-stamp above).
+	tagMgmtRows   []tagRegistryRow
+	tagMgmtCursor listState
 
 	// repoMetrics is the Lobby's own "Open/Total" column per configured
 	// repo (design note, bean bt-zhwl: "Kosten/Latenz-Abwägung dokumentieren"

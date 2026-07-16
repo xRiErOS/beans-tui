@@ -880,6 +880,21 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyLobby(msg)
 	}
 
+	// E10 Task 2 (bean bt-r92i, epic bt-362n D06): the Tag-Management page is
+	// ALSO a full-capture state, checked at the SAME checkpoint as
+	// m.view==viewLobby just above (identical rationale: every full-capture
+	// STATE check precedes every bare keybind MATCH check below). Without
+	// this, focusedBean()'s default branch would fall back to the Tree
+	// cursor while the PO is looking at the tag registry, letting global
+	// node-action keys (s/t/a/r/c/d/e) fire against a STALE, unrelated bean
+	// (verified against this file's own focusedBean(), lines ~1019-1029 --
+	// exactly the failure class LESSONS-LEARNED already documents twice,
+	// "Exit-Pfad-Inventur"/"Lobby-Exit im Hauptfall unerreichbar", epic
+	// bt-362n body's own D06 citation).
+	if m.view == viewTagManagement {
+		return m.keyTagManagement(msg)
+	}
+
 	// E4 Task 1 (bean bt-jpgn, design decision h): the Command-Center's own
 	// open state fully captures, same precedent as filterOpen/m.overlay
 	// above.

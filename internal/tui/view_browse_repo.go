@@ -706,6 +706,10 @@ func (m model) View() string {
 		// E5 Task 6 (bean bt-zhwl): the Lobby/Repo-Picker -- a full
 		// top-level view (view_lobby.go), not an overlay.
 		out = m.viewLobby()
+	case viewTagManagement:
+		// E10 Task 2 (bean bt-r92i): the Tag-Management page -- a full
+		// top-level view (view_tag_management.go), not an overlay.
+		out = m.viewTagManagement()
 	default:
 		out = m.viewBrowseRepo()
 	}

@@ -180,7 +180,7 @@ func TestPaletteActionsNoFocusedBeanOmitsNodeActions(t *testing.T) {
 			t.Fatalf("paletteActions leaked node action %q with no focused bean", it.actionID)
 		}
 	}
-	wantGlobal := []string{"create", "go_backlog", "go_browse", "filter", "search", "reload", "repo_picker", "settings"}
+	wantGlobal := []string{"create", "go_backlog", "go_browse", "filter", "search", "reload", "repo_picker", "go_tags", "settings"}
 	if len(items) != len(wantGlobal) {
 		t.Fatalf("len(items) = %d, want %d (%v)", len(items), len(wantGlobal), wantGlobal)
 	}
@@ -248,22 +248,25 @@ func TestPalFilteredActionsFuzzyStatMatchesSetStatusAndSetParent(t *testing.T) {
 	}
 }
 
-// TestPalFilteredActionsFuzzyGoMatchesAllFourGoToEntries guards T3-review
-// I01 (bean bt-kyj5 Prelude): the 4 "go to <entity>" entries (backlog/
-// browse/repo picker/settings) share PF-8's UNCHANGED "go to X" shape -- a
-// plain "go" query must still fuzzy-match all 4 (not fewer, per the
-// Prelude's "genau die 4 'go to'-Einträge" requirement), in declaration
-// order, with no other action or bean leaking in. (T5-mini, bean bt-uyzf,
-// optional T4-review I01): none of fixtureBeans' titles ("Milestone One"/
-// "Epic One"/"Task One"/"Task Two") contain a 'g' at all, so no bean item
-// could ever fuzzy-match "go" and silently inflate the 4-item count above --
-// the exact-length assertion below implicitly guards that absence too.
-func TestPalFilteredActionsFuzzyGoMatchesAllFourGoToEntries(t *testing.T) {
+// TestPalFilteredActionsFuzzyGoMatchesAllFiveGoToEntries guards T3-review
+// I01 (bean bt-kyj5 Prelude): the "go to <entity>" entries (backlog/browse/
+// repo picker/settings) share PF-8's UNCHANGED "go to X" shape -- a plain
+// "go" query must still fuzzy-match every one of them (not fewer), in
+// declaration order, with no other action or bean leaking in. E10 Task 2
+// (bean bt-r92i) added a 5th such entry ("go to tags", go_tags) -- widening
+// this guard from 4 to 5 (ERRATUM vs. the original Prelude's "genau die 4
+// 'go to'-Einträge" wording, which predates this task and is superseded by
+// the new entry, not violated by it). (T5-mini, bean bt-uyzf, optional
+// T4-review I01): none of fixtureBeans' titles ("Milestone One"/"Epic One"/
+// "Task One"/"Task Two") contain a 'g' at all, so no bean item could ever
+// fuzzy-match "go" and silently inflate the count above -- the exact-length
+// assertion below implicitly guards that absence too.
+func TestPalFilteredActionsFuzzyGoMatchesAllFiveGoToEntries(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.palQuery = "go"
 
 	items := m.palFiltered()
-	wantIDs := []string{"go_backlog", "go_browse", "repo_picker", "settings"}
+	wantIDs := []string{"go_backlog", "go_browse", "repo_picker", "go_tags", "settings"}
 	if len(items) != len(wantIDs) {
 		t.Fatalf("len(palFiltered) = %d, want %d (%v) for query %q", len(items), len(wantIDs), wantIDs, m.palQuery)
 	}
