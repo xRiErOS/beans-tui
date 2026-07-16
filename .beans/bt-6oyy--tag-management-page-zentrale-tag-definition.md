@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: normal
 created_at: 2026-07-15T14:11:37Z
-updated_at: 2026-07-15T20:48:28Z
+updated_at: 2026-07-16T07:39:01Z
 ---
 
 PO-Wunsch (2026-07-15, im Zuge E7-Feedback): Tags behalten UND zentral definieren können über eine eigene Page in bt.
@@ -28,3 +28,10 @@ D08 ENTSCHIEDEN: Tag-Management-Page ist v1.1-Scope — NICHT Teil von v1/E8.
 Die v1-Minimal-Lösung für Tag-Erstellung liefert E8/B14 (bt-ntoz): 'create tag'
 als Palette-Command + Neuanlage im t-Picker sichtbar (Footer-Hint). Diese Page
 baut darauf auf: zentrale Verwaltung (CRUD, Farben, Umbenennen mit Propagation).
+
+
+## PO-Entscheide (2026-07-16, Chat)
+
+- **Scope/Reihenfolge (revidiert D08-Timing):** Kette für dieses Feature startet **direkt NACH der E9-Kette** (bt-tct9) — nicht erst v1.1-Backlog. Eigenes Epos + eigener Planner, sobald E9 to-review ist.
+- **Persistenzort:** repo-lokal (Konventionsdatei im Repo, teamfähig, beans-nah) — exakter Dateiname/Format Planner-Entscheid.
+- **Picker-Verhalten:** Suggest-Mode — definierte Tags priorisiert angeboten, freie Tags bleiben erlaubt (kein strict mode).
