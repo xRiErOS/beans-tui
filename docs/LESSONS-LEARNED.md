@@ -234,3 +234,89 @@ neue Sektion). Jeder Eintrag hat exakt drei Felder:
   „Hintergrund-Läufe mit Monitor abwarten BEVOR der Report kommt";
   Supervisor-seitig erkennt der Fallback-Wakeup + `git log`-Check im
   Ziel-Repo hängende Agents (Commits da, Report fehlt → Nudge).
+
+## 2026-07-16 — E10-Abschluss (bt-362n, Quellen: E10-Fix-Runden + Reviews)
+
+### 1. False-negative Leak-Test ohne Leak-Surface (T2/bt-r92i F01)
+
+- **Was lief nicht rund:** Der als „D06 regression guard" benannte Test
+  `TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction` nutzte
+  `newModel(nil, "")` — ein Model OHNE fokussiertes Bean. `keyNodeAction`
+  ist bei `focusedBean()==nil` ohnehin ein silent No-Op, der Test blieb
+  also auch GRÜN, als der Reviewer den kompletten D06-Guard per Mutation
+  entfernte. Der architektonisch kritischste Test der Task bewies nichts.
+- **Wie gefixt:** Fixture-Wechsel auf `fixtureModel(t, fixtureBeans())` +
+  `focusBean(...)` + Setup-Sanity-Guard (`focusedBean()==nil` → Fatal,
+  verhindert stille Rück-Degeneration) — Commit `aa411fa`; Guard-Mutation
+  macht den Test jetzt nachweislich rot.
+- **Forward-Guard:** Checklisten-Punkt für Leak-/Guard-Tests: **das
+  Test-Setup muss die Leak-Surface real herstellen** (Zustand, in dem
+  der geschützte Pfad ohne Guard tatsächlich feuern würde) plus
+  Sanity-Assertion, die das Setup selbst pinnt. Reviewer prüfen
+  Guard-Tests grundsätzlich per Guard-Entfernungs-Mutation.
+
+### 2. Geteilter Save-Tail las Kontext aus Seiteneffekt (T4/bt-1lsu B01)
+
+- **Was lief nicht rund:** `applyTagDefsSaved` fand den Cursor nach
+  jedem `tagDefsSavedMsg` implizit über `m.tagMgmtInput.Value()` —
+  sicher, solange Create der einzige Aufrufer war. T4s Delete wurde
+  zweiter Aufrufer, der das Feld nie setzt; T3s esc-Abbruch leert
+  `Value()` nicht → nach „Create getippt → esc → unabhängiges Delete"
+  sprang der Cursor auf den stalen Text.
+- **Wie gefixt:** `tagDefsSavedMsg` trägt ein explizites
+  `refindName string`; jeder Aufrufer übergibt den Namen selbst
+  (Create: neuer Name, Delete: Ziel, Rename: neuer Name) — Commit
+  `315d21f`, Rollback-Mutation macht zwei Regressionstests rot.
+- **Forward-Guard:** **Geteilte Ergebnis-Handler bekommen ihren Kontext
+  als explizites Msg-Feld, nie über Model-Seiteneffekt-Reads** — jeder
+  neue Aufrufer eines bestehenden tea.Cmd-Producers prüft, welche
+  impliziten Model-Annahmen der Handler macht.
+
+### 3. Bulk-Sweep gegen Resolver-Randfall (T5/bt-y9my, Datenverlust-Falle)
+
+- **Was lief nicht rund (fast):** `SetTags` dokumentiert „same tag in
+  add and remove → remove wins". T5s Rename-Sweep hätte beim Resubmit
+  des UNVERÄNDERTEN Namens (den die D14-Dedupe-Exklusion bewusst
+  erlaubt) je Bean `--tag X --remove-tag X` gesendet — das Tag wäre
+  still von JEDEM betroffenen Bean gestrippt worden.
+- **Wie gefixt:** Same-Name-Guard im Sweep-Cmd (`oldTag == newTag` →
+  No-Op, kein einziger SetTags-Aufruf), vom Implementer proaktiv
+  ergänzt und regression-getestet; Reviewer-Mutation bestätigte, dass
+  der Test den Datenverlust gefangen hätte (Commit `6d3a9b4`).
+- **Forward-Guard:** Checklisten-Punkt für jeden Bulk-Sweep über
+  Mutations-APIs: **die dokumentierte Resolver-Semantik der API gegen
+  Identitäts- und Randfälle (x→x, leer, nicht existent) prüfen, BEVOR
+  der Sweep geschnitten wird** — und den Randfall als Test pinnen.
+
+### 4. Upstream-Quirk: `beans create --tag` liefert stalen ETag (beans 0.4.2)
+
+- **Was lief nicht rund:** Ein bei `beans create --tag` getaggtes Bean
+  bekommt einen `list`/`show`-berichteten ETag, der mit dem intern von
+  `update --if-match` geprüften NICHT übereinstimmt — jeder folgende
+  `SetTags` läuft in CONFLICT, bis ein erfolgreiches `update` den ETag
+  „repariert". Von T5-Implementer UND -Reviewer unabhängig live
+  reproduziert (traf das Smoke-Setup; der continue-on-error-Sweep ritt
+  korrekt durch alle CONFLICTs — ungeplanter D13-Beweis).
+- **Wie gefixt:** Workaround im Smoke-Setup: Tags via separatem
+  `beans update --tag` setzen, nie via `create --tag`. Kein
+  beans-tui-Fix möglich (Upstream-Verhalten).
+- **Forward-Guard:** Smoke-/Test-Setups taggen NIE über `create --tag`.
+  Upstream-Issue-Kandidat für hmans/beans — **POST nur mit
+  PO-Freigabe** (extern), gesammelt beim bestehenden
+  T03-Upstream-ETag-Punkt.
+
+### 5. API-529-Abbrüche per Transcript-Resume überbrückt (T5-Review, T7)
+
+- **Was lief nicht rund:** Zwei Agents (T5-Reviewer mitten im Review,
+  T7-Implementer direkt nach Dispatch) starben am serverseitigen
+  „529 Overloaded"-API-Fehler.
+- **Wie gefixt:** SendMessage-Resume aus dem erhaltenen Transcript —
+  beide setzten ohne Arbeitsverlust fort (der Reviewer explizit mit
+  „bereits Erledigtes nicht wiederholen, nur Restpunkte"). Vorher je
+  ein `git log`/`git status`-Check im Ziel-Repo, um den echten Stand
+  in den Resume-Prompt zu schreiben.
+- **Forward-Guard:** Supervisor-Playbook-Regel: bei `failed`-Status
+  IMMER erst Repo-Stand erheben (`git log --oneline`, `git status`),
+  dann Resume mit präzisem Reststand-Auftrag; Dispatch-Prompts weisen
+  Agents an, nach einem Resume selbst `git log` zu prüfen statt Arbeit
+  zu doppeln.
