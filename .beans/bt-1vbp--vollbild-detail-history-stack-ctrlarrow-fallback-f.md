@@ -1,10 +1,11 @@
 ---
 # bt-1vbp
 title: Vollbild-Detail History-Stack — ctrl+arrow + [/]-Fallback (F01 History)
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:59Z
-updated_at: 2026-07-16T06:45:59Z
+updated_at: 2026-07-16T14:03:56Z
 parent: bt-tct9
 blocked_by:
     - bt-13l7
