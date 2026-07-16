@@ -1,10 +1,11 @@
 ---
 # bt-b0w0
 title: 'RELATIONS-Sektion: Dopplung raus, Pfeil-selektierbar, hängender Einzug (B04)'
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:47Z
-updated_at: 2026-07-16T06:45:47Z
+updated_at: 2026-07-16T10:34:28Z
 parent: bt-tct9
 ---
 
