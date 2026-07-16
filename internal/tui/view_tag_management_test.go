@@ -111,15 +111,41 @@ func TestKeyTagManagementEscReturnsToBrowse(t *testing.T) {
 	}
 }
 
-// TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction is the bean's own
-// named RED test (bt-r92i TDD section, quoted verbatim) -- the D06
-// regression guard.
+// TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction is the D06
+// regression guard (bean bt-r92i TDD section; REWRITTEN in Fix-Runde 1,
+// T2-Review F01, medium): the bean's original verbatim sketch used
+// `newModel(nil, "")` -- a model with NO focused bean -- but keyNodeAction's
+// branch (update.go) is a silent no-op when focusedBean()==nil anyway, so
+// that version stayed GREEN even with the D06 full-capture guard
+// (update.go, `if m.view == viewTagManagement`) removed entirely
+// (reviewer-verified by mutation). The whole POINT of D06 is that
+// focusedBean()'s `default` branch falls through to the TREE cursor while
+// viewTagManagement is active -- so the test must set up exactly that leak
+// surface: a real index + a real tree cursor on a real bean (focusBean,
+// box_menu_value_test.go). With the guard removed, `d` now reaches
+// keyNodeAction, resolves tk-2 as the (stale, unrelated) target and opens
+// the Delete-Confirm (overlay=overlayDeleteConfirm) -- verified RED under
+// exactly that mutation during Fix-Runde 1, quoted in the bean.
 func TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction(t *testing.T) {
-	m := newModel(nil, "")
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
 	m.view = viewTagManagement
+
+	// Sanity: the leak surface this test guards must actually exist --
+	// focusedBean() resolves the tree cursor via its default branch even
+	// while viewTagManagement is active. If this ever returns nil, the test
+	// has silently degraded back to the F01 no-op version.
+	if m.focusedBean() == nil {
+		t.Fatal("test setup invalid: focusedBean() == nil -- the D06 leak this test guards would be impossible to trigger")
+	}
+
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	if nm.(model).overlay != overlayNone {
-		t.Fatalf("want no overlay opened, got %v", nm.(model).overlay)
+	mm := nm.(model)
+	if mm.overlay != overlayNone {
+		t.Fatalf("want no overlay opened, got %v", mm.overlay)
+	}
+	if mm.view != viewTagManagement {
+		t.Fatalf("want view to stay viewTagManagement, got %v", mm.view)
 	}
 }
 

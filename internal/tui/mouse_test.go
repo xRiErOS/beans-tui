@@ -315,6 +315,51 @@ func TestHandleMouseIgnoredWhenFullscreenActive(t *testing.T) {
 	}
 }
 
+// TestHandleMouseIgnoredOnTagManagementPage guards F02 (E10 Task 2, bean
+// bt-r92i, T2-Review Fix-Runde 1): the Tag-Management page is a
+// keyboard-only full-capture state -- wheel and click must be no-ops there,
+// same contract as viewLobby (mirrors TestHandleMouseIgnoredWhenFullscreen
+// Active's pattern). Honest scope note: this test pins the CONTRACT, not
+// the specific guard line -- today the guard is redundant in effect
+// (wheelMove's and the left-click dispatch's view switches have no
+// viewTagManagement case and no default, so removal of the F02 guard alone
+// does not turn this red); the test exists so any FUTURE change to either
+// switch that starts routing mouse events against this page's foreign
+// geometry fails loudly here.
+func TestHandleMouseIgnoredOnTagManagementPage(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.expanded["ms-1"] = true
+	m.cursorID = "ms-1"
+	nm, _ := m.openTagManagementPage()
+	m, ok := nm.(model)
+	if !ok || m.view != viewTagManagement {
+		t.Fatal("setup: openTagManagementPage did not switch to viewTagManagement")
+	}
+
+	tm, _ := m.handleMouse(wheelMsg(tea.MouseButtonWheelDown))
+	m2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("handleMouse(wheel) did not return a model, got %T", tm)
+	}
+	if m2.cursorID != "ms-1" {
+		t.Fatalf("wheel on the tag page moved the TREE cursor: cursorID = %q, want unchanged (ms-1)", m2.cursorID)
+	}
+	if m2.tagMgmtCursor.cursor != m.tagMgmtCursor.cursor {
+		t.Fatalf("wheel on the tag page moved tagMgmtCursor: %d, want unchanged (%d)", m2.tagMgmtCursor.cursor, m.tagMgmtCursor.cursor)
+	}
+
+	click := tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 5}
+	tm2, _ := m.handleMouse(click)
+	m3, ok := tm2.(model)
+	if !ok {
+		t.Fatalf("handleMouse(click) did not return a model, got %T", tm2)
+	}
+	if m3.cursorID != "ms-1" || m3.view != viewTagManagement || m3.overlay != overlayNone {
+		t.Fatalf("click on the tag page had a side effect: cursorID=%q view=%v overlay=%v", m3.cursorID, m3.view, m3.overlay)
+	}
+}
+
 // TestToastClickDismissesEvenWithFormOpen is the Cross-Feature-Fix
 // regression guard (design decision a, Port devd DD2-272/273): a Toast
 // click-dismiss must reach the PO even while a form is open. Goes through

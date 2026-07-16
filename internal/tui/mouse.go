@@ -155,8 +155,17 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// (bean bt-zhwl): the Lobby is keyboard-only in V1 (design-spec.md §9
 	// scope cut, no click-to-select row mapping), so a click anywhere on it
 	// is a no-op, same as every other full-capture state in this list.
+	// m.view == viewTagManagement (E10 Task 2, bean bt-r92i, T2-Review
+	// Fix-Runde 1 F02): the Tag-Management page is the SAME keyboard-only
+	// full-capture class as the Lobby -- currently redundant in effect
+	// (both wheelMove's and the left-click dispatch's view switches below
+	// have no matching case AND no default, so every path already no-ops),
+	// but Defense-in-Depth: this list's own doc claim of completeness must
+	// hold, and a future T3-T6 change to either switch must not silently
+	// route stray clicks against the tag page's foreign geometry.
 	if m.form != nil || m.overlay != overlayNone || m.paletteOpen || m.filterOpen ||
-		m.searchActive || m.helpOpen || m.confirmQuit || m.view == viewLobby {
+		m.searchActive || m.helpOpen || m.confirmQuit || m.view == viewLobby ||
+		m.view == viewTagManagement {
 		return m, nil
 	}
 

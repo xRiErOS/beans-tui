@@ -1,11 +1,11 @@
 ---
 # bt-r92i
 title: T2 — Tag-Management-Page Grundgerüst (read-only)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:24Z
-updated_at: 2026-07-16T16:37:35Z
+updated_at: 2026-07-16T16:45:02Z
 parent: bt-362n
 blocked_by:
     - bt-49hh
@@ -418,3 +418,59 @@ lesend bestätigt), nur die erwarteten Quelldateiänderungen.
 - **F02 (low, mouse.go:158-159):** Full-Capture-Guard in handleMouse listet `m.view == viewTagManagement` NICHT, obwohl der Doc-Kommentar darüber Vollständigkeit beansprucht. Aktuell folgenlos (switch ohne default schützt indirekt), aber latente Falle für T3-T6. FIX: View in die OR-Kette aufnehmen (Defense-in-Depth) + falls sinnvoll Testabdeckung.
 
 Fix-Runde beim selben Implementer; Re-Review beim selben Reviewer. Nach Fix: Verifikation, dass die Reviewer-Mutation (D06-Guard raus) den neuen Test ROT macht — als RED-Beleg zitieren.
+
+## Fix-Runde 1 (2026-07-16, selber Implementer)
+
+Commit `test(tui): T2-Review R1 — F01 Leak-Test, F02 Maus` (Refs: bt-r92i).
+
+**F01 (medium) — GEFIXT.** `TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction`
+(view_tag_management_test.go) umgestellt auf `fixtureModel(t, fixtureBeans())`
++ `focusBean(m, "tk-2")` (Cursor/cursorID/expanded auf echtes Bean, Helper aus
+box_menu_value_test.go) + `m.view = viewTagManagement`. Zusätzlich ein
+Setup-Sanity-Guard im Test (`m.focusedBean() == nil` → Fatal), damit der Test
+nie wieder still zur No-Op-Variante degradieren kann, plus eine zweite
+Assertion (`view` bleibt `viewTagManagement`). Doc-Kommentar dokumentiert die
+F01-Historie (warum die Bean-Body-Sketch-Variante beweislos war).
+
+RED-Beleg (Reviewer-Mutation exakt nachgestellt: D06-Guard update.go:894-896
+auskommentiert, `command go test ./internal/tui/ -run
+TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction -v -count=1`):
+
+```
+=== RUN   TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction
+    view_tag_management_test.go:145: want no overlay opened, got 6
+--- FAIL: TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction (0.00s)
+FAIL
+FAIL	beans-tui/internal/tui	0.439s
+```
+
+(`overlay=6` == `overlayDeleteConfirm` — exakt der vom Reviewer belegte Leak.)
+Guard danach wiederhergestellt, `git diff internal/tui/update.go` gegen HEAD
+leer (byte-identisch), Test GREEN:
+
+```
+=== RUN   TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction
+--- PASS: TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction (0.00s)
+```
+
+**F02 (low) — GEFIXT.** `m.view == viewTagManagement` in die
+Full-Capture-OR-Kette in `handleMouse` (mouse.go) aufgenommen, mit
+Doc-Kommentar (Defense-in-Depth: heute wirkungsgleich, da wheelMove- und
+Left-Click-Switch keinen viewTagManagement-Case und keinen default haben —
+aber die Vollständigkeits-Zusage des Kommentars gilt wieder, und künftige
+T3-T6-Änderungen an einem der Switches können keine Streu-Klicks mehr gegen
+die fremde Page-Geometrie routen). Testabdeckung ergänzt:
+`TestHandleMouseIgnoredOnTagManagementPage` (mouse_test.go, spiegelt
+`TestHandleMouseIgnoredWhenFullscreenActive`s Muster: Wheel + Left-Click auf
+der offenen Page → Tree-Cursor, tagMgmtCursor, view, overlay alle
+unverändert). Ehrliche Scope-Notiz im Test-Doc-Kommentar: der Test pinnt den
+VERTRAG (Maus = No-Op auf der Page), nicht die konkrete Guard-Zeile — eine
+Entfernung NUR des F02-Guards macht ihn heute nicht rot (die Switch-ohne-
+default-Struktur schützt indirekt weiter), er schlägt erst an, wenn eine
+künftige Änderung Maus-Events tatsächlich gegen die Page routet.
+
+Gates Fix-Runde 1: `command gofmt -l .` leer · `command go vet ./...` leer ·
+voller Lauf `command go test ./... -count=1` grün (145s, internal/tui 140.1s,
+exit 0) · Goldens-Gegenbeleg `-run "TestTreeGolden|TestBacklogGolden|
+TestChromeGolden" -count=2` grün, `git diff --stat -- internal/tui/testdata/`
+leer.
