@@ -1,11 +1,11 @@
 ---
 # bt-7pk2
 title: E9-Abschluss (Voll-Validierung, Epic to-review)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T06:46:07Z
-updated_at: 2026-07-16T09:11:02Z
+updated_at: 2026-07-16T14:41:50Z
 parent: bt-tct9
 blocked_by:
     - bt-mtig
@@ -60,3 +60,12 @@ transitiv B04→B06 und F01-Kernmechanik→F01-History mit ab). Keine Code-Ände
 - [ ] `docs/SSTD.md`-Konsistenz geprüft (Update nur falls nötig)
 - [ ] Kein Golden-Drift unentdeckt (letzter Gegenbeleg-/Regenlauf grün, im Commit-Body
       referenziert)
+
+## PRELUDE aus T8-Review (2026-07-16, Reviewer bt-1vbp, Verdict APPROVED)
+
+Zwei optionale low-Findings — als erster eigener Commit erledigen (test-only, kein Produktionscode):
+
+- **T8-F01 (low, view_fullscreen.go:94,112):** `if m.idx == nil { break }` in beiden History-Loops ohne dedizierte Testabdeckung. Regressionstest ergänzen: `m.idx = nil` bei `fullscreen == fullscreenDetail` + gefülltem navBack → HistoryBack muss No-Op sein (kein Panic, kein stiller Stack-Verlust ohne Navigation prüfen — Verhalten wie implementiert festschreiben).
+- **T8-F02 (low, view_fullscreen_test.go TestHistoryBackForwardRoundTripReturnsToOriginalBean):** Roundtrip-Test prüft am Ende nur Stack-LÄNGEN + fullscreenBeanID. Zusätzliche Assertion auf exakte finale Slice-INHALTE von navBack/navForward (reflect.DeepEqual) ergänzen.
+
+Zudem für die Design-Spec-Konsistenzprüfung (Kernauftrag T9): design-spec.md §15 F01-History sagt noch 'navBack/navForward werden beim Verlassen NICHT geleert' — implementiert ist per Supervisor-Entscheid das GEGENTEIL (jeder Vollbild-Exit leert beide Stacks, an allen 3 Choke-Points verifiziert). Spec-Wortlaut auf implementierten Stand bringen, Supervisor-Entscheid als Änderungsgrund vermerken.
