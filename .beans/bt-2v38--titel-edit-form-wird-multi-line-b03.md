@@ -1,10 +1,11 @@
 ---
 # bt-2v38
 title: Titel-Edit-Form wird multi-line (B03)
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:45Z
-updated_at: 2026-07-16T06:45:45Z
+updated_at: 2026-07-16T09:26:12Z
 parent: bt-tct9
 ---
 
@@ -86,3 +87,14 @@ den `GetString`-Zugriff theoretisch brechen, falls huh intern anders keyed).
       Feldtyp-Wechsel)
 - [ ] Kein Golden ändert sich (Gegenbeleg grün)
 - [ ] Voller Testlauf grün, gofmt/vet leer
+
+
+## PRELUDE (2026-07-16, aus bt-6bgn-Review F05 — ZUERST erledigen, eigener Commit)
+
+Ein-Zeilen-Test-Härtung, low, kein eigener Review-Zyklus: in
+`internal/tui/editor_test.go`, `TestEditorFinishedTargetVanishedSurfacesError` ist die
+Dual-Write-Assertion `strings.HasPrefix(nm.err, nm.toast.title)` für einen leeren
+Toast-Title trivially true. Härtung: zusätzlich `nm.toast.title == ""` in die
+Fail-Bedingung aufnehmen (oder Title gegen die Note-Konstante pinnen). Als eigener
+kleiner Commit (`test(tui): harden vanished-target dual-write pin (F05)`,
+`Refs: bt-2v38`) VOR der eigentlichen B03-Arbeit.
