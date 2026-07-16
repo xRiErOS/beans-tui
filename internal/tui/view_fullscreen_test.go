@@ -19,6 +19,7 @@ import (
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // fullscreenBacklogBeans is a small parentless, Backlog-eligible fixture
@@ -321,6 +322,95 @@ func TestViewBrowseRepoFullscreenFitsOuterFrame(t *testing.T) {
 		for i, l := range lines {
 			if w := lipgloss.Width(l); w > 100 {
 				t.Fatalf("fullscreen=%v: line %d width = %d, want <= 100 (outer frame overflow): %q", fs, i, w, l)
+			}
+		}
+	}
+}
+
+// TestOverlayRendersOverFullscreen pins Review-Finding I01's first half
+// (Fix-Runde 1, bean bt-13l7): a node-action overlay opened FROM inside the
+// Vollbild-Detail (every s/t/a/r/d key works there verbatim via
+// focusedBean()'s fullscreenDetail case) must actually render ON TOP of the
+// fullscreen body -- composeOverlays runs after the new fullscreen branch,
+// structurally correct but previously unpinned.
+func TestOverlayRendersOverFullscreen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "ms-1"
+
+	m = m.openValueMenu("status")
+	if m.overlay != overlayValueMenu {
+		t.Fatal("setup: openValueMenu did not set the overlay (focusedBean's fullscreenDetail case broken?)")
+	}
+
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "enter:apply") {
+		t.Fatalf("value menu's own hint line must be visible over the fullscreen body, got:\n%s", out)
+	}
+}
+
+// TestKeyFullscreenVNoOpWhileOverlayOrFormOpen pins Review-Finding I01's
+// second half: `v` typed while a full-capture state is active (node-action
+// overlay, huh form) must NOT enter the Vollbild -- handleKey's capture
+// order routes those keys to keyOverlay/keyForm long before keyFullscreen's
+// checkpoint is reached (structurally correct, previously unpinned).
+func TestKeyFullscreenVNoOpWhileOverlayOrFormOpen(t *testing.T) {
+	t.Run("overlay", func(t *testing.T) {
+		m := fixtureModel(t, fixtureBeans())
+		m.cursorID = "ms-1"
+		m = m.openValueMenu("status")
+
+		m = step(t, m, runeMsg('v'))
+
+		if m.fullscreen != fullscreenNone {
+			t.Fatalf("fullscreen = %v, want fullscreenNone (v must not leak through an open overlay)", m.fullscreen)
+		}
+	})
+	t.Run("form", func(t *testing.T) {
+		m := fixtureModel(t, fixtureBeans())
+		m.cursorID = "ms-1"
+		tm, _ := m.openCreateForm()
+		fm, ok := tm.(model)
+		if !ok || fm.form == nil {
+			t.Fatal("setup: openCreateForm did not set m.form")
+		}
+
+		fm = step(t, fm, runeMsg('v'))
+
+		if fm.fullscreen != fullscreenNone {
+			t.Fatalf("fullscreen = %v, want fullscreenNone (v must not leak through an open form)", fm.fullscreen)
+		}
+	})
+}
+
+// TestFullscreenRecomputesGeometryOnResize pins Review-Finding I02
+// (Fix-Runde 1, bean bt-13l7): a WindowSizeMsg arriving AFTER the Vollbild
+// was entered must re-derive the single pane's width/height from the NEW
+// terminal size -- architecturally guaranteed (the fullscreen branch
+// recomputes from m.width/m.height on every render, no cached geometry),
+// but previously unpinned. Same frame-fits assertion as
+// TestViewBrowseRepoFullscreenFitsOuterFrame, just with the resize
+// happening while the Vollbild is already active.
+func TestFullscreenRecomputesGeometryOnResize(t *testing.T) {
+	for _, fs := range []fullscreenMode{fullscreenList, fullscreenDetail} {
+		m := fixtureModel(t, fixtureBeans())
+		m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+		m.cursorID = "ms-1"
+		m.fullscreen = fs
+		m.fullscreenBeanID = "ms-1"
+
+		// Resize AFTER fullscreen entry -- the render must follow.
+		m = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+		out := m.View()
+		lines := strings.Split(out, "\n")
+		if len(lines) > 24 {
+			t.Fatalf("fullscreen=%v: View() after resize produced %d lines, want <= 24", fs, len(lines))
+		}
+		for i, l := range lines {
+			if w := lipgloss.Width(l); w > 80 {
+				t.Fatalf("fullscreen=%v: line %d width = %d after resize, want <= 80: %q", fs, i, w, l)
 			}
 		}
 	}

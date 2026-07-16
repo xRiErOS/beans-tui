@@ -992,6 +992,76 @@ func TestKeyDetailFocusEscSectionLevelExitsFullscreenToTree(t *testing.T) {
 	}
 }
 
+// TestKeyDetailFocusEscOnVanishedFullscreenBeanExitsFullscreen guards
+// Review-Finding F01 (Fix-Runde 1, bean bt-13l7, Schwere hoch): when
+// fullscreenBeanID vanishes externally (live watch-reload, repo switch,
+// parallel-agent delete -- real in the dogfooding repo), focusedBean()
+// returns nil and keyDetailFocus's b==nil guard fires BEFORE the Back-case
+// is ever reached. Pre-fix it only cleared m.detailFocus, never
+// m.fullscreen -- the PO was trapped in a dead fullscreenDetail with no
+// keyboard exit (esc and every other detail key re-hit the same guard,
+// only Quit escaped). The guard must ALSO leave the Vollbild.
+func TestKeyDetailFocusEscOnVanishedFullscreenBeanExitsFullscreen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "does-not-exist" // vanished externally
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+
+	if m.fullscreen != fullscreenNone {
+		t.Fatalf("fullscreen = %v, want fullscreenNone (b==nil guard must exit the Vollbild, not leave the PO trapped)", m.fullscreen)
+	}
+	if m.detailFocus {
+		t.Fatal("detailFocus must be cleared too (existing guard behavior, unchanged)")
+	}
+}
+
+// TestKeyDetailFocusEscExitsFullscreenToTreeWhenTargetNotBacklogVisible
+// guards Review-Finding F02 (Fix-Runde 1, bean bt-13l7, SUPERVISOR-
+// ENTSCHEID "Fallback = View-Wechsel"): after Relations-Sprünge inside a
+// Backlog-origin fullscreenDetail, the exit target is USUALLY not
+// backlogVisible() anymore (has a Parent / is Epic/Milestone / wrong
+// status) -- the pre-fix sync loop then silently found no hit and left
+// backlogList.cursor stale, showing a DIFFERENT bean selected (violates
+// the PO criterion "mit dem aktuellen Bean selektiert"). Fix: esc switches
+// to Browse/Tree instead (the Tree can show EVERY bean), cursor on the
+// target + ancestors expanded. Only a still-backlogVisible target keeps
+// the existing Backlog sync (TestKeyDetailFocusEscSectionLevelExits
+// FullscreenToBacklogWithCursorSynced below, unchanged).
+func TestKeyDetailFocusEscExitsFullscreenToTreeWhenTargetNotBacklogVisible(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "fb-root", Title: "Root Epic", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: "fb-a", Title: "Backlog A", Status: "todo", Type: "task", Priority: "normal", Blocking: []string{"fb-child"}},
+		{ID: "fb-child", Title: "Child Task", Status: "todo", Type: "task", Priority: "normal", Parent: "fb-root"},
+	}
+	m := fixtureModel(t, beans)
+	m.view = viewBacklog
+	// Post-jump state (Reviewer-Repro): Backlog-origin Vollbild now shows
+	// fb-child -- parented, therefore NOT in backlogVisible().
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "fb-child"
+	m.backlogList.setLen(len(m.backlogVisible()))
+	m.backlogList.cursor = 0
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+
+	if m.fullscreen != fullscreenNone {
+		t.Fatalf("fullscreen = %v, want fullscreenNone", m.fullscreen)
+	}
+	if m.view != viewBrowseRepo {
+		t.Fatalf("view = %v, want viewBrowseRepo (F02 fallback: Tree can show every bean, Backlog cannot)", m.view)
+	}
+	if m.cursorID != "fb-child" {
+		t.Fatalf("cursorID = %q, want fb-child (PO: 'mit dem aktuellen Bean selektiert')", m.cursorID)
+	}
+	if !m.expanded["fb-root"] {
+		t.Fatal("fb-child's ancestor (fb-root) must be expanded so the target is actually visible")
+	}
+	if !m.detailFocus {
+		t.Fatal("esc-exit must leave the Split-Detail focused (unchanged exit contract)")
+	}
+}
+
 // TestKeyDetailFocusEscSectionLevelExitsFullscreenToBacklogWithCursorSynced
 // is the Backlog mirror: backlogList.cursor syncs onto the last-shown
 // Vollbild bean's index in backlogVisible() instead of the Tree cursor/

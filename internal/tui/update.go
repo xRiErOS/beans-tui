@@ -1037,6 +1037,20 @@ func (m model) focusedBean() *data.Bean {
 func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	b := m.focusedBean()
 	if b == nil { // defensive guard: orphan-root cursor, no focusable bean
+		// F01 (Review Fix-Runde 1, bean bt-13l7, Schwere hoch): inside
+		// fullscreenDetail this guard is ALSO the landing spot when
+		// fullscreenBeanID vanished externally (live watch-reload, repo
+		// switch, parallel-agent delete -- real in the dogfooding repo,
+		// Reviewer-Repro: "user is trapped in a dead fullscreenDetail with
+		// no keyboard exit"). Clearing only detailFocus left m.fullscreen
+		// stuck: every subsequent key (esc included) routed right back here
+		// via handleKey's fullscreenDetail condition and died in this same
+		// guard -- Quit was the only escape. Leaving the Vollbild here too
+		// rescues EVERY trigger at the single choke point they all pass
+		// through (Reviewer-Minimal-Fix, verbatim).
+		if m.fullscreen == fullscreenDetail {
+			m.fullscreen = fullscreenNone
+		}
 		m.detailFocus = false
 		return m, nil
 	}
@@ -1146,12 +1160,31 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.fullscreen = fullscreenNone
 			m.detailFocus = true
 			if m.view == viewBacklog {
-				vis := m.backlogVisible()
-				for i, bb := range vis {
+				// F02 (Review Fix-Runde 1, bean bt-13l7, SUPERVISOR-
+				// ENTSCHEID "Fallback = View-Wechsel"): after Relations-
+				// Sprünge the exit target is USUALLY no longer
+				// backlogVisible() (has a Parent / is Epic/Milestone /
+				// status outside todo+draft -- almost every jump leaves
+				// the Backlog set). The pre-fix loop then silently matched
+				// nothing and left backlogList.cursor stale -- the Split-
+				// Backlog showed a DIFFERENT bean selected, a silent
+				// violation of the PO criterion "mit dem aktuellen Bean
+				// selektiert". Fallback: switch to Browse/Tree, which can
+				// show EVERY bean -- cursor on the target + ancestors
+				// expanded, exactly the Tree-exit branch below. Only a
+				// still-backlogVisible target keeps the Backlog sync.
+				found := false
+				for i, bb := range m.backlogVisible() {
 					if bb.ID == id {
 						m.backlogList.cursor = i
+						found = true
 						break
 					}
+				}
+				if !found {
+					m.view = viewBrowseRepo
+					m.expanded = expandAncestorsOf(m.idx, m.expanded, id)
+					m.cursorID = id
 				}
 			} else {
 				m.expanded = expandAncestorsOf(m.idx, m.expanded, id)
