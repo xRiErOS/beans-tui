@@ -398,12 +398,17 @@ func detailClickKey(secIdx, fieldIdx int) int {
 // is windowless, so "click the selected field again" must be too.
 // "Selected" is the same state the ▶ marker renders from (metaSectionBody,
 // view_detail_bean.go): m.detailFocus && detailLevel==1 && the cursor pair
-// matches -- a stale fieldCursor without detailFocus does NOT count. Per
-// bt-y2iw's "Notes for bt-duz7" (BODY's enter-cascade equivalent has no
-// field to double-click), a double click on the BODY section's OWN header
-// instead opens $EDITOR via the SAME openBodyEditor helper keyDetailFocus's
-// enter-on-BODY branch uses (update.go) -- never a duplicated
-// editorTarget/editorETag assignment.
+// matches -- a stale fieldCursor without detailFocus does NOT count.
+//
+// BODY's section header (fieldIdx==-1) used to have its OWN double-click
+// exception here, opening $EDITOR via the (since-removed) openBodyEditor
+// helper -- mirroring keyDetailFocus's former enter-on-BODY branch (bt-y2iw
+// "Notes for bt-duz7", E8 Task 6/B10). D01 (design-spec.md §15 PF-17, bean
+// bt-z4b1) REVERTED that keyDetailFocus branch ersatzlos ("PO's neues
+// Mentalmodell reserviert '$EDITOR öffnen' ausschließlich für e") -- this
+// mirrored mouse exception is reverted the SAME way, for the same reason: a
+// double click on ANY section header (BODY included) is now a plain no-op,
+// exactly like every other section header.
 func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	b := m.focusedBean()
 	if b == nil {
@@ -432,9 +437,6 @@ func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if fieldIdx < 0 {
 		m.detailLevel = 0
 		m.fieldCursor = 0
-		if isDouble && secIdx == bodySectionIdx {
-			return m.openBodyEditor(b)
-		}
 		return m, nil
 	}
 

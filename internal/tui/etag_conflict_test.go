@@ -3,7 +3,9 @@ package tui
 // etag_conflict_test.go — the ETag-Konflikt-Regression-Sweep (E3 Task 6,
 // bean bt-ppzb): a stale-etag CONFLICT simulated for EVERY mutation site
 // built across T1-T5 (Status/Type/Priority value menu, Tag-Picker, Parent-
-// Picker Set/RemoveParent, Blocking-Picker, Title-Edit-Form, Body-$EDITOR),
+// Picker Set/RemoveParent, Blocking-Picker, Title-Edit-Form, whole-bean
+// $EDITOR/UpdateWhole -- D01, bean bt-z4b1, updated the last site's own
+// dispatch from a Body-only SetBody to a combined UpdateWhole call),
 // asserting the ONE shared contract every site funnels through
 // (applyMutationResult, update.go, design decision d): a data.ErrConflict-
 // classified mutationDoneMsg -> a status line containing "Conflict", no
@@ -182,17 +184,21 @@ func TestEtagConflictSweep(t *testing.T) {
 		assertConflictSweep(t, tm, cmd)
 	})
 
-	t.Run("editor SetBody", func(t *testing.T) {
-		// KORRIGIERT (Review-Runde 2, F2, bean bt-sl45): this site's etag is
-		// frozen at $EDITOR-open (m.editorETag), never re-read fresh at
-		// submit (applyEditorFinished's own doc-stamp, update.go) -- the
-		// specific "freeze, don't re-read" nuance already has its OWN
-		// dedicated regression test
+	t.Run("editor UpdateWhole", func(t *testing.T) {
+		// KORRIGIERT (Review-Runde 2, F2, bean bt-sl45; UPDATED for D01, bean
+		// bt-z4b1, design-spec.md §15 PF-17): this site's etag (AND full
+		// snapshot, D01's extension) is frozen at $EDITOR-open
+		// (m.editorETag/m.editorSnapshot), never re-read fresh at submit
+		// (applyEditorFinished's own doc-stamp, update.go) -- the specific
+		// "freeze, don't re-read" nuance already has its OWN dedicated
+		// regression test
 		// (TestEditorFinishedUsesEtagCapturedAtOpenNotFreshIndexRead,
 		// editor_test.go); this subtest only proves the SAME shared conflict
 		// contract (Konflikt statusline + reload) every other site in this
 		// sweep is checked against, driving applyEditorFinished directly via
-		// editorFinishedMsg (mirrors
+		// editorFinishedMsg with a VALID raw-bean content (parseRawBean must
+		// succeed for this to reach UpdateWhole rather than the parse-error
+		// recovery path) -- mirrors
 		// TestEditorFinishedConflictWritesRecoveryTempFileAndSurfacesPath's
 		// own setup shape, editor_test.go).
 		fakeBeansConflict(t)
@@ -200,8 +206,12 @@ func TestEtagConflictSweep(t *testing.T) {
 		m.client = &data.Client{RepoDir: t.TempDir()}
 		m.editorTarget = "tk-2"
 		m.editorETag = "captured-at-open-etag"
+		m.editorSnapshot = &data.Bean{ID: "tk-2", Title: "Task Two", Status: "todo", Type: "task", Priority: "normal"}
 
-		tm, cmd := m.Update(editorFinishedMsg{content: "edited body", changed: true})
+		fm := rawBeanFrontmatter{Title: "Task Two Edited", Status: "todo", Type: "task", Priority: "normal"}
+		raw := rawEditorText(t, fm, "edited body")
+
+		tm, cmd := m.Update(editorFinishedMsg{content: raw, changed: true})
 		assertConflictSweep(t, tm, cmd)
 	})
 }
@@ -211,7 +221,7 @@ func TestEtagConflictSweep(t *testing.T) {
 // overlay's open and its enter must dispatch the FRESH (reloaded) etag, not
 // the stale open-time one -- so a reload itself never manufactures a false
 // conflict, only a genuine Submit<->Disk race does. Does NOT apply to the
-// editor SetBody site (m.editorETag is deliberately FROZEN at open, F2
+// editor UpdateWhole site (m.editorETag is deliberately FROZEN at open, F2
 // Review-Runde 2 -- see editor_test.go's own
 // TestEditorFinishedUsesEtagCapturedAtOpenNotFreshIndexRead, which proves the
 // OPPOSITE direction for that one site on purpose). Verified the same way

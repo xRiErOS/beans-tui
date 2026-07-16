@@ -233,6 +233,35 @@ func repoMetricsBatchCmd(repos []string) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// beanRawLoadedMsg carries data.Client.ShowRaw's async result (D01, design-
+// spec.md §15 PF-17, bean bt-z4b1) -- openBeanEditor's FIRST Cmd-hop
+// (editor.go): the raw markdown read must run as its own tea.Cmd BEFORE the
+// tea.ExecProcess suspend can fire (a subprocess call, ~20-50ms, must never
+// run synchronously inside Update). Update()'s beanRawLoadedMsg case
+// (applyBeanRawLoaded, update.go) fires the ACTUAL editInEditor suspend on
+// err==nil (the SECOND Cmd-hop) -- err != nil surfaces a toast and resets
+// the editor-open state instead of ever suspending into $EDITOR on a read
+// that never succeeded.
+type beanRawLoadedMsg struct {
+	id  string
+	raw string
+	err error
+}
+
+// showRawCmd runs data.Client.ShowRaw async, tagging the result as
+// beanRawLoadedMsg (D01) -- id rides along so applyBeanRawLoaded can confirm
+// it still matches m.editorTarget before suspending (defensive: nothing
+// else can legitimately touch editorTarget between openBeanEditor and this
+// Cmd resolving, since Update() only ever processes one Msg at a time, but
+// the check costs nothing and guards against a stale load ever suspending
+// into the WRONG bean's editor).
+func showRawCmd(c *data.Client, id string) tea.Cmd {
+	return func() tea.Msg {
+		raw, err := c.ShowRaw(id)
+		return beanRawLoadedMsg{id: id, raw: raw, err: err}
+	}
+}
+
 // mutationDoneMsg carries any mutation's outcome (E3, bean bt-dlgk: the
 // SHARED tail every Set*/Add*/Remove*/Delete mutation goes through -- no
 // per-mutation Msg types). Success and failure BOTH trigger an unconditional

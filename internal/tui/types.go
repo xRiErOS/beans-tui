@@ -318,6 +318,20 @@ type model struct {
 	editorTarget string
 	editorETag   string
 
+	// editorSnapshot (D01, design-spec.md §15 PF-17, bean bt-z4b1): the FULL
+	// *data.Bean value at $EDITOR-OPEN time, frozen in the SAME
+	// openBeanEditor call as editorTarget/editorETag above -- unlike the
+	// old openBodyEditor (SetBody-only, E3 Task 5/E8 B10, both SUPERSEDED
+	// by this task), the whole-bean $EDITOR round-trip diffs EVERY field
+	// individually against this snapshot (buildWholeEditDiff, editor.go),
+	// not just the body -- ID+ETag alone are not enough. Always non-nil
+	// together with a non-empty editorTarget (the single openBeanEditor
+	// call site sets all three at once); applyEditorFinished/
+	// applyBeanRawLoaded's error paths (update.go) clear all three
+	// together on every exit, mirroring editorTarget/editorETag's own
+	// contract.
+	editorSnapshot *data.Bean
+
 	// Delete-Confirm `d` (E3 Task 6, bean bt-ppzb, box_confirm_delete.go):
 	// delTitle/delChildren are captured at OPEN time (openDeleteConfirm) for
 	// the modal's own render -- mutTarget (shared with every other overlay,

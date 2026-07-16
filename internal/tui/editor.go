@@ -1,11 +1,24 @@
 package tui
 
-// editor.go — $EDITOR-Suspend for the Body field (`ctrl+e`, E3 Task 5, bean
-// bt-sl45, design decisions c/h): tea.ExecProcess suspends the running
+// editor.go — the $EDITOR-Suspend machinery (`e`/`ctrl+e`, D01, design-
+// spec.md §15 PF-17, bean bt-z4b1): tea.ExecProcess suspends the running
 // Bubble Tea program, hands the terminal to the user's editor on a temp file
-// seeded with the bean's current body, and resumes once the editor exits.
-// Port devd editor.go:14-96 (editorFinishedMsg/prepareEditor/
-// readEditorResult/editInEditor) VERBATIM.
+// seeded with the bean's FULL raw markdown representation (`beans show <id>
+// --raw`, byte-identical to the on-disk .beans/*.md file), and resumes once
+// the editor exits. Port devd editor.go:14-96 (editorFinishedMsg/
+// prepareEditor/readEditorResult/editInEditor) VERBATIM -- these stay
+// suffix/content-agnostic, unaffected by D01's scope change from
+// Body-only to whole-bean.
+//
+// openBeanEditor (below) REPLACES the former openBodyEditor (E3 Task 5/E8
+// B10, both SUPERSEDED by D01): "e"/"ctrl+e" now UNCONDITIONALLY open the
+// whole bean, not just its Body, and never open the Title-Edit-Form either
+// -- ONE editor helper, ONE dispatch path, no more context-sensitive
+// branching (update.go's keyNodeAction). Because ShowRaw is itself a
+// subprocess call (~20-50ms, design-spec §3.1), openBeanEditor cannot fire
+// tea.ExecProcess directly -- it returns showRawCmd's Cmd (messages.go)
+// instead, and Update()'s new beanRawLoadedMsg case (update.go) fires the
+// ACTUAL suspend once that read resolves (two Cmd-hops, not one).
 //
 // editorBinary()'s cascade (E5 Task 5, bean bt-0l8c, updates the E3-era
 // comment this file used to carry here): configuredEditor (Settings, E5's
@@ -19,12 +32,15 @@ package tui
 // render path); this file only carries the Editor-Suspend half.
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
+	"gopkg.in/yaml.v3"
 )
 
 // editorFinishedMsg carries an $EDITOR-Suspend session's result back into the
@@ -124,17 +140,156 @@ func editInEditor(initial, suffix string) tea.Cmd {
 	})
 }
 
-// openBodyEditor suspends into $EDITOR on b's Body (B10, design-spec.md §15
-// PF-16, bean bt-ntoz, E8 Task 6) -- the ONE shared helper for BOTH call
-// sites that need to open the Body in $EDITOR: keyNodeAction's "ctrl+e"/"e"-
-// on-BODY-section branch and keyDetailFocus's "enter"-on-BODY-section branch
-// (update.go). Factored out specifically so B10's second call site (the new
-// enter-on-BODY case) does not duplicate the etag-capture dance ctrl+e
-// already established (F2, Review-Runde 2: the etag is captured HERE, at
-// open time -- never a fresh m.beanETag(id) re-read later, see
-// applyEditorFinished's own doc-stamp for the full lost-update rationale).
-func (m model) openBodyEditor(b *data.Bean) (model, tea.Cmd) {
+// openBeanEditor suspends into $EDITOR on b's FULL raw markdown
+// representation (D01, design-spec.md §15 PF-17, bean bt-z4b1) -- the ONE
+// shared helper for the ONE remaining "e"/"ctrl+e" call site (keyNodeAction,
+// update.go), REPLACING the former openBodyEditor (Body-only, E3 Task 5/E8
+// B10 -- both superseded). Unlike openBodyEditor, the raw text is NOT
+// already in memory: ShowRaw is a subprocess read (~20-50ms, design-spec
+// §3.1) that must never run synchronously inside Update, so this returns
+// showRawCmd's Cmd (messages.go) -- the FIRST of two Cmd-hops. The actual
+// tea.ExecProcess suspend fires once that read resolves (Update()'s new
+// beanRawLoadedMsg case, update.go).
+//
+// editorTarget/editorETag/editorSnapshot are all frozen HERE, at
+// $EDITOR-open time (F2, mirrors openBodyEditor's own rationale -- never a
+// fresh m.beanETag(id)/m.idx re-read later). editorSnapshot (types.go, NEW
+// field) is the FULL *data.Bean value, not just ID+ETag: applyEditorFinished
+// diffs every field individually against it (buildWholeEditDiff below), so
+// title/status/type/priority/tags/blocking/blocked_by/parent/body all need
+// their open-time value on hand, not just enough to detect an ETag
+// conflict. A local copy (not a pointer into m.idx) so a later
+// beansLoadedMsg reload can never mutate it out from under an in-flight
+// $EDITOR session (same "frozen, not live" contract editorETag already
+// established).
+func (m model) openBeanEditor(b *data.Bean) (model, tea.Cmd) {
 	m.editorTarget = b.ID
 	m.editorETag = b.ETag
-	return m, editInEditor(b.Body, ".md")
+	snap := *b
+	m.editorSnapshot = &snap
+	return m, showRawCmd(m.client, b.ID)
+}
+
+// rawBeanFrontmatter is the parse target for a whole-bean $EDITOR round-trip
+// (D01, design-spec.md §15 PF-17) -- gopkg.in/yaml.v3 unmarshals the
+// frontmatter block parseRawBean (below) splits off. created_at/
+// updated_at/the ID itself are deliberately NOT fields here: `beans update`
+// has no flag for any of them -- the "Bekannte Grenze" applyEditorFinished's
+// own doc-stamp documents (update.go) as an ERRATUM, not a bug. The
+// "# <id>" comment line ShowRaw's output carries is a YAML comment, yaml.v3
+// skips it automatically.
+type rawBeanFrontmatter struct {
+	Title     string   `yaml:"title"`
+	Status    string   `yaml:"status"`
+	Type      string   `yaml:"type"`
+	Priority  string   `yaml:"priority"`
+	Tags      []string `yaml:"tags"`
+	Parent    string   `yaml:"parent"`
+	Blocking  []string `yaml:"blocking"`
+	BlockedBy []string `yaml:"blocked_by"`
+}
+
+// parseRawBean splits raw (the $EDITOR's returned content, the SAME shape
+// as ShowRaw's own seed text) at the SECOND "---" delimiter into
+// frontmatter + body, then yaml-unmarshals the frontmatter block. Returns
+// an error for malformed input (missing leading/second delimiter, invalid
+// YAML) -- the caller (applyEditorFinished, update.go) surfaces it via the
+// SAME recovery-tempfile convention as a CLI VALIDATION_ERROR (design-spec
+// §15 PF-17's "Fehlerfall": the whole-bean editor is bewusst UNconstrained
+// Freitext-YAML, so a malformed edit must be recoverable, never silently
+// discarded).
+//
+// body's leading-newline convention deliberately mirrors data.Bean.Body's
+// own CLI-JSON shape (verified empirically, internal/data's
+// TestUpdateWholeSendsOnlyChangedFields "body only" subtest): the on-disk
+// format always has a blank line between the frontmatter's closing "---"
+// and the body text, so everything AFTER the second delimiter's own
+// trailing newline -- including that blank line -- becomes the body,
+// unmodified.
+func parseRawBean(raw string) (rawBeanFrontmatter, string, error) {
+	const openDelim = "---\n"
+	if !strings.HasPrefix(raw, openDelim) {
+		return rawBeanFrontmatter{}, "", fmt.Errorf("parseRawBean: content does not start with a %q frontmatter delimiter", "---")
+	}
+	rest := raw[len(openDelim):]
+
+	const closeDelim = "\n---\n"
+	idx := strings.Index(rest, closeDelim)
+	if idx < 0 {
+		return rawBeanFrontmatter{}, "", fmt.Errorf("parseRawBean: missing second %q frontmatter delimiter", "---")
+	}
+	fmBlock := rest[:idx]
+	body := rest[idx+len(closeDelim):]
+
+	var fm rawBeanFrontmatter
+	if err := yaml.Unmarshal([]byte(fmBlock), &fm); err != nil {
+		return rawBeanFrontmatter{}, "", fmt.Errorf("parseRawBean: invalid YAML frontmatter: %w", err)
+	}
+	return fm, body, nil
+}
+
+// diffStringSlices computes the add/remove SET-diff between old and new
+// (both treated as unordered sets -- mirrors applyTagPickerDiff's/
+// applyBlockingPickerDiff's own add/remove convention, box_picker_tag.go/
+// box_picker_blocking.go), sorted for deterministic CLI flag order.
+func diffStringSlices(old, new []string) (add, remove []string) {
+	oldSet := make(map[string]bool, len(old))
+	for _, v := range old {
+		oldSet[v] = true
+	}
+	newSet := make(map[string]bool, len(new))
+	for _, v := range new {
+		newSet[v] = true
+	}
+	for v := range newSet {
+		if !oldSet[v] {
+			add = append(add, v)
+		}
+	}
+	for v := range oldSet {
+		if !newSet[v] {
+			remove = append(remove, v)
+		}
+	}
+	sort.Strings(add)
+	sort.Strings(remove)
+	return add, remove
+}
+
+// buildWholeEditDiff computes the field-level data.WholeEditDiff between
+// snapshot (the bean's state frozen at $EDITOR-open time, m.editorSnapshot)
+// and the $EDITOR round-trip's parsed return (fm, body) -- D01, design-spec
+// §15 PF-17 Step 2. Only fields that actually differ carry a non-nil/
+// non-empty value (data.Client.UpdateWhole's own "only changed fields"
+// contract, mutations.go) -- a fully unchanged round-trip (e.g. the PO only
+// reformatted whitespace) produces a zero-value diff, which UpdateWhole
+// turns into NO CLI call at all. created_at/updated_at/the ID are not
+// compared here -- they are not even parsed into rawBeanFrontmatter
+// (parseRawBean's own doc-stamp), the "Bekannte Grenze" this task documents
+// as an ERRATUM.
+func buildWholeEditDiff(snapshot *data.Bean, fm rawBeanFrontmatter, body string) data.WholeEditDiff {
+	var diff data.WholeEditDiff
+	if fm.Title != snapshot.Title {
+		diff.Title = &fm.Title
+	}
+	if fm.Status != snapshot.Status {
+		diff.Status = &fm.Status
+	}
+	if fm.Type != snapshot.Type {
+		diff.Type = &fm.Type
+	}
+	if fm.Priority != snapshot.Priority {
+		diff.Priority = &fm.Priority
+	}
+	diff.TagsAdd, diff.TagsRemove = diffStringSlices(snapshot.Tags, fm.Tags)
+	diff.BlockingAdd, diff.BlockingRemove = diffStringSlices(snapshot.Blocking, fm.Blocking)
+	diff.BlockedByAdd, diff.BlockedByRemove = diffStringSlices(snapshot.BlockedBy, fm.BlockedBy)
+	if fm.Parent != snapshot.Parent {
+		diff.ParentChanged = true
+		diff.Parent = fm.Parent
+	}
+	if body != snapshot.Body {
+		diff.Body = &body
+	}
+	return diff
 }

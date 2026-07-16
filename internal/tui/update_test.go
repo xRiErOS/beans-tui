@@ -930,12 +930,12 @@ func TestKeyDetailFocusEnterAtSectionLevelEntersFieldLevel(t *testing.T) {
 // TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields guards the same
 // alias's guard condition using History (section 4, historySectionIdx) --
 // like Body, History carries no .fields, so enter must stay at section
-// level (mirrors the existing right/l behavior for fieldless sections).
-// RENAMED/MOVED off Body (E8 Task 6, bean bt-y2iw, B10): Body is no longer a
-// generic fieldless-section example -- enter on Body now opens $EDITOR (see
-// TestKeyDetailFocusEnterOnBodySectionOpensEditor below), so this test needed
-// a DIFFERENT fieldless section to keep pinning the generic no-fields-noop
-// invariant the original test intended.
+// level (mirrors the existing right/l behavior for fieldless sections). Body
+// itself briefly had a special-cased $EDITOR-opening exception here (E8
+// Task 6, bean bt-y2iw, B10) -- D01 (design-spec.md §15 PF-17, bean bt-z4b1)
+// REVERTED that exception ersatzlos (TestKeyDetailFocusEnterOnBodyIsNoOpAgain
+// below), so Body is once again just another fieldless section covered by
+// this same generic invariant.
 func TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2")
@@ -950,22 +950,17 @@ func TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields(t *testing.T) {
 	}
 }
 
-// TestKeyDetailFocusEnterOnBodySectionOpensEditor guards B10 (design-spec.md
-// §15 PF-16, bean bt-ntoz, E8 Task 6): enter on Section [2] BODY (which
-// carries no .fields, so the OLD code fell straight to the fields>0 guard
-// and did nothing) now opens $EDITOR via the shared openBodyEditor helper
-// (editor.go) -- consistent with [1] META, where enter already opened the
-// field-level overlay cascade. m.detailLevel/m.secCursor stay untouched
-// (openBodyEditor doesn't touch either), only editorTarget/editorETag get
-// set and a non-nil Cmd (the ExecProcess-wrapped suspend) comes back.
-func TestKeyDetailFocusEnterOnBodySectionOpensEditor(t *testing.T) {
-	beans := fixtureBeans()
-	for i := range beans {
-		if beans[i].ID == "tk-2" {
-			beans[i].ETag = "tk-2-etag"
-		}
-	}
-	m := fixtureModel(t, beans)
+// TestKeyDetailFocusEnterOnBodyIsNoOpAgain is the B10-Revision regression
+// test (D01, design-spec.md §15 PF-17, bean bt-z4b1, supersedes E8-B10):
+// enter on Section [2] BODY used to open $EDITOR (B10) -- that special case
+// is now REMOVED ersatzlos ("PO's neues Mentalmodell reserviert '$EDITOR
+// öffnen' ausschließlich für e"). BODY carries no .fields, so enter must
+// fall straight through to the generic fields>0 guard and do nothing --
+// exactly the pre-E8 state, mirrors
+// TestKeyDetailFocusEnterAtSectionLevelNoopWithoutFields's assertions for
+// History.
+func TestKeyDetailFocusEnterOnBodyIsNoOpAgain(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2")
 	m = step(t, m, keyMsg(tea.KeyTab))
 	m = step(t, m, runeMsg('2')) // Body -- no fields
@@ -978,89 +973,136 @@ func TestKeyDetailFocusEnterOnBodySectionOpensEditor(t *testing.T) {
 	if !ok {
 		t.Fatalf("Update(enter) did not return a model, got %T", tm)
 	}
-	if nm.editorTarget != "tk-2" {
-		t.Fatalf("editorTarget = %q, want tk-2", nm.editorTarget)
-	}
-	if nm.editorETag != "tk-2-etag" {
-		t.Fatalf("editorETag = %q, want %q (captured at open, F2)", nm.editorETag, "tk-2-etag")
-	}
 	if nm.detailLevel != 0 {
-		t.Fatalf("detailLevel = %d, want unchanged 0 (BODY has no field level)", nm.detailLevel)
+		t.Fatal("enter on Body (no fields) must stay at section level")
 	}
-	if cmd == nil {
-		t.Fatal("enter on BODY must return a Cmd (the ExecProcess-wrapped editor suspend)")
+	if nm.form != nil || nm.overlay != overlayNone {
+		t.Fatal("enter on Body (no fields) must be a pure no-op -- no form/overlay")
+	}
+	if nm.editorTarget != "" || nm.editorETag != "" || nm.editorSnapshot != nil {
+		t.Fatal("enter on Body must NEVER open $EDITOR anymore (B10-Revision, D01) -- that is e/ctrl+e's job exclusively")
+	}
+	if cmd != nil {
+		t.Fatal("enter on Body (no fields) must return a nil Cmd")
 	}
 }
 
-// --- B10 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6): keyNodeAction's
-// "e"/"ctrl+e" Editor dispatch becomes section-context-sensitive too. ---
+// TestKeyNodeActionEditorAlwaysOpensBeanEditor is D01's core end-to-end
+// regression test (design-spec.md §15 PF-17, bean bt-z4b1, supersedet E8-
+// B10): e/ctrl+e must open the SAME whole-bean $EDITOR path from EVERY
+// realistic entry point -- Tree (no detail focus), Backlog (no detail
+// focus), and Detail focus parked on EVERY section/field level (META at
+// section AND field level, BODY, RELATIONS, HISTORY). Testing only one
+// entry point was exactly docs/LESSONS-LEARNED.md's Forward-Guard #3 gap
+// ("neue Kaskaden IMMER end-to-end testen -- JEDE Stufe, aus jedem
+// realistischen Ausgangszustand") -- this test exists specifically so D01's
+// "egal an welcher Stelle" claim does not repeat that mistake. Never opens
+// the Title-Edit-Form (the former section-context-sensitive B10 branching
+// is GONE, no exceptions).
+func TestKeyNodeActionEditorAlwaysOpensBeanEditor(t *testing.T) {
+	setup := func(t *testing.T) (model, *data.Bean) {
+		t.Helper()
+		beans := fixtureBeans()
+		for i := range beans {
+			if beans[i].ID == "tk-1" {
+				beans[i].ETag = "tk-1-etag"
+			}
+		}
+		m := fixtureModel(t, beans)
+		m = focusBean(m, "tk-1")
+		return m, m.idx.ByID["tk-1"]
+	}
 
-// TestKeyNodeActionBareEOnBodySectionOpensEditor mirrors
-// TestKeyNodeActionCtrlEStartsEditorSuspend (editor_test.go) for the PLAIN
-// "e" key: while Detail-Focus is parked on Section [2] BODY, "e" now opens
-// $EDITOR too -- not the Title-Edit-Form it opened before this task
-// (inconsistent with ctrl+e, PO-reported).
-func TestKeyNodeActionBareEOnBodySectionOpensEditor(t *testing.T) {
-	beans := fixtureBeans()
-	for i := range beans {
-		if beans[i].ID == "tk-1" {
-			beans[i].ETag = "tk-1-etag"
+	cases := []struct {
+		name  string
+		setup func(m model) model
+	}{
+		{"tree, no detail focus", func(m model) model { return m }},
+		{"detail focus, META section level", func(m model) model {
+			m.detailFocus, m.secCursor, m.detailLevel = true, metaSectionIdx, 0
+			return m
+		}},
+		{"detail focus, META field level", func(m model) model {
+			m.detailFocus, m.secCursor, m.detailLevel, m.fieldCursor = true, metaSectionIdx, 1, 0
+			return m
+		}},
+		{"detail focus, BODY section", func(m model) model {
+			m.detailFocus, m.secCursor, m.detailLevel = true, bodySectionIdx, 0
+			return m
+		}},
+		{"detail focus, RELATIONS section", func(m model) model {
+			m.detailFocus, m.secCursor, m.detailLevel = true, relationsSectionIdx, 0
+			return m
+		}},
+		{"detail focus, HISTORY section", func(m model) model {
+			m.detailFocus, m.secCursor, m.detailLevel = true, historySectionIdx, 0
+			return m
+		}},
+	}
+
+	for _, tc := range cases {
+		for _, key := range []tea.KeyMsg{runeMsg('e'), keyMsg(tea.KeyCtrlE)} {
+			t.Run(fmt.Sprintf("%s/%s", tc.name, key.String()), func(t *testing.T) {
+				m, b := setup(t)
+				m = tc.setup(m)
+
+				tm, cmd := m.Update(key)
+				nm, ok := tm.(model)
+				if !ok {
+					t.Fatalf("Update did not return a model, got %T", tm)
+				}
+				if nm.editorTarget != b.ID {
+					t.Fatalf("editorTarget = %q, want %q", nm.editorTarget, b.ID)
+				}
+				if nm.editorETag != b.ETag {
+					t.Fatalf("editorETag = %q, want %q", nm.editorETag, b.ETag)
+				}
+				if nm.editorSnapshot == nil || nm.editorSnapshot.ID != b.ID {
+					t.Fatalf("editorSnapshot = %v, want a snapshot of %q", nm.editorSnapshot, b.ID)
+				}
+				if nm.form != nil {
+					t.Fatal("e/ctrl+e must NEVER open the Title-Edit-Form (D01)")
+				}
+				if cmd == nil {
+					t.Fatal("e/ctrl+e must return a Cmd (the ShowRaw read, first Cmd-hop)")
+				}
+			})
 		}
 	}
-	m := fixtureModel(t, beans)
-	m = focusBean(m, "tk-1")
-	m.detailFocus = true
-	m.secCursor = bodySectionIdx
 
-	handled, nm, cmd := m.keyNodeAction(runeMsg('e'))
-	if !handled {
-		t.Fatal("e must be handled")
-	}
-	mm, ok := nm.(model)
-	if !ok {
-		t.Fatalf("keyNodeAction did not return a model, got %T", nm)
-	}
-	if mm.editorTarget != "tk-1" {
-		t.Fatalf("editorTarget = %q, want tk-1", mm.editorTarget)
-	}
-	if mm.editorETag != "tk-1-etag" {
-		t.Fatalf("editorETag = %q, want %q (captured at open, F2)", mm.editorETag, "tk-1-etag")
-	}
-	if mm.form != nil {
-		t.Fatal("e on Section [2] BODY must NOT open the Title-Edit-Form")
-	}
-	if cmd == nil {
-		t.Fatal("e on Section [2] BODY must return a Cmd (the ExecProcess-wrapped editor suspend)")
-	}
-}
-
-// TestKeyNodeActionBareEOutsideBodySectionOpensTitleForm is B10's regression
-// guard: "e" pressed while Detail-Focus is parked on any OTHER section
-// (META/RELATIONS/HISTORY) must still open the Title-Edit-Form exactly as
-// before this task -- only Section [2] BODY gets the new $EDITOR dispatch
-// (PO named only BODY as inconsistent, no further per-section fall
-// requested).
-func TestKeyNodeActionBareEOutsideBodySectionOpensTitleForm(t *testing.T) {
-	for _, sec := range []int{metaSectionIdx, relationsSectionIdx, historySectionIdx} {
-		t.Run(fmt.Sprintf("section=%d", sec), func(t *testing.T) {
-			m := fixtureModel(t, fixtureBeans())
-			m = focusBean(m, "tk-1")
-			m.detailFocus = true
-			m.secCursor = sec
-
-			handled, nm, _ := m.keyNodeAction(runeMsg('e'))
-			if !handled {
-				t.Fatal("e must be handled")
+	// Backlog entry point -- a separate m.view/focusedBean() path
+	// (focusedBean's viewBacklog case, update.go).
+	for _, key := range []tea.KeyMsg{runeMsg('e'), keyMsg(tea.KeyCtrlE)} {
+		t.Run("backlog, no detail focus/"+key.String(), func(t *testing.T) {
+			beans := backlogBeans()
+			for i := range beans {
+				beans[i].ETag = beans[i].ID + "-etag"
 			}
-			mm, ok := nm.(model)
+			m := fixtureModel(t, beans)
+			m.view = viewBacklog
+			m.backlogList.setLen(len(m.backlogVisible()))
+			m.backlogList.cursor = 0
+			b := m.backlogSelected()
+			if b == nil {
+				t.Fatal("setup: backlogSelected() is nil")
+			}
+
+			tm, cmd := m.Update(key)
+			nm, ok := tm.(model)
 			if !ok {
-				t.Fatalf("keyNodeAction did not return a model, got %T", nm)
+				t.Fatalf("Update did not return a model, got %T", tm)
 			}
-			if mm.form == nil || mm.formKind != "editTitle" {
-				t.Fatalf("section %d: e did not open the edit-title form (form=%v formKind=%q)", sec, mm.form, mm.formKind)
+			if nm.editorTarget != b.ID {
+				t.Fatalf("editorTarget = %q, want %q", nm.editorTarget, b.ID)
 			}
-			if mm.editorTarget != "" {
-				t.Fatalf("section %d: editorTarget = %q, want empty (must not open $EDITOR outside BODY)", sec, mm.editorTarget)
+			if nm.editorSnapshot == nil || nm.editorSnapshot.ID != b.ID {
+				t.Fatalf("editorSnapshot = %v, want a snapshot of %q", nm.editorSnapshot, b.ID)
+			}
+			if nm.form != nil {
+				t.Fatal("e/ctrl+e must NEVER open the Title-Edit-Form (D01)")
+			}
+			if cmd == nil {
+				t.Fatal("e/ctrl+e must return a Cmd")
 			}
 		})
 	}

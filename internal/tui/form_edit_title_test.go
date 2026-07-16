@@ -1,10 +1,13 @@
 package tui
 
-// form_edit_title_test.go — TDD coverage for the Title-Edit-Form (`e`, E3
-// Task 5, bean bt-sl45, design decision h): a single-field huh form, prefilled
-// with the bean's current title, nonEmpty-validated, that fires
+// form_edit_title_test.go — TDD coverage for the Title-Edit-Form (E3 Task 5,
+// bean bt-sl45, design decision h): a single-field huh form, prefilled with
+// the bean's current title, nonEmpty-validated, that fires
 // mutateCmd(SetTitle) DIRECTLY on completion -- no Confirm-Gate (Port devd
-// isCreateKind's own exclusion: only "create"-kind forms get gated).
+// isCreateKind's own exclusion: only "create"-kind forms get gated). Once
+// reachable via "e"; D01 (design-spec.md §15 PF-17, bean bt-z4b1) moved "e"
+// to the whole-bean $EDITOR exclusively -- this form is now reachable ONLY
+// via enter on the title: field (activateDetailField, update.go).
 
 import (
 	"strings"
@@ -84,24 +87,23 @@ func TestEditTitleSubmitFiresSetTitleDirectlyNoConfirm(t *testing.T) {
 	}
 }
 
-// TestKeyNodeActionEOpensEditTitleForm guards keyNodeAction's Editor
-// dispatch (design decision h): "e" opens the Title-Edit-Form prefilled from
-// the focused bean, captured on m.mutTarget (reused from the value-menu/
-// picker convention) -- distinct from "ctrl+e" (editor_test.go), which must
-// NOT open a form.
-func TestKeyNodeActionEOpensEditTitleForm(t *testing.T) {
+// TestKeyNodeActionEDoesNotOpenEditTitleFormAnymore is D01's regression
+// guard for this file's own scope (design-spec.md §15 PF-17, bean bt-z4b1,
+// SUPERSEDES design decision h's original "e opens Title-Edit-Form"
+// contract, E3 Task 5): "e" now ALWAYS opens the whole-bean $EDITOR
+// (TestKeyNodeActionEditorAlwaysOpensBeanEditor, update_test.go) and NEVER
+// the Title-Edit-Form anymore -- that form is reachable ONLY via enter on
+// the title: field now (TestKeyDetailFocusEnterOnTitleFieldOpensEditTitleForm,
+// update_test.go, activateDetailField's "title" case, unchanged by D01).
+func TestKeyNodeActionEDoesNotOpenEditTitleFormAnymore(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-1")
 
 	m = step(t, m, runeMsg('e'))
-	if m.form == nil || m.formKind != "editTitle" {
-		t.Fatalf("e did not open the edit-title form (form=%v formKind=%q)", m.form, m.formKind)
+	if m.form != nil {
+		t.Fatalf("e opened a form (form=%v formKind=%q), want NO form -- e now ALWAYS opens the whole-bean $EDITOR (D01)", m.form, m.formKind)
 	}
-	if m.mutTarget != "tk-1" {
-		t.Fatalf("mutTarget = %q, want tk-1", m.mutTarget)
-	}
-	f := driveForm(m.form, enterMsg()) // settle unedited -- observe the prefill (see the Prefilled test above)
-	if got := f.GetString("title"); got != "Task One" {
-		t.Fatalf("GetString(title) = %q, want the focused bean's current title %q", got, "Task One")
+	if m.editorTarget != "tk-1" {
+		t.Fatalf("editorTarget = %q, want tk-1 (e must open the whole-bean $EDITOR instead)", m.editorTarget)
 	}
 }

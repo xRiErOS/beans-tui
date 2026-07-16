@@ -75,11 +75,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// other mutation.
 		return m.applyCreateDone(msg)
 
+	case beanRawLoadedMsg:
+		// D01 (design-spec.md §15 PF-17, bean bt-z4b1): openBeanEditor's
+		// FIRST Cmd-hop result (the async ShowRaw read) -- fires the ACTUAL
+		// $EDITOR suspend on success, or surfaces a toast + resets the
+		// editor-open state on failure (applyBeanRawLoaded below).
+		return m.applyBeanRawLoaded(msg)
+
 	case editorFinishedMsg:
-		// E3 Task 5 (bean bt-sl45): the ctrl+e $EDITOR-Suspend's result --
-		// err -> status line only; unchanged -> silent no-op (no CLI call
-		// for a no-op edit); otherwise SetBody against a FRESH etag
-		// (applyEditorFinished below).
+		// D01 (design-spec.md §15 PF-17, bean bt-z4b1, supersedes E3 Task 5/
+		// E8 B10): the e/ctrl+e whole-bean $EDITOR-Suspend's result -- err ->
+		// status line only; unchanged -> silent no-op (no CLI call for a
+		// no-op edit); otherwise parsed + diffed against m.editorSnapshot and
+		// dispatched as ONE combined UpdateWhole call (applyEditorFinished
+		// below).
 		return m.applyEditorFinished(msg)
 
 	case toastExpiredMsg:
@@ -393,36 +402,87 @@ func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 	return m, loadCmd(m.client)
 }
 
-// applyEditorFinished handles the ctrl+e $EDITOR-Suspend's result (E3 Task
-// 5, bean bt-sl45, keyNodeAction's Editor branch above): a process-level err
-// surfaces in the status line with no mutation; unchanged content is a
-// silent no-op (no CLI call for a no-op edit, mirrors the plan's own
-// Akzeptanz wording); otherwise SetBody fires against the etag CAPTURED AT
-// $EDITOR-OPEN TIME (m.editorETag, F2 Review-Runde 2 fix) -- NOT a fresh
-// m.beanETag(id) read here. Design decision d's "always read fresh at
-// submit" is correct for every OTHER E3 overlay, whose open<->submit window
-// is a single keystroke, but wrong for a potentially long-lived $EDITOR
-// session: re-reading fresh at submit would let a watch-reload that landed
-// WHILE the PO was still typing in $EDITOR silently win, discarding their
-// edit with no conflict ever raised (a genuine lost update -- see epic-E3-
-// plan.md's Task 5 section and bean bt-sl45's own now-corrected "Notes für
-// T6" for the earlier, wrong assumption this closes). Freezing the etag at
-// open turns that same race into a genuine, surfaced ErrConflict instead --
-// correct optimistic-lock semantics over the WHOLE session. m.beanETag(id)
-// is still consulted here, but ONLY for its ok bool (bean presence) -- the
-// etag VALUE it would return is discarded in favor of the captured one; a
-// vanished target (deleted during the suspend) still surfaces a status-line
-// note instead of firing a doomed mutation, same guard shape as
-// applyValueMenuSelection. On a genuine ErrConflict, the PO's just-edited
-// content would otherwise be silently lost to applyMutationResult's
-// unconditional reload -- writeConflictTempFile persists it to a kept
-// tempfile first, wrapped as *conflictWithRecovery so its path rides along
-// in the surfaced status-line text (applyMutationResult above).
+// applyBeanRawLoaded handles openBeanEditor's FIRST Cmd-hop result (D01,
+// design-spec.md §15 PF-17, bean bt-z4b1): a ShowRaw failure surfaces a
+// toast and resets the FULL editor-open state (target/etag/snapshot,
+// mirrors applyEditorFinished's own err path below) -- a success fires the
+// ACTUAL tea.ExecProcess suspend (editInEditor, editor.go), the SECOND
+// Cmd-hop the design-spec calls for ("zwei Cmd-Hops statt einem", since a
+// subprocess read must never run synchronously inside Update). A msg.id
+// mismatch against m.editorTarget (defensive -- should be unreachable since
+// nothing else can touch editorTarget between openBeanEditor and this Msg
+// resolving) discards the stale load silently rather than suspending into
+// the WRONG bean's editor.
+func (m model) applyBeanRawLoaded(msg beanRawLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.id != m.editorTarget {
+		return m, nil // stale -- editorTarget moved on since this Cmd was dispatched
+	}
+	if msg.err != nil {
+		m.err = msg.err.Error()
+		m.editorTarget = ""
+		m.editorETag = ""
+		m.editorSnapshot = nil
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+		return m, toastCmd
+	}
+	return m, editInEditor(msg.raw, ".md")
+}
+
+// applyEditorFinished handles the e/ctrl+e whole-bean $EDITOR-Suspend's
+// result (D01, design-spec.md §15 PF-17, bean bt-z4b1, supersedes E3 Task 5/
+// E8 B10's Body-only SetBody dispatch): a process-level err surfaces in the
+// status line with no mutation; unchanged content is a silent no-op (no CLI
+// call for a no-op edit, mirrors the plan's own Akzeptanz wording);
+// otherwise the content is PARSED (parseRawBean, editor.go), DIFFED against
+// the snapshot frozen at $EDITOR-open time (buildWholeEditDiff), and
+// dispatched as ONE combined data.Client.UpdateWhole call against the etag
+// CAPTURED AT $EDITOR-OPEN TIME (m.editorETag, F2 Review-Runde 2 fix) --
+// NOT a fresh m.beanETag(id) read here. Design decision d's "always read
+// fresh at submit" is correct for every OTHER E3 overlay, whose
+// open<->submit window is a single keystroke, but wrong for a potentially
+// long-lived $EDITOR session: re-reading fresh at submit would let a
+// watch-reload that landed WHILE the PO was still typing in $EDITOR
+// silently win, discarding their edit with no conflict ever raised (a
+// genuine lost update). Freezing the etag (AND the full snapshot, D01's
+// extension of F2's original etag-only freeze) at open turns that same
+// race into a genuine, surfaced ErrConflict instead -- correct
+// optimistic-lock semantics over the WHOLE session.
+//
+// Two distinct failure modes, both RECOVERABLE (design-spec §15 PF-17
+// "Fehlerfall" -- the whole-bean editor is bewusst UNconstrained Freitext-
+// YAML, unlike every constrained Overlay, so a rejection must never lose
+// the PO's edits):
+//   - parseRawBean fails (malformed frontmatter, invalid YAML): the FULL
+//     raw text is persisted to a kept recovery tempfile immediately, no CLI
+//     call ever fires (there is nothing valid to diff).
+//   - UpdateWhole fails with a genuine ErrConflict (a parallel external
+//     write raced this submit): the FULL raw text is persisted the SAME
+//     way, wrapped as *conflictWithRecovery so its path rides along in the
+//     surfaced status-line text (applyMutationResult above) -- otherwise
+//     applyMutationResult's unconditional reload would silently discard the
+//     PO's just-edited content.
+//
+// m.beanETag(id) is still consulted for the vanished-target guard below,
+// but ONLY for its ok bool (bean presence) -- the etag VALUE it would
+// return is discarded in favor of the captured one, same guard shape as
+// applyValueMenuSelection.
+//
+// Bekannte Grenze (Dokumentationspflicht, kein Bug, design-spec.md §15
+// PF-17): created_at/updated_at/the "# <id>" header line are all VISIBLE in
+// the $EDITOR text (part of ShowRaw's own seed) but NOT editable -- they
+// are deliberately not even parsed into rawBeanFrontmatter (that type's own
+// doc-stamp, editor.go), since `beans update` has no flag for any of them.
+// A PO edit to one of these is silently dropped when the WholeEditDiff is
+// built, never surfaced as a rejected change -- a CLI-side feature gap, not
+// an implementation task for this bean.
 func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	id := m.editorTarget
 	etag := m.editorETag
+	snapshot := m.editorSnapshot
 	m.editorTarget = ""
 	m.editorETag = ""
+	m.editorSnapshot = nil
 	if msg.err != nil {
 		m.err = msg.err.Error()
 		var toastCmd tea.Cmd
@@ -438,12 +498,25 @@ func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 		m, toastCmd = m.showToast(toastWarn, m.err, "", nil, false)
 		return m, toastCmd
 	}
+
+	content := msg.content
+	fm, body, perr := parseRawBean(content)
+	if perr != nil {
+		m.err = "Invalid bean format: " + perr.Error()
+		if path, werr := writeConflictTempFile(content); werr == nil {
+			m.err += " — your version: " + path
+		}
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+		return m, toastCmd
+	}
+
+	diff := buildWholeEditDiff(snapshot, fm, body)
 	client := m.client
-	body := msg.content
 	return m, mutateCmd(func() error {
-		err := client.SetBody(id, body, etag)
+		err := client.UpdateWhole(id, diff, etag)
 		if err != nil && errors.Is(err, data.ErrConflict) {
-			if path, werr := writeConflictTempFile(body); werr == nil {
+			if path, werr := writeConflictTempFile(content); werr == nil {
 				return &conflictWithRecovery{err: err, path: path}
 			}
 		}
@@ -541,28 +614,24 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			return true, m.openBlockingPicker(), nil
 		}
 		if keybind.Matches(msg, keys.Editor) {
-			// E3 Task 5 (bean bt-sl45, design decision h): "e"/"ctrl+e"
-			// share ONE keys.Editor binding (design-spec §7), branching on
-			// msg.String() -- "ctrl+e" ALWAYS suspends into $EDITOR on the
-			// Body; "e" opens the Title-Edit-Form EXCEPT when Detail-Focus is
-			// parked on Section [2] BODY (B10, design-spec.md §15 PF-16, bean
-			// bt-ntoz, E8 Task 6) -- there it is context-sensitive to the
-			// selected section too, opening $EDITOR like ctrl+e. Every OTHER
-			// section (META/RELATIONS/HISTORY) keeps the Title-Edit-Form
-			// fallback (PO named only BODY as inconsistent).
-			if msg.String() == "ctrl+e" || (m.detailFocus && m.secCursor == bodySectionIdx) {
-				// B10 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6):
-				// shares the openBodyEditor helper (editor.go) with
-				// keyDetailFocus's new enter-on-BODY branch below -- F2
-				// (Review-Runde 2, Finding 2, ETag-Lost-Update) still holds:
-				// the etag is captured HERE, at open time -- not a fresh
-				// m.beanETag(id) read in applyEditorFinished at submit time
-				// (see that func's doc-stamp for the full lost-update
-				// rationale).
-				nm, cmd := m.openBodyEditor(b)
-				return true, nm, cmd
-			}
-			nm, cmd := m.openEditTitleForm(b)
+			// D01 (design-spec.md §15 PF-17, bean bt-z4b1, supersedet E8-
+			// B10): "e"/"ctrl+e" share ONE keys.Editor binding (design-spec
+			// §7) and now ALWAYS open the SAME whole-bean $EDITOR path,
+			// unconditionally -- egal welche Sektion/Feld-Ebene, auch ohne
+			// aktiven Detail-Fokus, aus Tree/Backlog/Detail (PO verbatim:
+			// "egal an welcher Stelle"). The former msg.String()=="ctrl+e"
+			// vs. section-context-sensitive "e" branching (B10) is GONE --
+			// there is only ONE editor path now, not two convergent ones
+			// ("ctrl+e-Sonderpfad vereinheitlichen", PO/D01-Wortlaut). e/
+			// ctrl+e NEVER open the Title-Edit-Form anymore -- openEditTitleForm
+			// stays reachable ONLY via enter on the title: field
+			// (activateDetailField, below). F2 (Review-Runde 2, Finding 2,
+			// ETag-Lost-Update) still holds, extended to the full bean
+			// snapshot by D01: the etag AND snapshot are captured HERE, at
+			// open time -- never a fresh m.beanETag(id)/m.idx read in
+			// applyEditorFinished at submit time (see that func's doc-stamp
+			// for the full lost-update rationale).
+			nm, cmd := m.openBeanEditor(b)
 			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Delete) {
@@ -982,18 +1051,14 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// enter detail focus itself (D01 revidiert, PO-Nachtrag 3) -- this alias
 	// only fires once m.detailFocus is already true.
 	if keybind.Matches(msg, keys.Enter) && m.detailLevel == 0 {
-		// B10 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 6): enter on
-		// Section [2] BODY was a No-Op before (bodySectionBody carries no
-		// .fields, so the fields>0 guard below never fired) -- inconsistent
-		// with [1] META, where enter opens the field-level overlay cascade.
-		// FIX: enter on BODY now opens $EDITOR (same openBodyEditor helper,
-		// editor.go, as keyNodeAction's e/ctrl+e-on-BODY branch above) --
-		// checked BEFORE the generic fields>0 guard so BODY never falls
-		// through to it (BODY never has fields to enter anyway).
-		if m.secCursor == bodySectionIdx {
-			nm, cmd := m.openBodyEditor(b)
-			return nm, cmd
-		}
+		// B10-Revision (design-spec.md §15 PF-17, bean bt-z4b1, D01): enter
+		// on Section [2] BODY briefly opened $EDITOR (E8-B10) -- that
+		// special case is REMOVED ersatzlos ("PO's neues Mentalmodell
+		// reserviert '$EDITOR öffnen' ausschließlich für e"). BODY carries
+		// no .fields, so it falls straight through to the generic
+		// fields>0 guard below and does nothing -- exactly the pre-E8
+		// state, restored (TestKeyDetailFocusEnterOnBodyIsNoOpAgain,
+		// update_test.go).
 		if len(secs[m.secCursor].fields) > 0 {
 			m.detailLevel = 1
 			m.fieldCursor = 0

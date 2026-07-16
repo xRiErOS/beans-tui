@@ -538,13 +538,16 @@ func TestMouseDetailClickDoubleClickOnFieldOpensOverlay(t *testing.T) {
 	}
 }
 
-// TestMouseDetailClickDoubleClickOnBodySectionOpensEditor guards the BODY
-// special case (bt-y2iw's "Notes for bt-duz7"): BODY has no field to
-// double-click, so a double click on its OWN Section-Header opens $EDITOR
-// via the SAME openBodyEditor helper `e`/enter already use (update.go) --
-// mirrors TestKeyDetailFocusEnterOnBodySectionOpensEditor's assertions
-// (update_test.go).
-func TestMouseDetailClickDoubleClickOnBodySectionOpensEditor(t *testing.T) {
+// TestMouseDetailClickDoubleClickOnBodySectionIsNoOpAgain is the B10-
+// Revision regression test's mouse counterpart (D01, design-spec.md §15
+// PF-17, bean bt-z4b1, mirrors TestKeyDetailFocusEnterOnBodyIsNoOpAgain,
+// update_test.go): a double click on BODY's OWN Section-Header used to open
+// $EDITOR (bt-y2iw's "Notes for bt-duz7", E8 Task 6/B10) -- that exception
+// is REVERTED ersatzlos, same as keyDetailFocus's enter-on-BODY branch, so
+// $EDITOR-opening is reserved EXCLUSIVELY for e/ctrl+e (D01). A double click
+// on BODY's header is now a plain no-op, exactly like every other section
+// header.
+func TestMouseDetailClickDoubleClickOnBodySectionIsNoOpAgain(t *testing.T) {
 	beans := fixtureBeans()
 	for i := range beans {
 		if beans[i].ID == "tk-2" {
@@ -564,7 +567,7 @@ func TestMouseDetailClickDoubleClickOnBodySectionOpensEditor(t *testing.T) {
 		t.Fatalf("handleMouse did not return a model, got %T", tm)
 	}
 	if m2.secCursor != bodySectionIdx || m2.editorTarget != "" {
-		t.Fatal("setup: first click must only select Section [2], not open $EDITOR yet")
+		t.Fatal("setup: first click must only select Section [2], not open $EDITOR")
 	}
 
 	msg2 := detailClickAt(t, m2, "[2]")
@@ -573,14 +576,14 @@ func TestMouseDetailClickDoubleClickOnBodySectionOpensEditor(t *testing.T) {
 	if !ok {
 		t.Fatalf("handleMouse did not return a model, got %T", tm2)
 	}
-	if m3.editorTarget != "tk-2" {
-		t.Fatalf("editorTarget = %q, want tk-2", m3.editorTarget)
+	if m3.editorTarget != "" || m3.editorETag != "" || m3.editorSnapshot != nil {
+		t.Fatal("double click on BODY's header must NEVER open $EDITOR anymore (B10-Revision, D01)")
 	}
-	if m3.editorETag != "tk-2-etag" {
-		t.Fatalf("editorETag = %q, want tk-2-etag (captured at open, F2)", m3.editorETag)
+	if m3.secCursor != bodySectionIdx || m3.detailLevel != 0 {
+		t.Fatal("double click on BODY's header must stay a plain section-select no-op")
 	}
-	if cmd == nil {
-		t.Fatal("double click on BODY's header must return a Cmd (the ExecProcess-wrapped editor suspend)")
+	if cmd != nil {
+		t.Fatal("double click on BODY's header must return a nil Cmd (pure no-op)")
 	}
 }
 
