@@ -12,31 +12,70 @@ package tui
 // editField concept yet.
 
 import (
+	"fmt"
+	"strings"
+
 	"beans-tui/internal/data"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 )
 
+// singleLineTitle is the Title-Edit-Form's validator (B03 Fix-Runde 1,
+// Review F02, Supervisor-Entscheid: reject, do NOT silently normalize):
+// nonEmpty (forms_shared.go) PLUS a newline rejection. The Input->Text swap
+// made it possible to type a real "\n" into the title via huh's NewLine
+// binding (alt+enter/ctrl+j, huh keymap.go) -- structurally impossible with
+// huh.Input -- and that newline survived GetString -> SetTitle ->
+// `beans update --title`, which is undefined for the YAML single-line
+// title field. Scoped to THIS form on purpose: the Create-Form's title
+// field is still a huh.Input (form_create_bean.go) and cannot contain one.
+func singleLineTitle(s string) error {
+	if err := nonEmpty(s); err != nil {
+		return err
+	}
+	if strings.Contains(s, "\n") {
+		return fmt.Errorf("title must be single-line")
+	}
+	return nil
+}
+
 // buildEditTitleForm constructs the keyed single-field form, pre-filled with
-// the bean's current title (huh.Text.Value(&v), field_text.go), nonEmpty-
-// required (Port devd forms_shared.go nonEmpty). B03 (design-spec.md §15
-// PF-17, bean bt-2v38): swapped from huh.NewInput() (single-line, horizontal
-// scroll on long titles) to huh.NewText().Lines(3) (multi-line, wraps
-// instead). .ExternalEditor(false) is MANDATORY, not cosmetic: huh.Text
-// brings its OWN ctrl+e editor-suspend mechanism (field_text.go default
-// true) that would collide with D01's app-wide e/ctrl+e whole-bean $EDITOR
-// (bt-z4b1) -- disabled so keyForm's own keyboard semantics
-// (forms_shared.go) stay the only ctrl+e in play here. .Lines(3) is a
-// Planner estimate (PO gave no line count); GetValue()/the Value(&v)
-// binding still returns a plain string (verified against field_text.go),
-// so submitForm's "editTitle" case (m.form.GetString("title"),
-// box_confirm_create.go) is UNCHANGED by this swap.
+// the bean's current title (huh.Text.Value(&v), field_text.go),
+// singleLineTitle-validated (nonEmpty + newline rejection, F02 above). B03
+// (design-spec.md §15 PF-17, bean bt-2v38): swapped from huh.NewInput()
+// (single-line, horizontal scroll on long titles) to huh.NewText().Lines(3)
+// (multi-line, wraps instead). .ExternalEditor(false) is MANDATORY, not
+// cosmetic: huh.Text brings its OWN ctrl+e editor-suspend mechanism
+// (field_text.go default true) that would collide with D01's app-wide
+// e/ctrl+e whole-bean $EDITOR (bt-z4b1) -- disabled so keyForm's own
+// keyboard semantics (forms_shared.go) stay the only ctrl+e in play here.
+// .Lines(3) is a Planner estimate (PO gave no line count); GetValue()/the
+// Value(&v) binding still returns a plain string (verified against
+// field_text.go), so submitForm's "editTitle" case
+// (m.form.GetString("title"), box_confirm_create.go) is UNCHANGED by this
+// swap.
 func buildEditTitleForm(title string) *huh.Form {
 	v := title
 	field := huh.NewText().Key("title").Title("Title").Lines(3).
-		ExternalEditor(false).Value(&v).Validate(nonEmpty)
-	return huh.NewForm(huh.NewGroup(field))
+		ExternalEditor(false).Value(&v).Validate(singleLineTitle)
+	form := huh.NewForm(huh.NewGroup(field))
+	// F01 (Fix-Runde 1, bean bt-2v38 Review-Findings): the
+	// .ExternalEditor(false) flag above does NOTHING by itself -- huh only
+	// translates it into a disabled ctrl+e binding inside KeyBinds()
+	// (field_text.go:249-252, `t.keymap.Editor.SetEnabled(t.externalEditor)`),
+	// and huh.NewForm's own WithKeyMap has just REPLACED the field's keymap
+	// with a fresh default whose Editor binding is enabled (form.go:119,
+	// field_text.go:453-457). Without this explicit call the disable would
+	// only ever happen as an ACCIDENTAL side effect of styleForm's
+	// WithHeight()-before-WithShowHelp(false) call order triggering a
+	// help-footer render (reviewer-proven: flag removed -> whole suite stays
+	// green; styleForm order swapped -> huh's editor fires). Calling
+	// KeyBinds() here, AFTER NewForm's keymap assignment, pins the disable
+	// deterministically at build time; later KeyBinds() runs (help-footer
+	// renders) re-derive it from the same flag and keep it disabled.
+	field.KeyBinds()
+	return form
 }
 
 // openEditTitleForm opens the Title-Edit-Form on b (`e`, keyNodeAction

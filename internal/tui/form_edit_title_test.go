@@ -10,10 +10,12 @@ package tui
 // via enter on the title: field (activateDetailField, update.go).
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"beans-tui/internal/data"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 )
 
@@ -90,15 +92,16 @@ func TestEditTitleSubmitFiresSetTitleDirectlyNoConfirm(t *testing.T) {
 // TestBuildEditTitleFormUsesMultiLineText guards B03's core swap (design-
 // spec.md §15 PF-17, bean bt-2v38): the title field itself must now be a
 // *huh.Text (multi-line textarea, huh v1.0.0 field_text.go), not the
-// single-line *huh.Input E3 Task 5 originally wired. huh.Text exposes no
-// getter to read .Lines(3) back off the field directly, so the
-// CONFIGURATION is checked via its own documented, version-independent
-// render contract instead (bubbles textarea.go:1182-1199, "Always show at
-// least `m.Height` lines"): a Text field's View() ALWAYS reserves exactly
-// its configured height's worth of rows regardless of content -- strictly
-// MORE rows than an equivalent *huh.Input's fixed single row renders for
-// the SAME title/width. That row-count delta IS the observable proof
-// .Lines(3) took effect, not just the bare type swap.
+// single-line *huh.Input E3 Task 5 originally wired. What this test pins
+// is the FIELD TYPE plus a MINIMUM height ("multi-line at all": strictly
+// more rendered rows than an equivalent *huh.Input's fixed single row for
+// the SAME title/width, via bubbles textarea.go:1182-1199's documented
+// "Always show at least `m.Height` lines" render contract) -- NOT the
+// exact .Lines(3) value. .Lines(3) is a Planner estimate, not a design
+// contract (bean bt-2v38 "Architektur-Vorgabe"), so a drive-by change to
+// e.g. .Lines(4), or even dropping .Lines() entirely (huh's textarea
+// default height is 6), deliberately does NOT fail here; only regressing
+// back to a single-line field does (Review F03, Fix-Runde 1).
 func TestBuildEditTitleFormUsesMultiLineText(t *testing.T) {
 	f := buildEditTitleForm("Original Title")
 
@@ -175,6 +178,124 @@ func TestOpenEditTitleFormRoundTripsLongTitleUnchanged(t *testing.T) {
 	}
 	if mdm.err == nil || !strings.Contains(mdm.err.Error(), "beans update") {
 		t.Fatalf("mutationDoneMsg.err = %v, want an error containing %q (proves SetTitle dispatched, same GetString(title) verified full/unchanged above)", mdm.err, "beans update")
+	}
+}
+
+// collectCmdMsgs executes cmd and returns every tea.Msg it produces,
+// recursively unwrapping tea.BatchMsg -- the only EXPORTED multi-cmd
+// wrapper bubbletea produces on this path (same scope note as
+// driveFormCmd, form_create_bean_test.go). Unlike driveFormCmd it does NOT
+// feed the msgs back into anything: callers want to INSPECT what a single
+// Update round emitted (e.g. hunt for tea's unexported execMsg), not
+// settle a form. budget bounds the walk against huh's self-perpetuating
+// blink-timer chain (driveFormBudget doc comment).
+func collectCmdMsgs(cmd tea.Cmd, budget int) []tea.Msg {
+	if cmd == nil || budget <= 0 {
+		return nil
+	}
+	msg := cmd()
+	if msg == nil {
+		return nil
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			budget--
+			if budget <= 0 {
+				break
+			}
+			out = append(out, collectCmdMsgs(c, budget)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
+
+// TestEditTitleFormCtrlEDoesNotFireHuhEditor guards F01 (Fix-Runde 1, bean
+// bt-2v38 Review-Findings): huh.Text ships its OWN ctrl+e editor-suspend
+// (field_text.go:321-330, tea.ExecProcess -> tea's unexported execMsg).
+// .ExternalEditor(false) alone does NOT disable it -- the flag is only
+// translated into a disabled key binding inside KeyBinds()
+// (field_text.go:249-252), which huh.NewForm's own WithKeyMap first UNDOES
+// (it replaces the field's keymap with a fresh default whose Editor
+// binding is enabled, form.go:119/286-297, field_text.go:453-457). Before
+// Fix-Runde 1 the disable only happened ACCIDENTALLY, as a side effect of
+// styleForm's WithHeight()-before-WithShowHelp(false) call order
+// triggering a help-footer render. This test therefore drives the REAL
+// production flow (enter on the title: field -> openEditTitleForm ->
+// styleForm) and proves a real ctrl+e KeyMsg through model.Update yields
+// NO execMsg anywhere in the returned Cmd tree -- it goes red both if
+// .ExternalEditor(false) is removed AND if the accidental-order safety net
+// alone is what disables the binding (buildEditTitleForm's explicit
+// KeyBinds() call is the deterministic fix).
+func TestEditTitleFormCtrlEDoesNotFireHuhEditor(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyEnter)) // field level, fieldCursor=0 (title)
+	m = step(t, m, keyMsg(tea.KeyEnter)) // opens the Title-Edit-Form via styleForm
+	if m.form == nil || m.formKind != "editTitle" {
+		t.Fatalf("setup: form=%v formKind=%q, want an open editTitle form", m.form, m.formKind)
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyCtrlE))
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(ctrl+e) did not return a model, got %T", tm)
+	}
+	if nm.form == nil {
+		t.Fatal("ctrl+e closed the form, want it still open (ctrl+e must be inert inside the Title-Edit-Form)")
+	}
+	for _, msg := range collectCmdMsgs(cmd, 16) {
+		if strings.Contains(fmt.Sprintf("%T", msg), "execMsg") {
+			t.Fatalf("ctrl+e inside the Title-Edit-Form produced %T -- huh's own editor-suspend fired despite .ExternalEditor(false) (F01: the flag only acts via KeyBinds(), which must be invoked deterministically, not as a styleForm call-order accident)", msg)
+		}
+	}
+}
+
+// TestEditTitleSubmitRejectsEmbeddedNewline guards F02 (Fix-Runde 1, bean
+// bt-2v38 Review-Findings, Supervisor-Entscheid: validator, NO silent
+// normalization): the Input->Text swap made it possible to type a REAL
+// newline into the title via huh's NewLine binding (alt+enter/ctrl+j,
+// keymap.go:136) -- with huh.Input that was structurally impossible, and
+// it survived all the way into `beans update --title` (undefined for the
+// YAML single-line title field). The single-line validator must reject it
+// with a clear message at submit; the counterpart half proves a normal
+// title still completes unchanged through the SAME flow.
+func TestEditTitleSubmitRejectsEmbeddedNewline(t *testing.T) {
+	f := buildEditTitleForm("Original Title")
+	// Init() focuses the single field synchronously (group.Init ->
+	// Field.Focus, huh group.go:195-215) -- without focus the underlying
+	// textarea drops every input key (bubbles textarea.go Update's !m.focus
+	// guard), so ctrl+j could never insert its newline.
+	f.Init()
+	f = driveForm(f, keyMsg(tea.KeyCtrlJ))
+	tf, ok := f.GetFocusedField().(*huh.Text)
+	if !ok {
+		t.Fatalf("focused field = %T, want *huh.Text", f.GetFocusedField())
+	}
+	if got, _ := tf.GetValue().(string); !strings.Contains(got, "\n") {
+		t.Fatalf("setup: field value %q contains no newline after ctrl+j -- huh's NewLine binding did not insert one", got)
+	}
+
+	f = driveForm(f, enterMsg())
+	if f.State == huh.StateCompleted {
+		t.Fatal("a title with an embedded newline reached StateCompleted, want the single-line validator to block the submit (F02)")
+	}
+	if err := tf.Error(); err == nil || !strings.Contains(err.Error(), "single-line") {
+		t.Fatalf("field error after blocked submit = %v, want a %q validation error (F02)", err, "title must be single-line")
+	}
+
+	// Counterpart: the SAME flow minus the ctrl+j still completes with the
+	// value untouched -- the new validator must not reject normal titles.
+	f2 := buildEditTitleForm("Original Title")
+	f2.Init()
+	f2 = driveForm(f2, enterMsg())
+	if f2.State != huh.StateCompleted {
+		t.Fatalf("form.State = %v after submitting a normal single-line title, want StateCompleted (the F02 validator must only reject titles containing a newline)", f2.State)
+	}
+	if got := f2.GetString("title"); got != "Original Title" {
+		t.Fatalf("GetString(title) = %q, want %q unchanged", got, "Original Title")
 	}
 }
 
