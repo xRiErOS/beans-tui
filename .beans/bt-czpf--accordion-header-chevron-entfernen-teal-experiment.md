@@ -1,11 +1,11 @@
 ---
 # bt-czpf
 title: 'Accordion-Header: Chevron entfernen + Teal-Experiment'
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T21:05:38Z
-updated_at: 2026-07-15T21:05:38Z
+updated_at: 2026-07-16T00:27:18Z
 parent: bt-ntoz
 ---
 

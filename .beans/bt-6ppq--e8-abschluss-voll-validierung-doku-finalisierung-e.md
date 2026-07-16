@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-15T21:10:37Z
-updated_at: 2026-07-15T23:53:56Z
+updated_at: 2026-07-16T00:27:18Z
 parent: bt-ntoz
 blocked_by:
     - bt-czpf
@@ -76,3 +76,8 @@ um diese 5 Sites ergänzen — reine Nachvollziehbarkeit.
 
 - I01 (low): TestDetailClickKeyDisjointNumberSpaces (mouse_test.go) ist selbst-referenziell — prüft gegen die Konstante detailClickKeyBase statt gegen hartes Literal 1000; gegen Base-Mutation wertlos (Verhaltenstest TestMouseDetailClickTreeClickIndexDoesNotAliasFieldClickKey deckt ab). Bei nächster Berührung von mouse_test.go Literal einsetzen — Abschluss-Task: NICHT eigens fixen, nur in LESSONS-LEARNED als Muster 'selbst-referenzieller Pin-Test' aufnehmen.
 - I02 (dokumentarisch): bewusste Asymmetrie BODY-Doppelklick (zeitfenstergebunden) vs. enter-auf-BODY (zeitfensterlos) — PO-Wortlaut scopet zeitfensterlosen Zweitklick auf Felder. Steht im Doc-Kommentar mouseDetailClick.
+
+
+## Prelude aus E8-T7-Review (2026-07-16, non-blocking, Quelle: bt-yqdy-Review APPROVED)
+
+- I01 (Doku): bt-yqdy-Summary referenziert nicht-existente Datei 'search.go' — /-Suche-Logik liegt in view_browse_repo.go/update.go/messages.go/types.go, Tests in search_test.go. Bei Doku-Finalisierung im bean-Body korrigieren.
