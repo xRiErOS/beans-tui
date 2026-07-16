@@ -416,6 +416,188 @@ func TestTagPickerNewTagAddsPendingItem(t *testing.T) {
 	}
 }
 
+// --- keyTagInput: Typeahead filter/navigation/auto-create (bean bt-9ipw) ---
+
+// TestTagInputOpensWithFilteredSeededFromFullTagList is the Typeahead's
+// initial state (bean bt-9ipw, Schritt 1): opening the free-text sub-mode
+// with an EMPTY query must seed tagInputFiltered with every existing
+// tagItems row (an empty substring matches everything) and park the
+// suggestion cursor at 0 -- mirrors filteredRepos()'s own "empty query ->
+// full list" contract (view_lobby.go).
+func TestTagInputOpensWithFilteredSeededFromFullTagList(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('t'))
+	before := len(m.tagItems)
+
+	m = step(t, m, runeMsg('n'))
+
+	if len(m.tagInputFiltered) != before {
+		t.Fatalf("tagInputFiltered len = %d, want %d (full tagItems on empty query)", len(m.tagInputFiltered), before)
+	}
+	if m.tagInputSuggestCursor != 0 {
+		t.Fatalf("tagInputSuggestCursor = %d, want 0 on open", m.tagInputSuggestCursor)
+	}
+}
+
+// TestTagInputFiltersLiveBySubstringCaseInsensitive is the Filter-Logik Step
+// (bean bt-9ipw): typing narrows tagInputFiltered to rows whose tag contains
+// the typed text as a case-insensitive substring (strings.Contains, no fuzzy
+// scoring -- YAGNI per the bean's own "Nicht jetzt" section).
+func TestTagInputFiltersLiveBySubstringCaseInsensitive(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2") // tagItems: urgent(2), backend(1), zeta(1)
+	m = step(t, m, runeMsg('t'))
+	m = step(t, m, runeMsg('n'))
+
+	for _, r := range "UR" { // mixed-case substring of "urgent"
+		m = step(t, m, runeMsg(r))
+	}
+
+	if len(m.tagInputFiltered) != 1 || m.tagInputFiltered[0].tag != "urgent" {
+		t.Fatalf("tagInputFiltered = %+v, want exactly [urgent]", m.tagInputFiltered)
+	}
+}
+
+// TestTagInputNavigationMovesCursorClampedToFilteredBounds is the
+// Navigation Step (bean bt-9ipw): up/down (real arrow KeyType, NOT the
+// vim-style i/k/j/l rune aliases navKey binds elsewhere -- those must stay
+// literal, typeable characters here, see this test's sibling below) move
+// tagInputSuggestCursor over tagInputFiltered, clamped to [0, len-1].
+func TestTagInputNavigationMovesCursorClampedToFilteredBounds(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('t'))
+	m = step(t, m, runeMsg('n')) // empty query -> all 3 rows suggested
+
+	if m.tagInputSuggestCursor != 0 {
+		t.Fatalf("setup: cursor = %d, want 0", m.tagInputSuggestCursor)
+	}
+	m = step(t, m, keyMsg(tea.KeyUp)) // already at 0 -- must clamp, not go negative
+	if m.tagInputSuggestCursor != 0 {
+		t.Fatalf("up at top clamped to %d, want 0", m.tagInputSuggestCursor)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyDown))
+	m = step(t, m, keyMsg(tea.KeyDown))
+	if m.tagInputSuggestCursor != 2 {
+		t.Fatalf("cursor after two downs = %d, want 2", m.tagInputSuggestCursor)
+	}
+	m = step(t, m, keyMsg(tea.KeyDown)) // already at bottom -- must clamp
+	if m.tagInputSuggestCursor != 2 {
+		t.Fatalf("down at bottom clamped to %d, want 2", m.tagInputSuggestCursor)
+	}
+}
+
+// TestTagInputArrowKeysDoNotLeakIntoTypedText guards the plan's own explicit
+// promise ("keine Kollision mit textinput.Model") the OTHER direction: the
+// navigation intercept must key off the raw tea.KeyUp/tea.KeyDown KeyType,
+// NOT navKey's letter-alias table (keys.Up binds "i", keys.Down binds "k")
+// -- otherwise a tag name containing "i" or "k" (e.g. "risk") could never be
+// typed. Typing the literal runes must land in the input value untouched.
+func TestTagInputArrowKeysDoNotLeakIntoTypedText(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('t'))
+	m = step(t, m, runeMsg('n'))
+
+	for _, r := range "risk" {
+		m = step(t, m, runeMsg(r))
+	}
+	if got := m.tagInput.Value(); got != "risk" {
+		t.Fatalf("tagInput.Value() = %q, want %q -- i/k must stay literal, not be swallowed as up/down", got, "risk")
+	}
+}
+
+// TestTagInputEnterOnSuggestionAssignsExistingTagNoDuplicateNoRegistryWrite
+// is the Enter-Dispatch Step's existing-tag branch (bean bt-9ipw): enter
+// with a non-empty tagInputFiltered assigns the cursored EXISTING tag to
+// tagPending (Copy-on-Write, mirrors toggleTagPending) WITHOUT adding a
+// second row to tagItems (already present) and WITHOUT touching the
+// Registry (D11 -- pure Bean-local assignment).
+func TestTagInputEnterOnSuggestionAssignsExistingTagNoDuplicateNoRegistryWrite(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2") // original tags: urgent
+	m = step(t, m, runeMsg('t'))
+	before := len(m.tagItems)
+
+	m = step(t, m, runeMsg('n'))
+	for _, r := range "back" { // substring of "backend", exactly one match
+		m = step(t, m, runeMsg(r))
+	}
+	if len(m.tagInputFiltered) != 1 || m.tagInputFiltered[0].tag != "backend" {
+		t.Fatalf("setup: tagInputFiltered = %+v, want exactly [backend]", m.tagInputFiltered)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.tagInputActive {
+		t.Fatal("enter on a suggestion must close the free-text input")
+	}
+	if !m.tagPending["backend"] {
+		t.Fatal("enter on the 'backend' suggestion must set tagPending[backend]=true")
+	}
+	if len(m.tagItems) != before {
+		t.Fatalf("tagItems len = %d, want %d unchanged -- 'backend' already existed, no duplicate row", len(m.tagItems), before)
+	}
+}
+
+// TestTagInputEnterWithNoMatchStillFallsBackToUnchangedCreatePath pins the
+// Enter-Dispatch Step's OTHER branch (bean bt-9ipw, D11): an empty
+// tagInputFiltered (no substring match at all) must fall through to
+// TODAY's create-path exactly as before Typeahead landed -- this is a
+// regression guard sitting alongside the pre-existing
+// TestTagPickerNewTagAddsPendingItem/TestTagPickerNewTagValidatesRegex (same
+// package, unchanged), proving the new branch didn't disturb the old one.
+func TestTagInputEnterWithNoMatchStillFallsBackToUnchangedCreatePath(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('t'))
+	before := len(m.tagItems)
+
+	m = step(t, m, runeMsg('n'))
+	for _, r := range "greenfield" {
+		m = step(t, m, runeMsg(r))
+	}
+	if len(m.tagInputFiltered) != 0 {
+		t.Fatalf("setup: tagInputFiltered = %+v, want empty (no match for 'greenfield')", m.tagInputFiltered)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if m.tagInputActive {
+		t.Fatal("valid create-path submit must close the input")
+	}
+	if len(m.tagItems) != before+1 {
+		t.Fatalf("tagItems len = %d, want %d (one new row)", len(m.tagItems), before+1)
+	}
+	if !m.tagPending["greenfield"] {
+		t.Fatal("a freshly created tag must be pending=true immediately")
+	}
+}
+
+// --- tagInputBox: rendering the Typeahead suggestion list (bean bt-9ipw) ---
+
+// TestTagInputBoxRendersFilteredSuggestionsWithCursorMarker is the
+// Rendering Step (bean bt-9ipw): tagInputBox must render one line per
+// tagInputFiltered row, the cursored row carrying the SAME "▸" marker
+// convention tagPickerBox uses (mirrored, not reinvented).
+func TestTagInputBoxRendersFilteredSuggestionsWithCursorMarker(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('t'))
+	m = step(t, m, runeMsg('n'))
+	m = step(t, m, keyMsg(tea.KeyDown)) // cursor -> suggestion index 1
+
+	out := ansi.Strip(m.tagInputBox())
+	if !strings.Contains(out, "urgent") || !strings.Contains(out, "backend") || !strings.Contains(out, "zeta") {
+		t.Fatalf("tagInputBox() = %q, want all 3 suggestion rows rendered", out)
+	}
+	if !strings.Contains(out, "▸") {
+		t.Fatalf("tagInputBox() = %q, want a cursor marker on the suggestion list", out)
+	}
+}
+
 // --- vanished-target guard on enter (design decision d parity, T1) ---
 
 func TestTagPickerEnterTargetVanishedClosesGracefully(t *testing.T) {
