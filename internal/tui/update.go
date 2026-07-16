@@ -75,6 +75,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// other mutation.
 		return m.applyCreateDone(msg)
 
+	case tagDefsSavedMsg:
+		// E10 Task 3 (bean bt-604w, D11/D14): a Tag-Registry SaveTagDefs
+		// write's outcome -- applyTagDefsSaved below is its OWN tail, NOT
+		// applyMutationResult (no Bean was touched, so no unconditional
+		// loadCmd reload is needed, messages.go's own tagDefsSavedMsg
+		// doc-stamp).
+		return m.applyTagDefsSaved(msg)
+
 	case beanRawLoadedMsg:
 		// D01 (design-spec.md §15 PF-17, bean bt-z4b1): openBeanEditor's
 		// FIRST Cmd-hop result (the async ShowRaw read) -- fires the ACTUAL
@@ -423,6 +431,58 @@ func (m model) applyCreateDone(msg createDoneMsg) (tea.Model, tea.Cmd) {
 	m.cursorID = msg.bean.ID
 	m.err = ""
 	return m, loadCmd(m.client)
+}
+
+// applyTagDefsSaved handles a completed Tag-Registry write (E10 Task 3, bean
+// bt-604w, D11/D14 Create -- also T4/T5's shared Delete/Rename tail):
+// mirrors applyMutationResult's own error branch (non-conflict half -- a
+// Tag-Registry write can never produce data.ErrConflict, it carries no ETag)
+// WITHOUT that function's unconditional loadCmd reload, since a Registry
+// write never touches any Bean (D11/D12) and therefore never stales m.idx --
+// "hier gibt es kein m.idx zu invalidieren, nur die Registry" (bean bt-604w
+// wording). On failure the input sub-mode stays OPEN (tagMgmtInputActive
+// untouched) so the PO can retry the same typed name without retyping it,
+// alongside a Toast surfacing the error.
+//
+// On success: the input sub-mode closes, and tagMgmtRows is rebuilt from a
+// FRESH LoadTagDefs (D02/D03, mirrors openTagManagementPage's own
+// "reload from disk on every open" convention one layer up) rather than from
+// whatever defs slice keyTagMgmtInput happened to compute at dispatch time --
+// the on-disk file is the single source of truth this function trusts, same
+// D02 tolerant-missing philosophy as everywhere else this registry is read.
+// The cursor then lands on the just-created/renamed row by NAME (mirrors
+// applyLoaded's own cursor-refinding-by-ID pattern one layer up) -- the
+// input's OWN (still-unblurred) Value() at this point is exactly the name
+// that was just submitted, since nothing else can touch it between
+// keyTagMgmtInput's dispatch and this single Msg resolving (Update()
+// processes one Msg at a time).
+func (m model) applyTagDefsSaved(msg tagDefsSavedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, msg.err.Error(), "", nil, false)
+		return m, toastCmd
+	}
+
+	name := strings.TrimSpace(m.tagMgmtInput.Value())
+	m.tagMgmtInputActive = false
+	m.tagMgmtInput.Blur()
+	m.tagMgmtInput.SetValue("")
+	m.tagMgmtInputErr = ""
+	m.tagMgmtInputTarget = ""
+
+	var defs []string
+	if m.client != nil {
+		defs, _ = m.client.LoadTagDefs() // D02: LoadTagDefs never returns a non-nil error
+	}
+	m.tagMgmtRows = tagRegistryRows(m.idx, defs)
+	m.tagMgmtCursor.setLen(len(m.tagMgmtRows))
+	for i, r := range m.tagMgmtRows {
+		if r.name == name {
+			m.tagMgmtCursor.cursor = i
+			break
+		}
+	}
+	return m, nil
 }
 
 // applyBeanRawLoaded handles openBeanEditor's FIRST Cmd-hop result (D01,

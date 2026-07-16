@@ -334,3 +334,28 @@ func searchCmd(c *data.Client, query string) tea.Cmd {
 // bt-ntoz, E8 Task 7, bean bt-yqdy): the Command-Center shows ONLY commands
 // now, bean search is exclusively `/`'s job (searchBleveResultMsg/searchCmd
 // above, UNTOUCHED).
+
+// tagDefsSavedMsg carries a Tag-Registry SaveTagDefs write's outcome (E10
+// Task 3, bean bt-604w, epic bt-362n D11/D14 Create -- also T4/T5's shared
+// Delete/Rename write path). Deliberately its OWN Msg type, not the shared
+// mutationDoneMsg (bean bt-604w's own wording: "hier gibt es kein m.idx zu
+// invalidieren, nur die Registry") -- applyTagDefsSaved (update.go) does NOT
+// run applyMutationResult's unconditional loadCmd reload, since a Tag-
+// Registry write never touches any Bean (D11/D12) and therefore never stales
+// m.idx. This is the SAME kind of deliberate exception createDoneMsg already
+// is to mutationDoneMsg (messages.go doc-stamp above), one layer further:
+// each mutation family gets its own Msg exactly when its OWN completion tail
+// genuinely diverges from the shared one.
+type tagDefsSavedMsg struct{ err error }
+
+// saveTagDefsCmd wraps a single Tag-Registry SaveTagDefs write (a local,
+// synchronous file write, data/tagdefs.go) into an async Cmd -- CONSISTENCY
+// with every other state-changing call in this codebase demands a Cmd, never
+// a direct call inside the Update path, even though the underlying I/O is
+// fast enough it would not technically need one (mirrors mutateCmd's own
+// build shape, messages.go above).
+func saveTagDefsCmd(c *data.Client, defs []string) tea.Cmd {
+	return func() tea.Msg {
+		return tagDefsSavedMsg{err: c.SaveTagDefs(defs)}
+	}
+}

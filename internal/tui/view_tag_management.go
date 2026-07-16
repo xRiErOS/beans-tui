@@ -23,6 +23,16 @@ package tui
 // suggest-mode rows, though this page has no Picker relationship of its own
 // (bean bt-r92i's own "D10-Konvention vorgezogen ... hier noch ohne
 // Picker-Bezug" wording).
+//
+// E10 Task 3 (bean bt-604w, D11/D14) adds Create: `n` (keys.NewTag, reused
+// verbatim from the Tag-Picker) opens a page-LOCAL free-text input sub-mode
+// that lives INSIDE this same full-capture page (D06) -- not a floating
+// overlay/modalPanel like the Tag-Picker's own tagInputBox, since the Page
+// itself already owns full input capture; a second, nested overlayID would
+// only duplicate that capture, not add anything. The sub-mode is SHARED
+// (D14) between Create (this task, tagMgmtInputMode "create") and Rename
+// (T5, "rename") -- one textinput.Model, one open/close/validate path, two
+// callers.
 
 import (
 	"sort"
@@ -32,6 +42,7 @@ import (
 	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -136,13 +147,18 @@ func (m model) tagManagementChrome(innerW int) (head, localKeys string) {
 }
 
 // tagManagementLocalBindings is the page's own Footer Zone 3 local set.
-// T2 vorerst: Up/Down/Back only (read-only Grundgerüst) -- T3 (Create)/T4
-// (Delete)/T5 (Rename) each append their OWN binding to this SAME shared
-// function body as their overlays land (bean bt-r92i's own wording: "EIN
-// gemeinsamer Funktionsrumpf, kein Duplikat je Task"), never a
-// second, parallel bindings list.
+// T2 shipped Up/Down/Back only (read-only Grundgerüst) -- T3 (bean bt-604w)
+// appends keys.NewTag here (reuse of the EXISTING binding, same "n"/"new
+// tag" meaning as the Tag-Picker's own, no new keybind.Binding introduced,
+// keymap.go's helpGroups already lists it). T4 (Delete)/T5 (Rename) append
+// their own bindings to this SAME shared function body as they land (bean
+// bt-r92i's own wording: "EIN gemeinsamer Funktionsrumpf, kein Duplikat je
+// Task"), never a second, parallel bindings list. Ordering: NewTag sits
+// BEFORE Back (mirrors tagPickerLocalBindings' own action-keys-before-Back
+// convention, footer_context.go) -- an implementer decision, the bean body
+// only specifies "hängt an", not an exact position.
 func tagManagementLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, keys.NewTag, keys.Back}
 }
 
 // tagManagementMarkerGlyph is the PF-12 reserved-gutter glyph (design-
@@ -258,9 +274,23 @@ func (m model) viewTagManagement() string {
 	// SAME way here, this task's own tmux-smoke run).
 	paneW := innerW - 2
 
-	listRows := m.tagManagementRows(m.tagMgmtRows, true, paneW, bodyH)
-	if len(m.tagMgmtRows) == 0 {
-		listRows = []string{theme.Muted.Render("(no tags)")}
+	// E10 Task 3 (bean bt-604w, D14): while the shared input sub-mode is
+	// active, the SAME pane's content swaps to the input's own hint/field/
+	// error rows instead of the row list -- D06's "lebt INNERHALB der
+	// Full-Capture-Page" wording taken literally: no separate overlay/
+	// composeOverlays detour, just a different set of rows fed into the SAME
+	// renderPane call below (which already truncates every row to paneW-2,
+	// view.go's truncate helper, so an oversized error line degrades to a
+	// "…"-suffixed cut instead of wrapping -- same budget the normal row
+	// list already relies on, B01's own lesson one layer up).
+	var listRows []string
+	if m.tagMgmtInputActive {
+		listRows = m.tagMgmtInputRows()
+	} else {
+		listRows = m.tagManagementRows(m.tagMgmtRows, true, paneW, bodyH)
+		if len(m.tagMgmtRows) == 0 {
+			listRows = []string{theme.Muted.Render("(no tags)")}
+		}
 	}
 	listBox := renderPane(pane{rows: listRows}, paneW, bodyH, true)
 
@@ -277,10 +307,24 @@ func (m model) viewTagManagement() string {
 // enter is a documented HANDLED no-op (D08 -- reserved for a future
 // Master-Detail drilldown fast-follow, idx.WithTag(tag) already exists);
 // esc (keys.Back) returns to Browse (D03/D06-Pendant: exactly ONE level
-// back, mirrors keyLobby's own esc-with-a-live-client case). Every OTHER key
-// (including the global s/t/a/r/c/d/e node-action set AND `?`/ctrl+k/`p`) is
-// silently swallowed -- the D06 regression this page exists to prevent.
+// back, mirrors keyLobby's own esc-with-a-live-client case); `n` (keys.NewTag,
+// E10 Task 3, bean bt-604w, D11/D14) opens the shared Create/Rename input
+// sub-mode. Every OTHER key (including the global s/t/a/r/c/d/e node-action
+// set AND `?`/ctrl+k/`p`) is silently swallowed -- the D06 regression this
+// page exists to prevent.
 func (m model) keyTagManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// E10 Task 3 (bean bt-604w, D14): the shared input sub-mode is checked
+	// FIRST and fully captures every key except enter/esc -- same precedent
+	// as keyTagPicker's own `if m.tagInputActive` check (box_picker_tag.go).
+	// Without this, typing e.g. "d" into a new tag name would fall through
+	// to the switches below and either move a cursor or (were this page NOT
+	// already itself full-capture) leak to a global action -- exactly the
+	// Full-Capture-Disziplin the harness brief for this task calls out by
+	// name.
+	if m.tagMgmtInputActive {
+		return m.keyTagMgmtInput(msg)
+	}
+
 	switch navKey(msg.String()) {
 	case "up":
 		m.tagMgmtCursor.move(-1)
@@ -299,6 +343,107 @@ func (m model) keyTagManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// ("Beans zu diesem Tag") would land here, idx.WithTag(tag) already
 		// exists (epic bt-362n body's own empirical-verification note).
 		return m, nil
+	case keybind.Matches(msg, keys.NewTag):
+		return m.openTagMgmtInput("create", "")
 	}
 	return m, nil
+}
+
+// openTagMgmtInput enters the shared free-text input sub-mode (D14, mirrors
+// openTagInput's own "reset value, focus, blink" convention,
+// box_picker_tag.go): prefill seeds BOTH the input's visible text AND
+// tagMgmtInputTarget -- for Create (T3, this task) prefill is always "",
+// leaving tagMgmtInputTarget empty (D11: a new Definition never targets an
+// existing name); T5's own Rename call site will pass the OLD name as
+// prefill, pre-filling the field AND remembering it as the dedupe-exclusion/
+// rename-source target in one shot.
+func (m model) openTagMgmtInput(mode, prefill string) (tea.Model, tea.Cmd) {
+	m.tagMgmtInputActive = true
+	m.tagMgmtInputMode = mode
+	m.tagMgmtInputTarget = prefill
+	m.tagMgmtInputErr = ""
+	m.tagMgmtInput.SetValue(prefill)
+	m.tagMgmtInput.Focus()
+	return m, textinput.Blink
+}
+
+// keyTagMgmtInput drives the open input sub-mode -- mirrors keyTagInput's
+// structure 1:1 (box_picker_tag.go): esc discards ONLY the sub-mode (the
+// Page underneath is untouched, D14); enter validates against
+// data.ValidTagName, THEN dedupes against the CURRENT m.tagMgmtRows name set
+// (defined AND free rows alike -- the bean body's own explicit wording,
+// "Dedupe prüft also gegen ALLE vorhandenen Namen" for Create, where
+// tagMgmtInputTarget is always "" -- T5/Rename will exclude its OWN old name
+// via that field). A validation/dedupe failure sets tagMgmtInputErr and
+// leaves the sub-mode open for a retry, same contract as keyTagInput. A
+// valid Create submit dispatches saveTagDefsCmd with the registry's current
+// defined names (extracted from tagMgmtRows, D11: Create is a pure Registry
+// act, never touches m.idx) plus the new one (data.AddTagDefName) -- the
+// sub-mode itself does NOT close here; applyTagDefsSaved (update.go) closes
+// it only on a CONFIRMED successful write, so a failed disk write leaves the
+// PO able to retry the same typed name without retyping it.
+func (m model) keyTagMgmtInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.tagMgmtInputActive = false
+		m.tagMgmtInput.Blur()
+		m.tagMgmtInputErr = ""
+		return m, nil
+	case tea.KeyEnter:
+		name := strings.TrimSpace(m.tagMgmtInput.Value())
+		if !data.ValidTagName(name) {
+			m.tagMgmtInputErr = "invalid tag name (a-z0-9, hyphen-separated, lowercase)"
+			return m, nil
+		}
+		for _, r := range m.tagMgmtRows {
+			if r.name == name && name != m.tagMgmtInputTarget {
+				m.tagMgmtInputErr = "tag already defined: " + name
+				return m, nil
+			}
+		}
+		m.tagMgmtInputErr = ""
+
+		switch m.tagMgmtInputMode {
+		case "create":
+			defs := definedTagNames(m.tagMgmtRows)
+			return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, name))
+		}
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.tagMgmtInput, cmd = m.tagMgmtInput.Update(msg)
+	return m, cmd
+}
+
+// definedTagNames extracts the currently-registry-defined subset of rows
+// (defined==true) as a plain name slice -- the input to
+// data.AddTagDefName/RemoveTagDefName/RenameTagDefName (T1's own pure
+// helpers, internal/data/tagdefs.go), since m.tagMgmtRows itself never
+// carried a separate "raw defs slice" field (T2's own "one Union row list,
+// no manual patching" convention, bean bt-r92i's Notes-für-T3+T4).
+func definedTagNames(rows []tagRegistryRow) []string {
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.defined {
+			out = append(out, r.name)
+		}
+	}
+	return out
+}
+
+// tagMgmtInputRows renders the input sub-mode's own content -- mirrors
+// tagInputBox's hint+field+error layout (box_picker_tag.go) but INLINE,
+// inside the SAME pane the row list normally occupies (D06/D14: no floating
+// modalPanel/overlay for this page).
+func (m model) tagMgmtInputRows() []string {
+	hint := "enter:create  esc:cancel"
+	if m.tagMgmtInputMode == "rename" {
+		hint = "enter:rename  esc:cancel"
+	}
+	rows := []string{theme.Muted.Render(hint), "", m.tagMgmtInput.View()}
+	if m.tagMgmtInputErr != "" {
+		rows = append(rows, "", lipgloss.NewStyle().Foreground(theme.Red).Render(m.tagMgmtInputErr))
+	}
+	return rows
 }

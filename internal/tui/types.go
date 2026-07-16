@@ -587,6 +587,25 @@ type model struct {
 	tagMgmtRows   []tagRegistryRow
 	tagMgmtCursor listState
 
+	// Tag-Management page's own shared free-text input sub-mode (E10 Task 3,
+	// bean bt-604w, epic bt-362n D11/D14): mirrors tagInput/tagInputActive/
+	// tagInputErr's "one persistent textinput.Model, reset+focused on open"
+	// convention (box_picker_tag.go's own doc-stamp, types.go above) --
+	// tagMgmtInputActive fully captures input WITHIN the already-full-capture
+	// Page (D06), never a second overlayID case. tagMgmtInputMode is
+	// "create" (T3, this task) or "rename" (T5, D14: Rename reuses this SAME
+	// sub-mode instead of inventing a second one). tagMgmtInputTarget is the
+	// OLD name being renamed -- empty for Create (D11: a new Definition never
+	// targets an existing name), populated by T5's own prefill. tagMgmtInputErr
+	// carries an inline validation/dedupe failure (ValidTagName or a
+	// duplicate against m.tagMgmtRows' current name set) -- the input stays
+	// open for a retry when set, same contract as tagInputErr one layer up.
+	tagMgmtInputActive bool
+	tagMgmtInputMode   string
+	tagMgmtInput       textinput.Model
+	tagMgmtInputTarget string
+	tagMgmtInputErr    string
+
 	// repoMetrics is the Lobby's own "Open/Total" column per configured
 	// repo (design note, bean bt-zhwl: "Kosten/Latenz-Abwägung dokumentieren"
 	// -- resolved as N independent async tea.Cmd dispatches, batched via
@@ -615,18 +634,24 @@ func newModel(client *data.Client, repoDir string) model {
 	tagIn.Prompt = ""
 	tagIn.CharLimit = 40
 
+	tagMgmtIn := textinput.New() // E10 Task 3: Tag-Management page's own shared create/rename input (D14)
+	tagMgmtIn.Placeholder = "new tag (a-z0-9, hyphen-separated)"
+	tagMgmtIn.Prompt = ""
+	tagMgmtIn.CharLimit = 40
+
 	repoIn := textinput.New() // E5 Task 6: Lobby's own repo-filter input
 	repoIn.Placeholder = "Filter repos (path)"
 	repoIn.Prompt = ""
 	repoIn.CharLimit = 200
 
 	return model{
-		view:        viewBrowseRepo,
-		client:      client,
-		repoDir:     repoDir,
-		expanded:    map[string]bool{},
-		searchInput: ti,
-		tagInput:    tagIn,
-		repoSearch:  repoIn,
+		view:         viewBrowseRepo,
+		client:       client,
+		repoDir:      repoDir,
+		expanded:     map[string]bool{},
+		searchInput:  ti,
+		tagInput:     tagIn,
+		tagMgmtInput: tagMgmtIn,
+		repoSearch:   repoIn,
 	}
 }
