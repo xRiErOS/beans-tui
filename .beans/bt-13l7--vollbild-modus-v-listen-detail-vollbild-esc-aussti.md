@@ -1,11 +1,11 @@
 ---
 # bt-13l7
 title: Vollbild-Modus 'v' — Listen-/Detail-Vollbild, esc-Ausstieg (F01 Kernmechanik)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:55Z
-updated_at: 2026-07-16T13:48:38Z
+updated_at: 2026-07-16T13:55:51Z
 parent: bt-tct9
 blocked_by:
     - bt-b0w0
@@ -512,3 +512,34 @@ innerW-2) -- siehe Smoke-Abschnitt.
 1. F01 (Reviewer-Minimal-Fix): im b==nil-Guard zusätzlich `if m.fullscreen == fullscreenDetail { m.fullscreen = fullscreenNone }` — rettet alle Trigger an einer Stelle. Regressionstest: fullscreenDetail + fullscreenBeanID="does-not-exist" + esc → fullscreenNone.
 2. F02 (SUPERVISOR-ENTSCHEID): Fallback = View-Wechsel. Wenn Ursprung Backlog UND Exit-Ziel-Bean nicht backlogVisible(): esc wechselt nach Browse/Tree mit Cursor auf dem Bean + expandAncestorsOf (Tree kann jedes Bean zeigen) — erfüllt das PO-Kriterium maximal statt still zu desyncen. Nur bei backlogVisible bleibt der bestehende Backlog-Sync. Regressionstest analog Reviewer-Repro (Jump-Target mit Parent). Entscheid dem PO im Abschluss-Report spiegeln (Review-Punkt, analog Q03).
 3. I01/I02 mitnehmen (je ein kleiner Pin-Test, billig, sichert die adversarial geprüften Pfade).
+
+## Fix-Runde 1 (2026-07-16, Review-Verdict CHANGES_REQUIRED)
+
+| Fxx | Status | Fix |
+|---|---|---|
+| F01 | 🟢 gefixt | `keyDetailFocus`s b==nil-Guard (update.go) setzt bei `m.fullscreen == fullscreenDetail` zusätzlich `m.fullscreen = fullscreenNone` (Reviewer-Minimal-Fix verbatim) — rettet ALLE Trigger (Watch-Reload, Repo-Wechsel, Delete) am einen Choke-Point, den sie alle passieren. Regressionstest `TestKeyDetailFocusEscOnVanishedFullscreenBeanExitsFullscreen`. |
+| F02 | 🟢 gefixt | Backlog-Exit-Zweig (keyDetailFocus Back-Case): Sync-Loop meldet jetzt `found` — bei Nicht-Treffer (Exit-Ziel nicht `backlogVisible()`) **SUPERVISOR-ENTSCHEID "Fallback = View-Wechsel"**: `m.view = viewBrowseRepo` + `expandAncestorsOf` + `m.cursorID = id` (Tree kann jedes Bean zeigen; PO-Kriterium "mit dem aktuellen Bean selektiert" maximal erfüllt statt still zu desyncen). Nur bei backlogVisible bleibt der bestehende Backlog-Sync (Regressionstest der happy-path bleibt unverändert grün). Regressionstest `TestKeyDetailFocusEscExitsFullscreenToTreeWhenTargetNotBacklogVisible` (Reviewer-Repro: Jump-Target mit Parent aus Backlog-Vollbild). **Entscheid dem PO zu spiegeln (Review-Punkt, analog Q03).** |
+| I01 | 🟢 gepinnt | `TestOverlayRendersOverFullscreen` (Value-Menu aus fullscreenDetail geöffnet rendert über dem Vollbild-Body) + `TestKeyFullscreenVNoOpWhileOverlayOrFormOpen` (Subtests overlay/form: `v` leakt nicht durch Full-Capture-States). |
+| I02 | 🟢 gepinnt | `TestFullscreenRecomputesGeometryOnResize` (WindowSizeMsg 100x30→80x24 NACH Vollbild-Eintritt, beide Spielarten: Frame passt in die NEUE Größe — kein Geometrie-Caching). |
+
+### RED→GREEN
+
+RED (F01/F02, vor Fix, wörtlich):
+```
+=== RUN   TestKeyDetailFocusEscOnVanishedFullscreenBeanExitsFullscreen
+    update_test.go:1012: fullscreen = 2, want fullscreenNone (b==nil guard must exit the Vollbild, not leave the PO trapped)
+--- FAIL: TestKeyDetailFocusEscOnVanishedFullscreenBeanExitsFullscreen (0.00s)
+=== RUN   TestKeyDetailFocusEscExitsFullscreenToTreeWhenTargetNotBacklogVisible
+    update_test.go:1052: view = 1, want viewBrowseRepo (F02 fallback: Tree can show every bean, Backlog cannot)
+--- FAIL: TestKeyDetailFocusEscExitsFullscreenToTreeWhenTargetNotBacklogVisible (0.00s)
+```
+
+GREEN (nach Fix): beide Regressionstests PASS; Nachbar-Tests
+`TestKeyDetailFocusEscSectionLevelExitsFullscreenToBacklogWithCursorSynced`
+(happy-path Backlog-Sync) + `TestKeyDetailFocusOnOrphanRootExitsGracefully`
+(alter Guard-Kontrakt) unverändert PASS. I01/I02-Pins sofort grün (pinnen
+strukturell korrektes Bestandsverhalten, kein RED erwartet/verlangt).
+Voller Lauf `go test ./... -short -count=1` grün, `-race -count=1` grün,
+`gofmt -l .`/`go vet ./...` leer. Basis-Goldens: `git diff --stat --
+internal/tui/testdata/` leer, TestTreeGolden/TestBacklogGolden/
+TestChromeGolden grün ohne -update.
