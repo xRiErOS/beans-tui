@@ -290,6 +290,85 @@ func (c *Client) SetBlocking(id string, add, remove []string, etag string) error
 	return c.update(id, etag, args...)
 }
 
+// WholeEditDiff is the field-level diff between a whole-bean $EDITOR
+// session's ORIGINAL snapshot and its edited return (D01, design-spec.md
+// §15 PF-17, bean bt-z4b1). nil/false/empty means "unchanged, omit this
+// flag" -- UpdateWhole below only sends flags for fields that actually
+// differ, mirroring update()'s own minimal-args convention (and SetTags'/
+// SetBlocking's combined-diff convention, generalized to every field at
+// once). ParentChanged is a separate bool (rather than a *string) because
+// "" is itself a valid target value (--remove-parent), so a nil-vs-empty
+// pointer distinction would be ambiguous -- same reasoning RemoveParent's
+// own existence already establishes for the single-field setters above.
+type WholeEditDiff struct {
+	Title, Status, Type, Priority *string
+	TagsAdd, TagsRemove           []string
+	BlockingAdd, BlockingRemove   []string
+	BlockedByAdd, BlockedByRemove []string
+	ParentChanged                 bool
+	Parent                        string // valid only if ParentChanged; "" = --remove-parent
+	Body                          *string
+}
+
+// UpdateWhole applies every changed field from a whole-bean $EDITOR
+// round-trip in ONE beans-update call (D01, design-spec.md §15 PF-17) --
+// the SAME single-etag-no-cascade rationale SetTags/SetBlocking above
+// already establish: N sequential calls against the SAME etag would be a
+// conflict cascade, since the first call rotates the etag on disk and every
+// subsequent call then sees a stale one. A zero-value diff (nothing
+// actually changed -- e.g. the PO's $EDITOR session only reformatted
+// whitespace) builds NO args at all and returns nil WITHOUT ever shelling
+// out to the CLI (client_mut_test.go's "empty diff fires no CLI call"
+// subtest) -- the Akzeptanz-Checkliste's explicit "No-op-Save -> kein
+// CLI-Call" claim.
+func (c *Client) UpdateWhole(id string, diff WholeEditDiff, etag string) error {
+	var args []string
+	if diff.Title != nil {
+		args = append(args, "--title", *diff.Title)
+	}
+	if diff.Status != nil {
+		args = append(args, "--status", *diff.Status)
+	}
+	if diff.Type != nil {
+		args = append(args, "--type", *diff.Type)
+	}
+	if diff.Priority != nil {
+		args = append(args, "--priority", *diff.Priority)
+	}
+	for _, t := range diff.TagsAdd {
+		args = append(args, "--tag", t)
+	}
+	for _, t := range diff.TagsRemove {
+		args = append(args, "--remove-tag", t)
+	}
+	for _, b := range diff.BlockingAdd {
+		args = append(args, "--blocking", b)
+	}
+	for _, b := range diff.BlockingRemove {
+		args = append(args, "--remove-blocking", b)
+	}
+	for _, b := range diff.BlockedByAdd {
+		args = append(args, "--blocked-by", b)
+	}
+	for _, b := range diff.BlockedByRemove {
+		args = append(args, "--remove-blocked-by", b)
+	}
+	if diff.ParentChanged {
+		if diff.Parent == "" {
+			args = append(args, "--remove-parent")
+		} else {
+			args = append(args, "--parent", diff.Parent)
+		}
+	}
+	if diff.Body != nil {
+		args = append(args, "--body", *diff.Body)
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	return c.update(id, etag, args...)
+}
+
 // AppendBody appends text to a bean's body (`--body-append`); it does not
 // replace the existing body.
 func (c *Client) AppendBody(id, text, etag string) error {

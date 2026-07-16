@@ -393,6 +393,152 @@ func TestSetBlockingAddsAndRemovesInOneCall(t *testing.T) {
 	}
 }
 
+// TestUpdateWholeSendsOnlyChangedFields guards data.Client.UpdateWhole (D01,
+// design-spec.md §15 PF-17, bean bt-z4b1): the whole-bean $EDITOR round-trip
+// fires exactly ONE `beans update` call carrying only the flags for fields
+// that actually changed -- mirrors SetTags'/SetBlocking's own
+// single-etag-no-cascade rationale, generalized to every editable field at
+// once. The "empty diff" subtest is the Akzeptanz-Checkliste's explicit
+// "No-op-Save -> kein CLI-Call" claim: RepoDir points at a directory with NO
+// beans repo at all, so ANY shelled-out `beans` invocation would fail --
+// UpdateWhole must still return nil.
+func TestUpdateWholeSendsOnlyChangedFields(t *testing.T) {
+	requireBeansBinary(t)
+
+	t.Run("title only", func(t *testing.T) {
+		repo := newTestRepo(t)
+		client := &Client{RepoDir: repo}
+		beans, err := client.List()
+		if err != nil {
+			t.Fatalf("List() error = %v", err)
+		}
+		task := findBean(t, beans, "tt-task")
+
+		title := "Renamed Title"
+		if err := client.UpdateWhole(task.ID, WholeEditDiff{Title: &title}, task.ETag); err != nil {
+			t.Fatalf("UpdateWhole() error = %v", err)
+		}
+
+		after, err := client.List()
+		if err != nil {
+			t.Fatalf("List() after UpdateWhole error = %v", err)
+		}
+		updated := findBean(t, after, "tt-task")
+		if updated.Title != title {
+			t.Fatalf("Title = %q, want %q", updated.Title, title)
+		}
+		if updated.Status != task.Status || updated.Type != task.Type || updated.Priority != task.Priority {
+			t.Fatalf("UpdateWhole(title-only) touched other fields: %+v", updated)
+		}
+	})
+
+	t.Run("tags add and remove combined", func(t *testing.T) {
+		repo := newTestRepo(t)
+		client := &Client{RepoDir: repo}
+
+		beans, err := client.List()
+		if err != nil {
+			t.Fatalf("List() error = %v", err)
+		}
+		task := findBean(t, beans, "tt-task")
+		if err := client.AddTag(task.ID, "seed", task.ETag); err != nil {
+			t.Fatalf("seed AddTag() error = %v", err)
+		}
+
+		beans, err = client.List()
+		if err != nil {
+			t.Fatalf("List() after seed error = %v", err)
+		}
+		task = findBean(t, beans, "tt-task")
+
+		diff := WholeEditDiff{TagsAdd: []string{"alpha", "beta"}, TagsRemove: []string{"seed"}}
+		if err := client.UpdateWhole(task.ID, diff, task.ETag); err != nil {
+			t.Fatalf("UpdateWhole() error = %v", err)
+		}
+
+		after, err := client.List()
+		if err != nil {
+			t.Fatalf("List() after UpdateWhole error = %v", err)
+		}
+		updated := findBean(t, after, "tt-task")
+		want := map[string]bool{"alpha": true, "beta": true}
+		for _, tg := range updated.Tags {
+			if tg == "seed" {
+				t.Fatal("UpdateWhole() left the removed tag \"seed\" in place")
+			}
+			if !want[tg] {
+				t.Errorf("UpdateWhole() left unexpected tag %q, want only %v", tg, want)
+				continue
+			}
+			delete(want, tg)
+		}
+		if len(want) != 0 {
+			t.Errorf("UpdateWhole() missing tags %v, got %v", want, updated.Tags)
+		}
+	})
+
+	t.Run("parent clear", func(t *testing.T) {
+		repo := newTestRepo(t)
+		client := &Client{RepoDir: repo}
+
+		beans, err := client.List()
+		if err != nil {
+			t.Fatalf("List() error = %v", err)
+		}
+		task := findBean(t, beans, "tt-task") // fixture: parent: tt-epic
+
+		diff := WholeEditDiff{ParentChanged: true, Parent: ""}
+		if err := client.UpdateWhole(task.ID, diff, task.ETag); err != nil {
+			t.Fatalf("UpdateWhole() error = %v", err)
+		}
+
+		after, err := client.List()
+		if err != nil {
+			t.Fatalf("List() after UpdateWhole error = %v", err)
+		}
+		updated := findBean(t, after, "tt-task")
+		if updated.Parent != "" {
+			t.Fatalf("Parent = %q, want empty (--remove-parent)", updated.Parent)
+		}
+	})
+
+	t.Run("body only", func(t *testing.T) {
+		repo := newTestRepo(t)
+		client := &Client{RepoDir: repo}
+
+		beans, err := client.List()
+		if err != nil {
+			t.Fatalf("List() error = %v", err)
+		}
+		task := findBean(t, beans, "tt-task")
+
+		body := "Replaced body text."
+		if err := client.UpdateWhole(task.ID, WholeEditDiff{Body: &body}, task.ETag); err != nil {
+			t.Fatalf("UpdateWhole() error = %v", err)
+		}
+
+		after, err := client.List()
+		if err != nil {
+			t.Fatalf("List() after UpdateWhole error = %v", err)
+		}
+		updated := findBean(t, after, "tt-task")
+		// The CLI's own JSON "body" field always carries a leading "\n"
+		// (the blank line between the frontmatter's closing "---" and the
+		// body text on disk) -- verified against every OTHER body-bearing
+		// fixture in this package (e.g. testrepo_test.go's own bodies).
+		if updated.Body != "\n"+body {
+			t.Fatalf("Body = %q, want %q", updated.Body, "\n"+body)
+		}
+	})
+
+	t.Run("empty diff fires no CLI call", func(t *testing.T) {
+		client := &Client{RepoDir: t.TempDir()}
+		if err := client.UpdateWhole("nonexistent-id", WholeEditDiff{}, "some-etag"); err != nil {
+			t.Fatalf("UpdateWhole(empty diff) error = %v, want nil (no CLI call fired at all)", err)
+		}
+	})
+}
+
 // TestAddBlockingCyclePinsValidationErrorShape closes the E3-T3-Review
 // PFLICHT finding carried into bean bt-ppzb/E3 Task 6 ("Blocking-Zyklus via
 // CLI -> VALIDATION_ERROR-Shape-Test gepinnt, bisher nur Kommentar"):
