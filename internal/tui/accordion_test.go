@@ -41,11 +41,32 @@ func TestRenderAccordionExclusiveOpen(t *testing.T) {
 	if strings.Contains(out, "body-three-content") {
 		t.Error("closed section 3's body must not render")
 	}
-	if !strings.Contains(ansi.Strip(out), "▸") {
-		t.Error("closed section 3 must show the closed chevron ▸")
+	// B05 (design-spec.md §15 PF-16, bean bt-ntoz/bt-czpf, 2026-07-16):
+	// the old assertions here required the "▸"/"▾" chevron hint suffix to
+	// be PRESENT -- that suffix was removed as redundant (open/closed
+	// state is already visible from whether the body renders below the
+	// header). See TestRenderAccordionNoChevronSuffix below for the
+	// current (inverse) contract.
+}
+
+// TestRenderAccordionNoChevronSuffix guards B05 (design-spec.md §15 PF-16,
+// bean bt-ntoz/bt-czpf, 2026-07-16): the accordion section header's
+// trailing hint suffix ("  ▾" open / "  ▸" closed) is redundant -- a
+// section's open/closed state is already visible from whether its body
+// renders below the header. Neither glyph may appear in the rendered
+// header output any more, regardless of open/closed state.
+func TestRenderAccordionNoChevronSuffix(t *testing.T) {
+	secs := []accordionSection{
+		{title: "One", body: "body-one-content"},
+		{title: "Two", body: "body-two-content"},
+		{title: "Three", body: "body-three-content"},
 	}
-	if !strings.Contains(ansi.Strip(out), "▾") {
-		t.Error("open sections (1 and 2) must show the open chevron ▾")
+	out := ansi.Strip(renderAccordion(secs, 2, 60, false, 0, 0))
+	if strings.Contains(out, "▾") {
+		t.Error("B05: open section header must no longer carry the '▾' chevron suffix")
+	}
+	if strings.Contains(out, "▸") {
+		t.Error("B05: closed section header must no longer carry the '▸' chevron suffix")
 	}
 }
 

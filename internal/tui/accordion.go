@@ -69,13 +69,15 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 		isOpen := n == open || n == 1         // PF-1: Meta (section 1) always shows its body
 		activeSec := active && activeIdx == i // D08: focus is on this section
 		marker := theme.Chevron.Render("> ") + theme.Key.Render(fmt.Sprintf("[%d]", n)) + " "
-		var title, hint string
+		// B05 (design-spec.md §15 PF-16, bean bt-ntoz/bt-czpf, 2026-07-16):
+		// the former "  ▾"/"  ▸" hint suffix was removed -- redundant, the
+		// section's open/closed state is already visible from whether its
+		// body renders below the header (isOpen, above).
+		var title string
 		if isOpen {
 			title = theme.Header.Render(s.title)
-			hint = theme.Muted.Render("  ▾")
 		} else {
 			title = theme.Muted.Render(s.title)
-			hint = theme.Muted.Render("  ▸")
 		}
 		// PF-12 (design-spec.md §15, E7 T4): BOTH branches now reserve
 		// exactly 1 gutter column (" " inactive, "▌" active) and truncate
@@ -87,9 +89,9 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 		if activeSec {
 			// D08: active section = ▌ bar + whole line accent-tinted (own
 			// per-cell colors stripped first, mirrors the tree cursor).
-			header = theme.Accent.Render("▌" + truncate(ansi.Strip(marker+title+hint), w-1))
+			header = theme.Accent.Render("▌" + truncate(ansi.Strip(marker+title), w-1))
 		} else {
-			header = " " + truncate(marker+title+hint, w-1)
+			header = " " + truncate(marker+title, w-1)
 		}
 		b.WriteString(headerStyle.Render(header) + "\n")
 		if isOpen {
