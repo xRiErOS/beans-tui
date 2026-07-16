@@ -233,7 +233,7 @@ func hangingIndentWrap(prefix, text string, w int) string {
 	// spaceless token (URL, German compound, long ID, CJK prose) longer
 	// than contW would overflow the target width unbounded. Hardwrap
 	// force-breaks such over-long tokens at the cell boundary (true =
-	// preserve ANSI sequences), same as the pre-B04 blanket wrapText did.
+	// preserveSpace, wie wrapText), same as the pre-B04 blanket wrapText did.
 	wrapped := ansi.Hardwrap(ansi.Wordwrap(text, contW, ""), contW, true)
 	lines := strings.Split(wrapped, "\n")
 	var b strings.Builder
@@ -260,16 +260,20 @@ func relationRowMarker(active bool, fieldIdx, rowIdx int) string {
 	return theme.Muted.Render("▷ ")
 }
 
-// relationRowNoWrap is a large sentinel width for relationRow callers that
-// pre-date hangingIndentWrap and intentionally keep a single, un-wrapped
-// line (the Parent-/Blocking-Picker, box_picker_parent.go/box_picker_
-// blocking.go): B04/bt-b0w0's scope is the RELATIONS section only -- T5/
-// bt-4mo9 (blocked_by this task, epic-E9-plan.md) widens those two pickers
-// and switches them onto REAL hangingIndentWrap wrapping. No realistic
-// title's first "word" (Wordwrap only breaks on whitespace) reaches this
-// width, so these callers render byte-identically to the pre-B04 bare
-// concatenation (marker "" adds nothing visible either).
-const relationRowNoWrap = 1 << 20
+// relationRowPrefix returns the glyph+ID half of a relation row (status
+// icon, type icon, Key-styled ID, trailing space) WITHOUT a leading marker
+// and WITHOUT wrapping -- extracted out of relationRow (T5, bean bt-4mo9,
+// B06) so the Blocking-/Parent-Picker (box_picker_blocking.go/box_picker_
+// parent.go) can compose their OWN leading element (the D08 cursor bar and,
+// for Blocking, the pending dot) in front of it and hand the combined
+// string to hangingIndentWrap as ITS prefix argument, against the REAL
+// picker width (wideModalWidth(m.width)) instead of the old relationRowNoWrap
+// sentinel (removed by this task -- no caller left after this refactor).
+// relationRow (below) is now a thin wrapper around this plus its own
+// `marker` parameter, byte-identical to its pre-extraction behavior.
+func relationRowPrefix(rel *data.Bean) string {
+	return theme.StatusIcon(rel.Status) + " " + theme.TypeIcon(rel.Type) + " " + theme.Key.Render(rel.ID) + " "
+}
 
 // relationRow renders one resolved relation as a marker-prefixed status-
 // icon+type-icon+ID+title row (mirrors treeRowText's glyph order, view_
@@ -277,8 +281,7 @@ const relationRowNoWrap = 1 << 20
 // continuation lines align under the title's own start on THIS row instead
 // of falling back to column 0.
 func relationRow(rel *data.Bean, marker string, w int) string {
-	prefix := marker + theme.StatusIcon(rel.Status) + " " + theme.TypeIcon(rel.Type) + " " + theme.Key.Render(rel.ID) + " "
-	return hangingIndentWrap(prefix, rel.Title, w)
+	return hangingIndentWrap(marker+relationRowPrefix(rel), rel.Title, w)
 }
 
 // resolveSorted resolves a slice of bean IDs against idx.ByID, canonically

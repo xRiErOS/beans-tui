@@ -15,7 +15,26 @@ import (
 
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
+
+// contentIndent measures a rendered picker row's hangingIndentWrap indent,
+// skipping modalBox's own constant 2-cell frame (1 border rune + 1
+// Padding(0,1) rune) that prefixes every content line inside the box (T5,
+// bean bt-4mo9, B06) -- a bare TrimLeft(line, " ") from column 0 would stop
+// immediately at the leading "│" border rune (not a space) and always
+// report 0, hiding the real hanging-indent width.
+func contentIndent(t *testing.T, line string) int {
+	t.Helper()
+	runes := []rune(line)
+	const frameW = 2
+	if len(runes) < frameW {
+		t.Fatalf("line shorter than the modal frame (%d cells): %q", frameW, line)
+	}
+	rest := string(runes[frameW:])
+	return len(rest) - len(strings.TrimLeft(rest, " "))
+}
 
 // --- buildBlockingItems / openBlockingPicker ---
 
@@ -197,6 +216,86 @@ func TestBlockingPickerEscDiscards(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Fatal("esc must not fire a mutation Cmd")
+	}
+}
+
+// --- blockingPickerBox width/wrap (T5, bean bt-4mo9, B06) ---
+
+// TestBlockingPickerBoxUsesWideModalWidth guards the actual B06 fix: on a
+// wide terminal (120 cols), the rendered overlay's border line must be
+// substantially wider than the old fixed clampModalWidth(48, ...) box
+// (which renders 50 cells wide, see modalBox/TestModalBoxHasRoundedBorder)
+// -- ~wideModalWidth(120)+2=104 instead.
+func TestBlockingPickerBoxUsesWideModalWidth(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.width = 120
+	m = focusBean(m, "ep-1")
+	m = step(t, m, runeMsg('r'))
+
+	out := m.blockingPickerBox()
+	lines := strings.Split(out, "\n")
+	maxW := 0
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > maxW {
+			maxW = w
+		}
+	}
+	oldFixed := clampModalWidth(48, m.width) + 2 // +2 border, byte-parity with modalBox's own overhead
+	if maxW <= oldFixed {
+		t.Fatalf("blockingPickerBox max line width = %d, want > %d (old fixed-48 box) at m.width=120", maxW, oldFixed)
+	}
+	wantW := wideModalWidth(m.width) + 2
+	if maxW != wantW {
+		t.Errorf("blockingPickerBox max line width = %d, want %d (wideModalWidth(120)+2 border)", maxW, wantW)
+	}
+}
+
+// TestBlockingPickerBoxLongTitleWrapsWithHangingIndent guards the actual
+// PO-reported bug (B06 screenshot: IDs breaking mid-word) end-to-end: a
+// bean with a long ID and a long title, rendered at a picker width narrow
+// enough to force a wrap, must keep the FULL ID intact on the row's first
+// line and hanging-indent the continuation line -- never fall back to
+// column 0 or split the ID itself.
+func TestBlockingPickerBoxLongTitleWrapsWithHangingIndent(t *testing.T) {
+	longID := "bt-averylongidentifier99"
+	beans := []data.Bean{
+		{ID: "ep-1", Title: "Focus", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: longID, Title: "Hier steht ein langer Titel eines beans der so umbricht dass die Uebersicht gewahrt ist", Status: "todo", Type: "task", Priority: "normal"},
+	}
+	m := fixtureModel(t, beans)
+	m.width = 70 // narrow enough that wideModalWidth(70)=60 forces the long title to wrap
+	m = focusBean(m, "ep-1")
+	m = step(t, m, runeMsg('r'))
+
+	out := ansi.Strip(m.blockingPickerBox())
+	lines := strings.Split(out, "\n")
+
+	idLine := -1
+	for i, l := range lines {
+		if strings.Contains(l, longID) {
+			idLine = i
+			break
+		}
+	}
+	if idLine < 0 {
+		t.Fatalf("blocking picker output missing the full intact ID %q on any single line: %q", longID, out)
+	}
+	for i, l := range lines {
+		if i == idLine {
+			continue
+		}
+		if strings.Contains(l, "bt-a") || strings.Contains(l, "verylongidentifier") {
+			t.Errorf("ID fragment leaked onto a different line %d (mid-ID break): %q (full output: %q)", i, l, out)
+		}
+	}
+	if idLine+1 >= len(lines) {
+		t.Fatalf("expected the long title to wrap onto a continuation line after line %d, got only %d lines: %q", idLine, len(lines), out)
+	}
+	titleCol := cellCol(t, lines[idLine], "Hier") // absolute column, includes the modal's 2-cell frame
+	gotIndent := contentIndent(t, lines[idLine+1])
+	wantIndent := titleCol - 2
+	if gotIndent != wantIndent {
+		t.Errorf("continuation line indent = %d, want %d (title-start column on the ID's own line): %q", gotIndent, wantIndent, lines[idLine+1])
 	}
 }
 

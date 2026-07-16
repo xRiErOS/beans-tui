@@ -376,3 +376,24 @@ func clampModalWidth(pref, termW int) int {
 	}
 	return w
 }
+
+// wideModalWidth sizes a floating box relative to the terminal, unlike
+// clampModalWidth (which only ever SHRINKS a fixed preference) -- B06,
+// design-spec.md §15 PF-17: the Blocking-/Parent-Picker need to GROW on
+// wide terminals (PO: "die Breite muss viel weiter werden"), not stay
+// pinned to a fixed 48. ~85% of termW, floor 60 (never narrower than the
+// old fixed value), ceiling termW-4 (same 2-column margin convention as
+// clampModalWidth).
+func wideModalWidth(termW int) int {
+	w := termW * 85 / 100
+	if w < 60 {
+		w = 60
+	}
+	if termW > 4 && w > termW-4 {
+		w = termW - 4
+	}
+	if w < 24 {
+		w = 24 // absolute floor, mirrors clampModalWidth's own floor
+	}
+	return w
+}

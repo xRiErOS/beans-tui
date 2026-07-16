@@ -14,6 +14,8 @@ import (
 
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // fixtureBeansForParentPicker is a deliberately deeper/wider hierarchy than
@@ -308,5 +310,89 @@ func TestParentPickerCurrentParentOutOfEligibilityCursorFallsBackToZero(t *testi
 	}
 	if m.menu.cursor != 0 {
 		t.Fatalf("menu.cursor = %d, want 0 (fallback: current parent tk-9 is not in parentItems)", m.menu.cursor)
+	}
+}
+
+// --- parentPickerBox width/wrap (T5, bean bt-4mo9, B06) ---
+
+// TestParentPickerBoxUsesWideModalWidth mirrors
+// TestBlockingPickerBoxUsesWideModalWidth: the rendered overlay must scale
+// with the terminal instead of staying pinned to the old fixed
+// clampModalWidth(48, ...).
+func TestParentPickerBoxUsesWideModalWidth(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansForParentPicker())
+	m.width = 120
+	m = focusBeanFull(m, "ep-1")
+	m = step(t, m, runeMsg('a'))
+
+	out := m.parentPickerBox()
+	lines := strings.Split(out, "\n")
+	maxW := 0
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > maxW {
+			maxW = w
+		}
+	}
+	oldFixed := clampModalWidth(48, m.width) + 2 // +2 border, byte-parity with modalBox's own overhead
+	if maxW <= oldFixed {
+		t.Fatalf("parentPickerBox max line width = %d, want > %d (old fixed-48 box) at m.width=120", maxW, oldFixed)
+	}
+	wantW := wideModalWidth(m.width) + 2
+	if maxW != wantW {
+		t.Errorf("parentPickerBox max line width = %d, want %d (wideModalWidth(120)+2 border)", maxW, wantW)
+	}
+}
+
+// TestParentPickerBoxLongTitleWrapsWithHangingIndent guards the actual
+// PO-reported bug (B06 screenshot: IDs breaking mid-word) end-to-end,
+// exercising the NON-cursor row path deliberately (ep-1 has no parent set,
+// so openParentPicker's cursor seed lands on the clear row, index 0 -- the
+// long-title eligible-parent row sits at index 1, never the cursor): the
+// full ID must stay intact on the row's first line, and the continuation
+// line must hang-indent under the title's own start column, never column 0.
+func TestParentPickerBoxLongTitleWrapsWithHangingIndent(t *testing.T) {
+	longID := "ms-averylongidentifier99"
+	beans := []data.Bean{
+		{ID: longID, Title: "Hier steht ein langer Titel eines beans der so umbricht dass die Uebersicht gewahrt ist", Status: "todo", Type: "milestone", Priority: "normal"},
+		{ID: "ep-1", Title: "Focus", Status: "todo", Type: "epic", Priority: "normal"},
+	}
+	m := fixtureModel(t, beans)
+	m.width = 70 // narrow enough that wideModalWidth(70)=60 forces the long title to wrap
+	m = focusBean(m, "ep-1")
+	m = step(t, m, runeMsg('a'))
+
+	if m.menu.cursor != 0 {
+		t.Fatalf("setup: expected cursor on the clear row (index 0, ep-1 has no parent set), got %d -- this test exercises the NON-cursor wrap path", m.menu.cursor)
+	}
+
+	out := ansi.Strip(m.parentPickerBox())
+	lines := strings.Split(out, "\n")
+
+	idLine := -1
+	for i, l := range lines {
+		if strings.Contains(l, longID) {
+			idLine = i
+			break
+		}
+	}
+	if idLine < 0 {
+		t.Fatalf("parent picker output missing the full intact ID %q on any single line: %q", longID, out)
+	}
+	for i, l := range lines {
+		if i == idLine {
+			continue
+		}
+		if strings.Contains(l, "ms-a") || strings.Contains(l, "verylongidentifier") {
+			t.Errorf("ID fragment leaked onto a different line %d (mid-ID break): %q (full output: %q)", i, l, out)
+		}
+	}
+	if idLine+1 >= len(lines) {
+		t.Fatalf("expected the long title to wrap onto a continuation line after line %d, got only %d lines: %q", idLine, len(lines), out)
+	}
+	titleCol := cellCol(t, lines[idLine], "Hier") // absolute column, includes the modal's 2-cell frame
+	gotIndent := contentIndent(t, lines[idLine+1])
+	wantIndent := titleCol - 2
+	if gotIndent != wantIndent {
+		t.Errorf("continuation line indent = %d, want %d (title-start column on the ID's own line): %q", gotIndent, wantIndent, lines[idLine+1])
 	}
 }

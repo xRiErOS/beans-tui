@@ -46,7 +46,7 @@ func buildBlockingItems(idx *data.Index, selfID string) []pickerItem {
 
 	items := make([]pickerItem, len(all))
 	for i, cand := range all {
-		items[i] = pickerItem{id: cand.ID, label: relationRow(cand, "", relationRowNoWrap)}
+		items[i] = pickerItem{id: cand.ID, prefix: relationRowPrefix(cand), title: cand.Title}
 	}
 	return items
 }
@@ -182,19 +182,39 @@ func blockingDot(pending bool) string {
 // since each row already carries its own theme colors. windowAround
 // (parentPickerRowBudget, box_picker_parent.go) keeps a repo with many beans
 // from overflowing the modal.
+//
+// T5 (bean bt-4mo9, B06): the old single-line `blockingDot(...) + it.label`
+// concatenation (label pre-rendered via relationRow(cand, "", relationRow
+// NoWrap) at open-time, NEVER wrap-aware) is replaced by hangingIndentWrap
+// against the REAL, live picker width (wideModalWidth(m.width)) -- the dot
+// now lives INSIDE the composed `prefix` argument (alongside the cursor bar
+// and the glyph+ID part), so hangingIndentWrap's own indent math accounts
+// for its width too and continuation lines align correctly regardless of
+// pending/cursor state. See parentPickerBox's doc comment for why only
+// prefix (not title) carries the Accent cursor-recolor.
 func (m model) blockingPickerBox() string {
 	var b strings.Builder
 	b.WriteString(theme.Muted.Render("space/x:toggle  enter:save  esc:discard") + "\n")
 
+	w := wideModalWidth(m.width)
+	contW := w - 2 // modalBox's Padding(0,1) overhead only -- see parentPickerBox's doc comment
+	if contW < 8 {
+		contW = 8
+	}
+
 	rows := make([]string, len(m.blockItems))
 	for i, it := range m.blockItems {
-		text := blockingDot(m.blockPending[it.id]) + it.label
+		dot := blockingDot(m.blockPending[it.id])
+		title := it.title
+		var prefix string
 		if i == m.menu.cursor {
-			plain := ansi.Strip(text)
-			rows[i] = theme.Accent.Render("▌" + plain)
+			plain := ansi.Strip(dot + it.prefix)
+			prefix = theme.Accent.Render("▌" + plain)
+			title = theme.Accent.Render(title)
 		} else {
-			rows[i] = "  " + text
+			prefix = " " + dot + it.prefix
 		}
+		rows[i] = hangingIndentWrap(prefix, title, contW)
 	}
 	rows = windowAround(rows, parentPickerRowBudget, m.menu.cursor)
 	b.WriteString(strings.Join(rows, "\n"))
@@ -204,5 +224,5 @@ func (m model) blockingPickerBox() string {
 	if len(m.blockItems) == 0 {
 		b.WriteString(theme.Muted.Render("(no other beans in repo)") + "\n")
 	}
-	return modalPanel("Blocking", b.String(), "", clampModalWidth(48, m.width), theme.Mauve)
+	return modalPanel("Blocking", b.String(), "", w, theme.Mauve)
 }

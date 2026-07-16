@@ -23,13 +23,27 @@ import (
 // pickerItem is one row shared by the Parent-Picker (this file) and the
 // Blocking-Picker (box_picker_blocking.go). id "" is the Parent-Picker's own
 // "(No parent)" clear row (RemoveParent) -- the Blocking-Picker never
-// produces an empty id, every one of its rows is a real bean. label is the
-// already-themed row text (relationRow, view_detail_bean.go) for a real
-// bean, or a plain "(No parent)" string for the clear row (themed at
-// render time instead, see parentPickerBox).
+// produces an empty id, every one of its rows is a real bean.
+//
+// T5 (bean bt-4mo9, B06): prefix/title replace the old single pre-rendered
+// `label` field (relationRow(cand, "", relationRowNoWrap) -- a fully
+// concatenated, NEVER-wrapped string baked at open-time). Splitting them
+// lets blockingPickerBox/parentPickerBox compose their OWN leading element
+// (the D08 cursor bar and, for Blocking, the pending dot) onto prefix and
+// hand BOTH to hangingIndentWrap at RENDER time, against the LIVE picker
+// width (wideModalWidth(m.width)) -- the actual B06 fix (PO: overlay IDs
+// broke mid-word because the old single-line label was never wrap-aware).
 type pickerItem struct {
-	id    string
-	label string
+	id string
+	// prefix is the themed glyph+ID half of a relation row
+	// (relationRowPrefix, view_detail_bean.go: status icon, type icon,
+	// Key-styled ID, trailing space) -- "" for the Parent-Picker's own
+	// synthetic "(No parent)" clear row, which carries no relation glyphs.
+	prefix string
+	// title is the wrappable text: a real bean's Title, or the clear row's
+	// plain "(No parent)" string (themed at render time, mirroring the
+	// pre-T5 contract).
+	title string
 }
 
 // parentPickerRowBudget caps the Parent-Picker's/Blocking-Picker's row
@@ -48,9 +62,9 @@ const parentPickerRowBudget = 14
 // existing relationRow helper (view_detail_bean.go:66-68) -- same status-
 // icon+type-icon+ID+title glyph order as every other bean row in the app.
 func buildParentItems(idx *data.Index, b *data.Bean) []pickerItem {
-	items := []pickerItem{{id: "", label: "(No parent)"}}
+	items := []pickerItem{{id: "", title: "(No parent)"}}
 	for _, cand := range data.EligibleParents(idx, b) {
-		items = append(items, pickerItem{id: cand.ID, label: relationRow(cand, "", relationRowNoWrap)})
+		items = append(items, pickerItem{id: cand.ID, prefix: relationRowPrefix(cand), title: cand.Title})
 	}
 	return items
 }
@@ -140,29 +154,51 @@ func (m model) applyParentPickerSelection() (tea.Model, tea.Cmd) {
 // treatment (ansi.Strip + Accent-wrap) for the cursored row, same convention
 // as treeRows/backlogRows (view_browse_repo.go/view_browse_backlog.go)
 // rather than box_menu_value.go's/box_picker_tag.go's theme.Header.Render:
-// unlike those two overlays' PLAIN value/tag strings, a real row's label here
-// is ALREADY themed (relationRow -- status-icon/type-icon colors, Key-styled
-// ID), so re-wrapping it in a second style would clash; stripping to plain
-// text and re-tinting the whole line Accent is the same technique the
-// Tree/Backlog panes already use for exactly this reason. windowAround
+// unlike those two overlays' PLAIN value/tag strings, a real row's prefix
+// here is ALREADY themed (relationRowPrefix -- status-icon/type-icon
+// colors, Key-styled ID), so re-wrapping it in a second style would clash;
+// stripping to plain text and re-tinting Accent is the same technique the
+// Tree/Backlog panes already use for exactly this reason -- T5 (bean
+// bt-4mo9, B06) narrows that treatment to the PREFIX only (cursor bar +
+// glyph+ID), matching hangingIndentWrap's own contract (prefix carries
+// styling, text/title stays plain unless separately styled): the pending
+// dot's SHAPE (blockingDot, box_picker_blocking.go) still reads under an
+// Accent override, exactly mirroring the ▷/▶ marker-only convention T4
+// introduced for the RELATIONS section (view_detail_bean.go). windowAround
 // (parentPickerRowBudget) keeps a long eligible-parent list from overflowing
-// the modal (plan Step 3).
+// the modal (plan Step 3) -- ACHTUNG (B06 Architektur-Vorgabe, documented
+// judgment call): rows can now be MULTI-LINE (a wrapped long title), so
+// "parentPickerRowBudget=14" caps 14 windowAround SLICE ELEMENTS (i.e. 14
+// eligible-parent rows), not 14 visible terminal lines -- an unusually long
+// run of unusually long titles in the visible window can still grow the
+// modal past 14 screen lines. Accepted per the bean's own note: most bean
+// titles stay single-line even at 85% width, height (parentPickerRowBudget)
+// deliberately stays untouched (PO: "Höhe passt").
 func (m model) parentPickerBox() string {
 	var b strings.Builder
 	b.WriteString(theme.Muted.Render("enter:set  esc:cancel") + "\n")
 
+	w := wideModalWidth(m.width)
+	contW := w - 2 // modalBox's own Padding(0,1) overhead -- border adds no further inner-width cost (empirically verified: Width() already absorbs padding, Border() only adds outside it)
+	if contW < 8 {
+		contW = 8
+	}
+
 	rows := make([]string, len(m.parentItems))
 	for i, it := range m.parentItems {
-		text := it.label
+		title := it.title
 		if it.id == "" {
-			text = theme.Dim.Render(text)
+			title = theme.Dim.Render(title)
 		}
+		var prefix string
 		if i == m.menu.cursor {
-			plain := ansi.Strip(text)
-			rows[i] = theme.Accent.Render("▌" + plain)
+			plain := ansi.Strip(it.prefix)
+			prefix = theme.Accent.Render("▌" + plain)
+			title = theme.Accent.Render(ansi.Strip(title))
 		} else {
-			rows[i] = "  " + text
+			prefix = " " + it.prefix
 		}
+		rows[i] = hangingIndentWrap(prefix, title, contW)
 	}
 	rows = windowAround(rows, parentPickerRowBudget, m.menu.cursor)
 	b.WriteString(strings.Join(rows, "\n"))
@@ -172,5 +208,5 @@ func (m model) parentPickerBox() string {
 	if len(m.parentItems) == 1 {
 		b.WriteString(theme.Muted.Render("(no eligible parent types)") + "\n")
 	}
-	return modalPanel("Assign parent", b.String(), "", clampModalWidth(48, m.width), theme.Mauve)
+	return modalPanel("Assign parent", b.String(), "", w, theme.Mauve)
 }

@@ -269,6 +269,52 @@ func TestBeanMatchesFacetsTagRequiresAnyOverlap(t *testing.T) {
 	}
 }
 
+// --- wideModalWidth (T5, bean bt-4mo9, B06) ---
+
+// TestWideModalWidthScalesWithTerminal guards the actual fix behind B06: PO
+// verbatim "Aber die Breite muss viel weiter werden" -- unlike
+// clampModalWidth (a pure shrink-only clamp of a FIXED preference, never
+// grows), wideModalWidth scales UP with the terminal (~85%), with a floor of
+// 60 (never narrower than the old fixed 48-ish picker width) and a ceiling
+// of termW-4 (clampModalWidth's own 2-column margin convention), plus the
+// absolute floor of 24 clampModalWidth itself already established.
+func TestWideModalWidthScalesWithTerminal(t *testing.T) {
+	cases := []struct {
+		name  string
+		termW int
+		want  int
+	}{
+		{"wide terminal, plain 85%", 120, 102},      // 120*85/100=102, well under both floor/ceiling
+		{"very wide terminal, plain 85%", 200, 170}, // 200*85/100=170
+		{"floor-60 boundary: 85% would be 59, floor wins", 70, 60},
+		{"ceiling termW-4: floor(60) exceeds it, ceiling wins", 50, 46},
+		{"absolute floor 24: ceiling itself is below 24", 20, 24},
+		{"zero terminal width: no ceiling guard applies, floor 60 wins", 0, 60},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := wideModalWidth(c.termW); got != c.want {
+				t.Errorf("wideModalWidth(%d) = %d, want %d", c.termW, got, c.want)
+			}
+		})
+	}
+}
+
+// TestWideModalWidthNeverNarrowerThanOldFixedPicker guards the B06 PO-
+// complaint directly against a regression: the picker's old fixed width
+// (clampModalWidth(48, termW)) must never exceed wideModalWidth's own floor
+// on any terminal wide enough to hold it -- otherwise the "fix" could
+// silently render NARROWER than before on some width.
+func TestWideModalWidthNeverNarrowerThanOldFixedPicker(t *testing.T) {
+	for _, termW := range []int{48, 52, 64, 80, 100, 120, 200} {
+		old := clampModalWidth(48, termW)
+		got := wideModalWidth(termW)
+		if got < old {
+			t.Errorf("wideModalWidth(%d) = %d, narrower than the old clampModalWidth(48,%d) = %d", termW, got, termW, old)
+		}
+	}
+}
+
 // --- I02 (optional, E2-T3-Review finding carried into bean bt-9ldr): empty
 // filter-match render must not panic. ---
 
