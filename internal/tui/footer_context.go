@@ -112,6 +112,29 @@ func searchLocalBindings() []keybind.Binding {
 func paletteLocalBindings() []keybind.Binding { return []keybind.Binding{keys.Enter, keys.Back} }
 func helpLocalBindings() []keybind.Binding    { return []keybind.Binding{keys.Back} }
 
+// fullscreenDetailLocalBindings is the Detail-Vollbild's own Footer Zone 3
+// set (F01 History-Stack, E9 Task 8, bean bt-1vbp, design-spec.md §15): the
+// PO-Implementierungshinweis "im Footer/Help ausweisen" made concrete --
+// ctrl+left/[ and ctrl+right/] (History Back/Forward) are wirksam ONLY
+// while m.fullscreen == fullscreenDetail, shown here so the PO discovers
+// them. keys.Back is repeated too (same convention as every other
+// capture-state local set above, e.g. valueMenuLocalBindings) since esc's
+// Vollbild-exit meaning here is a NEW, non-obvious D03 rung
+// (keyDetailFocus's Back-case, update.go) worth reinforcing at the point
+// the PO is actually looking.
+func fullscreenDetailLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.HistoryBack, keys.HistoryForward, keys.Back}
+}
+
+// fullscreenListLocalBindings is the Listen-Vollbild's own Footer Zone 3
+// set -- History-Keys are DELIBERATELY omitted (wirkungslos here: the
+// History-Stack tracks Relations-Sprünge inside fullscreenDetail only,
+// design-spec.md §15 Scope-Entscheidung). enter is the meaningful LOCAL key
+// this mode adds (Listen-Vollbild -> Detail-Vollbild jump, keyFullscreen).
+func fullscreenListLocalBindings() []keybind.Binding {
+	return []keybind.Binding{keys.Back, keys.Enter}
+}
+
 // overlayLocalBindings dispatches m.overlay to its own footer set --
 // extracted helper for contextualLocalHint's overlay case, below.
 func overlayLocalBindings(o overlayID) []keybind.Binding {
@@ -155,6 +178,16 @@ func (m model) contextualLocalHint(viewLocal []keybind.Binding) string {
 		return renderBindings(paletteLocalBindings())
 	case m.helpOpen:
 		return renderBindings(helpLocalBindings())
+	case m.fullscreen == fullscreenDetail:
+		// F01 (E9 Task 8, bean bt-1vbp): a further Capture-artiger Zustand,
+		// slotted in AFTER Help/Palette/Suche/Overlay/Filter (none of those
+		// can be active WHILE fullscreen != fullscreenNone anyway -- every
+		// full-capture state routes handleKey's dispatch back to Split-Modus
+		// first) but BEFORE the final viewLocal fallback, whose Tree/Backlog-
+		// specific hints (tab/shift+tab/search/…) are non-functional here.
+		return renderBindings(fullscreenDetailLocalBindings())
+	case m.fullscreen == fullscreenList:
+		return renderBindings(fullscreenListLocalBindings())
 	}
 	return renderBindings(viewLocal)
 }

@@ -82,6 +82,15 @@ type keyMap struct {
 	// (view_fullscreen.go), handleKey's checkpoint NACH FocusIn/FocusOut, VOR
 	// keyNodeAction (update.go).
 	Fullscreen keybind.Binding // v — fullscreen
+
+	// History-Stack (F01, E9 Task 8, bean bt-1vbp, design-spec.md §15):
+	// ctrl+left/ctrl+right are bubbletea v1.3.10's native decode of the
+	// standard xterm CSI sequences -- `[`/`]` are the terminal-unabhängig
+	// garantiert zustellbare Fallback (verified unbelegt against every OTHER
+	// binding above, TestHistoryBindingsUnbelegtElsewhere). Wirksam NUR in
+	// fullscreenDetail (keyFullscreen, view_fullscreen.go).
+	HistoryBack    keybind.Binding // ctrl+left / [ — history back
+	HistoryForward keybind.Binding // ctrl+right / ] — history fwd
 }
 
 // newKeyMap returns the currently active keybinding set. The direction cross
@@ -128,6 +137,9 @@ func newKeyMap() keyMap {
 		NewTag: keybind.NewBinding(keybind.WithKeys("n"), keybind.WithHelp("n", "New tag")),
 
 		Fullscreen: keybind.NewBinding(keybind.WithKeys("v"), keybind.WithHelp("v", "fullscreen")),
+
+		HistoryBack:    keybind.NewBinding(keybind.WithKeys("ctrl+left", "["), keybind.WithHelp("[", "history back")),
+		HistoryForward: keybind.NewBinding(keybind.WithKeys("ctrl+right", "]"), keybind.WithHelp("]", "history fwd")),
 	}
 }
 
@@ -146,7 +158,7 @@ type helpGroup struct {
 // a later task — the help view itself is out of scope here).
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
-		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen}},
+		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen, k.HistoryBack, k.HistoryForward}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
 		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort, k.NewTag}},
 	}

@@ -1050,6 +1050,16 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// through (Reviewer-Minimal-Fix, verbatim).
 		if m.fullscreen == fullscreenDetail {
 			m.fullscreen = fullscreenNone
+			// F01 History-Stack (Supervisor-Entscheid, E9 Task 8, bean
+			// bt-1vbp): EVERY Vollbild-Exit clears navBack/navForward -- this
+			// guard is one of the two choke points a fullscreenDetail session
+			// can leave through (the other is the Back-case below), and
+			// leaving either stack populated here would let a stale
+			// History-Path leak into whatever the PO opens next (types.go's
+			// own navBack/navForward doc-stamp has the full ERRATA
+			// rationale vs. design-spec.md §15's original "NICHT geleert"
+			// text).
+			m.navBack, m.navForward = nil, nil
 		}
 		m.detailFocus = false
 		return m, nil
@@ -1149,15 +1159,24 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// D03's "eine Ebene pro Druck" cascade -- section-level esc inside
 		// fullscreenDetail leaves the Vollbild ENTIRELY (IMMER direkt zu
 		// Browse/Backlog, NICHT schrittweise durch die Relations-Sprung-Kette
-		// -- die History-Rückwärtsnavigation ist Task 8s eigene Aufgabe,
-		// ctrl+left/`[`). The Split-Detail stays focused afterward (PO: "mit
-		// dem AKTUELLEN Bean selektiert" -- the just-shown Vollbild-Detail
-		// bean, not a jump back to the Tree/Backlog's own focus), and the
-		// Tree-/Backlog-cursor syncs onto m.fullscreenBeanID so Split-Modus
-		// shows the SAME bean the PO was just looking at.
+		// -- die History-Rückwärtsnavigation ist keys.HistoryBack/
+		// ctrl+left/`[`s eigene Aufgabe, view_fullscreen.go). The
+		// Split-Detail stays focused afterward (PO: "mit dem AKTUELLEN Bean
+		// selektiert" -- the just-shown Vollbild-Detail bean, not a jump
+		// back to the Tree/Backlog's own focus), and the Tree-/Backlog-
+		// cursor syncs onto m.fullscreenBeanID so Split-Modus shows the
+		// SAME bean the PO was just looking at.
 		if m.fullscreen == fullscreenDetail {
 			id := m.fullscreenBeanID
 			m.fullscreen = fullscreenNone
+			// F01 History-Stack (Supervisor-Entscheid, E9 Task 8, bean
+			// bt-1vbp): EVERY Vollbild-Exit clears navBack/navForward -- see
+			// the b==nil guard's identical clear above (the OTHER choke
+			// point a fullscreenDetail session can leave through) and
+			// types.go's navBack/navForward doc-stamp for the full ERRATA
+			// rationale vs. design-spec.md §15's original "NICHT geleert"
+			// text.
+			m.navBack, m.navForward = nil, nil
 			m.detailFocus = true
 			if m.view == viewBacklog {
 				// F02 (Review Fix-Runde 1, bean bt-13l7, SUPERVISOR-
@@ -1257,18 +1276,25 @@ func (m model) activateDetailField(b *data.Bean, f relationField) (tea.Model, te
 		if f.beanID == "" {
 			return m, nil // unresolved reference -- nothing to jump to
 		}
-		// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): the ONE new case
-		// this task adds here -- inside fullscreenDetail, a Relations-Sprung
-		// must NOT exit to the Split-Tree/Backlog (the branch below, m.
-		// detailFocus = false) -- it stays in fullscreenDetail, now showing
-		// the JUMP TARGET. History-Push (navBack/navForward) is explicitly
-		// Task 8's own job (bean bt-1vbp, "Notes for Task 8" in this bean) --
-		// this is ONLY the target switch, mirroring the SAME Detail-Fokus-
-		// Maschine reset keyFullscreen's own Listen-Vollbild-entry uses
-		// (Meta/section level, field cursor 0). The Split-Modus-Sprung branch
-		// below stays byte-for-byte unchanged -- no PO-Wortlaut requires
-		// History there either (design-spec.md §15).
+		// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): inside
+		// fullscreenDetail, a Relations-Sprung must NOT exit to the
+		// Split-Tree/Backlog (the branch below, m.detailFocus = false) -- it
+		// stays in fullscreenDetail, now showing the JUMP TARGET, mirroring
+		// the SAME Detail-Fokus-Maschine reset keyFullscreen's own
+		// Listen-Vollbild-entry uses (Meta/section level, field cursor 0).
+		// The Split-Modus-Sprung branch below stays byte-for-byte unchanged
+		// -- no PO-Wortlaut requires History there either (design-spec.md
+		// §15 Scope-Entscheidung).
+		//
+		// History-Push (F01 History-Stack, E9 Task 8, bean bt-1vbp, "Notes
+		// for T8" in bt-13l7): pushes the bean being LEFT onto navBack and
+		// kappt navForward (Standard-Browser-Semantik, a fresh jump discards
+		// any stale forward-history) -- BEFORE m.fullscreenBeanID is
+		// overwritten below, so the pushed value is the bean the PO is
+		// actually leaving, not the jump target.
 		if m.fullscreen == fullscreenDetail {
+			m.navBack = append(cloneStringSlice(m.navBack), m.fullscreenBeanID)
+			m.navForward = nil
 			m.fullscreenBeanID = f.beanID
 			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
 			return m, nil

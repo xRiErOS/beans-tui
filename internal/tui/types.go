@@ -98,6 +98,18 @@ func cloneBoolMap(src map[string]bool) map[string]bool {
 	return out
 }
 
+// cloneStringSlice is cloneBoolMap's []string counterpart -- the same I01
+// Copy-on-Write rationale, applied to navBack/navForward (F01 History-Stack,
+// E9 Task 8, bean bt-1vbp): every push clones via this helper before
+// appending, so a slice header shared with an older model copy (a test
+// variable held around, a future undo feature) never gets silently aliased
+// by a later append reusing spare backing-array capacity.
+func cloneStringSlice(src []string) []string {
+	out := make([]string, len(src))
+	copy(out, src)
+	return out
+}
+
 // fullscreenMode enumerates F01's Vollbild-Navigation state (design-spec.md
 // §15 "F01 — Vollbild-Navigation", bean bt-13l7, E9 Task 7): ORTHOGONAL to
 // viewID (m.view) -- Vollbild changes only HOW the active view's Master-
@@ -530,11 +542,32 @@ type model struct {
 	// UNABHÄNGIG vom Tree-/Backlog-Cursor (a Relations-Sprung inside
 	// fullscreenDetail moves ONLY this field, never m.cursorID/
 	// m.backlogList.cursor -- those only sync back on esc-exit,
-	// keyDetailFocus's Back-case). navBack/navForward ([]string Bean-ID-
-	// Stacks) are declared here ALREADY but deliberately left empty/unused by
-	// this task (Task 8, bean bt-1vbp, fills them: the History-Stack
-	// ctrl+left/ctrl+right, `[`/`]` -- declaring the fields now avoids an
-	// otherwise-unnecessary struct diff in that follow-up task).
+	// keyDetailFocus's Back-case).
+	//
+	// navBack/navForward (F01 History-Stack, E9 Task 8, bean bt-1vbp, wired
+	// here -- Task 7 only declared them empty/unused) are []string Bean-ID
+	// stacks, COW throughout (cloneStringSlice above): every Relations-Sprung
+	// INSIDE fullscreenDetail (activateDetailField's jump case) pushes the
+	// bean being LEFT onto navBack and kapt navForward (Standard-Browser-
+	// Semantik). keys.HistoryBack/HistoryForward (ctrl+left/[, ctrl+right/],
+	// keyFullscreen) pop/push symmetrically between the two, wirksam NUR in
+	// fullscreenDetail. Both loop past a bean that vanished externally
+	// (watch-reload/repo-switch/parallel-agent delete) instead of landing on
+	// it -- same not-trap spirit as the F01 b==nil-Guard fix (Fix-Runde 1,
+	// bt-13l7) -- a stack that is empty OR all-vanished is a clean No-Op.
+	//
+	// ERRATA (Supervisor-Entscheid, Task 8): design-spec.md §15's original
+	// text ("navBack/navForward werden beim Verlassen NICHT geleert",
+	// verbatim repeated in bt-13l7's own "Notes for T8") is DEVIATED FROM
+	// here -- EVERY Vollbild-Exit (both keyDetailFocus's b==nil dead-end
+	// guard AND its Back-case esc-exit, PLUS keyFullscreen's fullscreenList
+	// esc-exit, defensively) now clears BOTH stacks. Rationale: leaving them
+	// populated would let a stale History-Path leak from one Vollbild
+	// session into the NEXT (e.g. `v` on a totally different bean, minutes
+	// later, would still offer Back/Forward into the earlier session's
+	// unrelated jump chain) -- the Supervisor judged that surprise worse
+	// than losing the (minor, PO-never-requested) "resume History on the
+	// same bean" convenience the original text was optimizing for.
 	fullscreen          fullscreenMode
 	fullscreenBeanID    string
 	navBack, navForward []string

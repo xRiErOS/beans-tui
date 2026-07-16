@@ -1,10 +1,10 @@
 package tui
 
 // view_fullscreen.go — F01 Kernmechanik: Vollbild-Modus `v` (design-spec.md
-// §15 "F01 — Vollbild-Navigation", bean bt-13l7, E9 Task 7). OHNE den
-// History-Stack (ctrl+left/ctrl+right, `[`/`]` -- Task 8, bean bt-1vbp, s.
-// types.go's own navBack/navForward doc-stamp). keyFullscreen is this file's
-// own dispatch (handleKey's checkpoint, update.go) -- renderFullscreenBody is
+// §15 "F01 — Vollbild-Navigation", bean bt-13l7, E9 Task 7) PLUS its
+// History-Stack (ctrl+left/ctrl+right, `[`/`]` -- E9 Task 8, bean bt-1vbp,
+// s. types.go's own navBack/navForward doc-stamp). keyFullscreen is this
+// file's own dispatch (handleKey's checkpoint, update.go) -- renderFullscreenBody is
 // the shared single-pane renderer both viewBrowseRepo()/viewBacklog() call
 // into (view_browse_repo.go/view_browse_backlog.go) instead of their normal
 // JoinHorizontal(listBox, detailBox) split whenever m.fullscreen !=
@@ -50,6 +50,76 @@ func (m model) keyFullscreen(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			// m.cursorID/m.backlogList.cursor) -- keine Sync nötig, anders als
 			// der fullscreenDetail-Exit (keyDetailFocus's Back-case).
 			m.fullscreen = fullscreenNone
+			// F01 History-Stack (Supervisor-Entscheid, E9 Task 8, bean
+			// bt-1vbp): EVERY Vollbild-Exit clears navBack/navForward --
+			// defensive here (fullscreenList can only ever be REACHED with
+			// empty stacks in practice: navBack/navForward are populated
+			// exclusively inside fullscreenDetail, and fullscreenDetail
+			// always exits via fullscreenNone first, never straight into
+			// fullscreenList), but pinned so a future change to that
+			// invariant cannot silently leak History across a Vollbild
+			// session (types.go's navBack/navForward doc-stamp has the
+			// full ERRATA rationale).
+			m.navBack, m.navForward = nil, nil
+			return true, m, nil
+		}
+	}
+
+	// F01 History-Stack (E9 Task 8, bean bt-1vbp, design-spec.md §15):
+	// ctrl+left/[ (HistoryBack) and ctrl+right/] (HistoryForward), checked
+	// HERE mirroring the fullscreenList block above -- wirksam NUR bei
+	// m.fullscreen == fullscreenDetail (Scope-Entscheidung: der Stack
+	// trackt ausschliesslich Relations-Sprünge INNERHALB fullscreenDetail).
+	// Elsewhere (fullscreenList, Split-Modus) these keys are unbelegte
+	// No-Ops (verified free against the whole keymap,
+	// TestHistoryBindingsUnbelegtElsewhere) -- this block simply does not
+	// match there and falls through unhandled.
+	//
+	// Both directions LOOP past a bean that vanished externally (live
+	// watch-reload, repo switch, parallel-agent delete -- the same
+	// real-world trigger class as the F01 b==nil-Guard fix, update.go)
+	// instead of landing on it: a Supervisor-Entscheid "F01-Analogie" --
+	// stopping on the FIRST (possibly dead) entry would let one bad entry
+	// permanently block Back/Forward even though perfectly good history
+	// sits further along the stack, exactly the kind of Sackgasse the
+	// b==nil-Guard fix was created to prevent. A stack that is empty OR
+	// contains ONLY vanished entries left is a clean No-Op (dead entries
+	// are discarded along the way -- "No-Op mit sauberem Zustand").
+	if m.fullscreen == fullscreenDetail {
+		if keybind.Matches(msg, keys.HistoryBack) {
+			for len(m.navBack) > 0 {
+				n := len(m.navBack)
+				target := m.navBack[n-1]
+				m.navBack = m.navBack[:n-1]
+				if m.idx == nil {
+					break
+				}
+				if _, ok := m.idx.ByID[target]; !ok {
+					continue // vanished -- skip, keep looking further back
+				}
+				m.navForward = append(cloneStringSlice(m.navForward), m.fullscreenBeanID)
+				m.fullscreenBeanID = target
+				m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+				break
+			}
+			return true, m, nil
+		}
+		if keybind.Matches(msg, keys.HistoryForward) {
+			for len(m.navForward) > 0 {
+				n := len(m.navForward)
+				target := m.navForward[n-1]
+				m.navForward = m.navForward[:n-1]
+				if m.idx == nil {
+					break
+				}
+				if _, ok := m.idx.ByID[target]; !ok {
+					continue // vanished -- skip, keep looking further forward
+				}
+				m.navBack = append(cloneStringSlice(m.navBack), m.fullscreenBeanID)
+				m.fullscreenBeanID = target
+				m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+				break
+			}
 			return true, m, nil
 		}
 	}

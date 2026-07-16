@@ -919,6 +919,80 @@ func TestActivateDetailFieldJumpStaysInFullscreenDetail(t *testing.T) {
 	}
 }
 
+// TestActivateDetailFieldJumpPushesHistoryInFullscreen is the bean's own
+// explicitly-named TDD step (F01 History-Stack, E9 Task 8, bean bt-1vbp):
+// a Relations-Sprung inside fullscreenDetail pushes the bean being LEFT
+// onto navBack (Notes for T8, bean bt-13l7: the push happens BEFORE
+// m.fullscreenBeanID is overwritten).
+func TestActivateDetailFieldJumpPushesHistoryInFullscreen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-a"
+	b := m.focusedBean()
+
+	tm, _ := m.activateDetailField(b, relationField{kind: "", beanID: "bean-b"})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+
+	if len(nm.navBack) != 1 || nm.navBack[0] != "bean-a" {
+		t.Fatalf("navBack = %v, want [bean-a] (the bean being left)", nm.navBack)
+	}
+	if nm.fullscreenBeanID != "bean-b" {
+		t.Fatalf("fullscreenBeanID = %q, want bean-b", nm.fullscreenBeanID)
+	}
+}
+
+// TestActivateDetailFieldJumpClearsForwardHistoryOnNewJump guards the
+// Standard-Browser-Semantik design-spec.md §15 calls for: a FRESH jump
+// kappt navForward, even if it was non-empty (a previous Back left stale
+// forward-history that a new jump must discard, not silently keep around).
+func TestActivateDetailFieldJumpClearsForwardHistoryOnNewJump(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-a"
+	m.navForward = []string{"stale-forward-entry"}
+	b := m.focusedBean()
+
+	tm, _ := m.activateDetailField(b, relationField{kind: "", beanID: "bean-b"})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+
+	if nm.navForward != nil {
+		t.Fatalf("navForward = %v, want nil (a fresh jump must clear stale forward-history)", nm.navForward)
+	}
+}
+
+// TestActivateDetailFieldJumpDoesNotMutateSharedNavBackAcrossModelCopies
+// pins the I01 Copy-on-Write convention at this History-Push's own call
+// site -- mirrors TestSetExpandedDoesNotMutateSharedMapAcrossModelCopies'
+// own rationale (below), applied to navBack's []string instead of
+// m.expanded's map[string]bool.
+func TestActivateDetailFieldJumpDoesNotMutateSharedNavBackAcrossModelCopies(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-a"
+	m.navBack = []string{"pre-existing"}
+	copy1 := m
+	b := copy1.focusedBean()
+
+	tm, _ := copy1.activateDetailField(b, relationField{kind: "", beanID: "bean-b"})
+	copy2, ok := tm.(model)
+	if !ok {
+		t.Fatalf("activateDetailField did not return a model, got %T", tm)
+	}
+
+	if len(m.navBack) != 1 {
+		t.Errorf("original m.navBack was mutated by copy2's History-Push -- navBack is a shared slice, not copy-on-write (I01)")
+	}
+	if len(copy2.navBack) != 2 || copy2.navBack[0] != "pre-existing" || copy2.navBack[1] != "bean-a" {
+		t.Fatalf("copy2.navBack = %v, want [pre-existing bean-a]", copy2.navBack)
+	}
+}
+
 // TestKeyDetailFocusRoutesToDetailFocusMachineViaFullscreenAlone is a
 // regression guard for handleKey's own routing line (update.go): it must
 // fire on m.fullscreen == fullscreenDetail even when m.detailFocus is FALSE
@@ -1089,6 +1163,55 @@ func TestKeyDetailFocusEscSectionLevelExitsFullscreenToBacklogWithCursorSynced(t
 	}
 	if m.backlogList.cursor != 1 {
 		t.Fatalf("backlogList.cursor = %d, want 1 (synced onto %s)", m.backlogList.cursor, target.ID)
+	}
+}
+
+// TestKeyDetailFocusEscSectionLevelExitClearsHistoryStacks guards a
+// SUPERVISOR-ENTSCHEID deviation from design-spec.md §15's original text
+// ("navBack/navForward werden beim Verlassen NICHT geleert" -- bt-13l7's own
+// "Notes for T8" quoted the same line verbatim as something T8 need not
+// touch). Task 8's Supervisor explicitly OVERRODE that decision: every
+// Vollbild-Exit now clears BOTH stacks, so a stale History-Path from one
+// fullscreenDetail session can never leak into the next (ERRATA -- see this
+// task's Deviations/commit body).
+func TestKeyDetailFocusEscSectionLevelExitClearsHistoryStacks(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-b"
+	m.navBack = []string{"bean-a"}
+	m.navForward = []string{"ep-1"}
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+
+	if m.fullscreen != fullscreenNone {
+		t.Fatalf("fullscreen = %v, want fullscreenNone", m.fullscreen)
+	}
+	if m.navBack != nil {
+		t.Fatalf("navBack = %v, want nil (Vollbild-Exit must clear it, Supervisor-Entscheid)", m.navBack)
+	}
+	if m.navForward != nil {
+		t.Fatalf("navForward = %v, want nil (Vollbild-Exit must clear it, Supervisor-Entscheid)", m.navForward)
+	}
+}
+
+// TestKeyDetailFocusEscOnVanishedFullscreenBeanClearsHistoryStacks mirrors
+// the above for the OTHER Vollbild-Exit choke point: the F01 b==nil dead-end
+// guard (Fix-Runde 1) also leaves fullscreenDetail entirely and must clear
+// the same two stacks for the same reason.
+func TestKeyDetailFocusEscOnVanishedFullscreenBeanClearsHistoryStacks(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "does-not-exist"
+	m.navBack = []string{"ms-1"}
+	m.navForward = []string{"tk-1"}
+
+	m = step(t, m, keyMsg(tea.KeyEsc))
+
+	if m.fullscreen != fullscreenNone {
+		t.Fatalf("fullscreen = %v, want fullscreenNone", m.fullscreen)
+	}
+	if m.navBack != nil || m.navForward != nil {
+		t.Fatalf("navBack=%v navForward=%v, want both nil (b==nil guard is a Vollbild-Exit too)", m.navBack, m.navForward)
 	}
 }
 
