@@ -304,10 +304,10 @@ func (m model) mouseBacklogClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // v1 simplification (bean bt-duz7 Architektur-Vorgabe #2, no PO-Wortlaut
 // requires more): ONLY Meta (metaSectionIdx) has a fixed, direct
 // Zeile->Feldindex mapping (Zeile 0 = title ... Zeile 4 = tags, per
-// metaFields' fixed order -- bt-lg68 shrunk this from 7 to 5 rows,
-// created_at/updated_at removed) -- a click landing inside an OPEN Body/Relations/
-// History section's body resolves to that section's OWN header hit
-// (fieldIdx == -1), never a field index. Relations rows carry their own
+// metaFields' fixed order). bt-lg68 shrunk this from 7 to 5 rows
+// (created_at/updated_at removed). A click landing inside an OPEN
+// Body/Relations/History section's body resolves to that section's OWN
+// header hit (fieldIdx == -1), never a field index. Relations rows carry their own
 // ▷/▶ cursor marker now too (B04, relationsSectionBody) but are NOT yet
 // individually mouse-clickable -- that stays v1 scope, unchanged by this
 // task (no PO-Wortlaut requires it; B04's own scope is keyboard navigation
