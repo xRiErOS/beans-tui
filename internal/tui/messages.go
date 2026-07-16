@@ -359,9 +359,19 @@ func searchCmd(c *data.Client, query string) tea.Cmd {
 // verified repro, bean bt-1lsu Review-Findings Runde 1). A refindName with
 // no matching row leaves the cursor where it was (same miss semantics the
 // old name-search already had).
+// successToast (E11 Item 6, bean bt-idm1): a non-empty string here has
+// applyTagDefsSaved (update.go) fire an EXTRA toastInfo success Toast on a
+// clean write -- Create/Rename/Delete all dispatch with this field left at
+// its zero value "" (unchanged: those three stay silent on success, exactly
+// TestApplyTagDefsSavedSuccessRefreshesRowsAndMovesCursor's own "no unconditional
+// reload"/no-Cmd assertion still guards). Adopt (openTagMgmtAdopt) is the ONE
+// dispatch site that sets it -- bt-ct3k's own Toast-Konsistenz wording: since
+// that task just replaced a silent no-op with a Toast, a new silent success
+// path here would be a regression in the other direction.
 type tagDefsSavedMsg struct {
-	err        error
-	refindName string
+	err          error
+	refindName   string
+	successToast string
 }
 
 // saveTagDefsCmd wraps a single Tag-Registry SaveTagDefs write (a local,
@@ -370,10 +380,12 @@ type tagDefsSavedMsg struct {
 // a direct call inside the Update path, even though the underlying I/O is
 // fast enough it would not technically need one (mirrors mutateCmd's own
 // build shape, messages.go above). refindName rides along untouched into
-// tagDefsSavedMsg (B01, doc-stamp there).
-func saveTagDefsCmd(c *data.Client, defs []string, refindName string) tea.Cmd {
+// tagDefsSavedMsg (B01, doc-stamp there); successToast likewise (E11 Item 6,
+// doc-stamp on the struct above) -- every call site names its own, most
+// callers passing "" (unchanged silent-success contract).
+func saveTagDefsCmd(c *data.Client, defs []string, refindName, successToast string) tea.Cmd {
 	return func() tea.Msg {
-		return tagDefsSavedMsg{err: c.SaveTagDefs(defs), refindName: refindName}
+		return tagDefsSavedMsg{err: c.SaveTagDefs(defs), refindName: refindName, successToast: successToast}
 	}
 }
 

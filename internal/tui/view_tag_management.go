@@ -371,6 +371,18 @@ func (m model) keyTagManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// exists (epic bt-362n body's own empirical-verification note).
 		return m, nil
 	case keybind.Matches(msg, keys.NewTag):
+		// E11 Item 6 (bean bt-idm1, blocked_by bt-ct3k): a cursor resting on a
+		// FREE row adopts that row's OWN name directly (Registrieren, no
+		// input sub-mode) -- mirrors openTagMgmtRename's own Cursor-Row-Check
+		// shape one function up. An out-of-range cursor (no rows) OR a row
+		// that is ALREADY defined falls through to the unchanged Blank-Create
+		// below (Registrieren ergibt hier keinen Sinn, Name existiert schon /
+		// es gibt nichts zu adoptieren).
+		if m.tagMgmtCursor.cursor >= 0 && m.tagMgmtCursor.cursor < len(m.tagMgmtRows) {
+			if row := m.tagMgmtRows[m.tagMgmtCursor.cursor]; !row.defined {
+				return m.openTagMgmtAdopt(row)
+			}
+		}
 		return m.openTagMgmtInput("create", "")
 	case keybind.Matches(msg, keys.Delete):
 		return m.openTagMgmtDeleteConfirm()
@@ -426,6 +438,27 @@ func (m model) openTagMgmtRename() (tea.Model, tea.Cmd) {
 	return m.openTagMgmtInput("rename", row.name)
 }
 
+// openTagMgmtAdopt directly registers a FREE row's own name as a new Registry
+// Definition (E11 Item 6, bean bt-idm1, blocked_by bt-ct3k -- same file) --
+// dispatched from keyTagManagement's keys.NewTag case ONLY when the cursor
+// already sits on an undefined row (that check lives one layer up, this
+// function trusts its caller and never re-checks row.defined itself).
+// Planner-Entscheidung (final): DIREKTES Registrieren OHNE Zwischenschritt --
+// no openTagMgmtInput detour, since the name is already fixed (the row's own
+// name) and Registrieren is non-destructive (unlike Delete's own Confirm
+// precedent, no confirm-step needed). saveTagDefsCmd's successToast carries a
+// success message (bt-ct3k Toast-Konsistenz: that task just replaced a
+// silent no-op with a Toast, so a new silent success path here would be a
+// regression) -- applyTagDefsSaved (update.go) shows it, and its EXISTING
+// cursor-refind-by-name tail lands the cursor on the now-defined row for
+// free (mirrors Delete/Rename's own refindName convention), no separate
+// handling needed here.
+func (m model) openTagMgmtAdopt(row tagRegistryRow) (tea.Model, tea.Cmd) {
+	defs := definedTagNames(m.tagMgmtRows)
+	return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, row.name), row.name,
+		fmt.Sprintf("tag '%s' registered", row.name))
+}
+
 // keyTagMgmtInput drives the open input sub-mode -- mirrors keyTagInput's
 // structure 1:1 (box_picker_tag.go): esc discards ONLY the sub-mode (the
 // Page underneath is untouched, D14); enter validates against
@@ -474,7 +507,7 @@ func (m model) keyTagMgmtInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// refindName = the new name, explicitly (B01, Fix-Runde 1, bean
 			// bt-1lsu): applyTagDefsSaved no longer reads the input's Value()
 			// implicitly -- every dispatch site names its own cursor target.
-			return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, name), name)
+			return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, name), name, "")
 		case "rename":
 			// E10 Task 5 (bean bt-y9my, D13): Registry-Rename and Bean-Sweep
 			// dispatch as TWO INDEPENDENT Cmds in ONE tea.Batch -- neither
@@ -487,7 +520,7 @@ func (m model) keyTagMgmtInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			old := m.tagMgmtInputTarget
 			defs := definedTagNames(m.tagMgmtRows)
 			return m, tea.Batch(
-				saveTagDefsCmd(m.client, data.RenameTagDefName(defs, old, name), name),
+				saveTagDefsCmd(m.client, data.RenameTagDefName(defs, old, name), name, ""),
 				renameTagCmd(m.client, m.idx, old, name),
 			)
 		}
@@ -579,7 +612,7 @@ func (m model) keyTagMgmtDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// name-search misses, and the cursor stays put -- and stale text in
 		// the (esc-aborted, never-cleared) Create input can no longer
 		// redirect the cursor, since applyTagDefsSaved no longer reads it.
-		return m, saveTagDefsCmd(m.client, data.RemoveTagDefName(defs, target), target)
+		return m, saveTagDefsCmd(m.client, data.RemoveTagDefName(defs, target), target, "")
 	case keybind.Matches(msg, keys.Back), msg.String() == "n":
 		m.tagMgmtDeleteConfirm = false
 		m.tagMgmtDeleteTarget = ""
