@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-16T03:46:20Z
+updated_at: 2026-07-16T06:21:24Z
 parent: bt-apmy
 ---
 
@@ -166,3 +166,12 @@ vervollständigt (5 Zusatz-Sites, alle konform).
 
 Danach (separat, NICHT Teil dieses Eposs): D07/T03 Upstream-Issue-Entwurf
 NACH v1-Abnahme, POST nur mit PO-Freigabe (Repro-Beleg oben).
+
+
+## PO-Teilabnahme R3 (2026-07-16)
+
+- B06 (Teal-Header): ACCEPTED — "Live angeschaut und ist super". Sign-off erteilt.
+- US-08/bt-gdkx: REJECTED (kein Tag sichtbar) — reopened als E9-B05 unter bt-tct9.
+- Epic-Gesamtabnahme: DEFERRED (PO: "Erst diese Runde abschließen") — bleibt to-review.
+- Q01 (Backlog-Footer): PO "Guter Vorschlag" → interpretiert als Option b (Sort-Eintrag
+  streichen), Umsetzung E9/D02.

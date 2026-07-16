@@ -5,10 +5,10 @@ status: todo
 type: bug
 priority: normal
 tags:
-    - to-review
+    - rejected
 created_at: 2026-07-15T19:21:19Z
-updated_at: 2026-07-16T03:45:47Z
-parent: bt-ntoz
+updated_at: 2026-07-16T06:21:24Z
+parent: bt-tct9
 ---
 
 ## Befund (E6 T2, US-08-Validierung, 2026-07-15)
@@ -83,3 +83,10 @@ Detail-Tabelle in §7 „E8-Umsetzung".
 
 Status bleibt bewusst UNVERÄNDERT (PO-Gate, Review-Flow §5) — Tag
 `to-review` gesetzt, der PO schließt nach eigener Sichtprüfung.
+
+
+## Review 2026-07-16 (PO): REJECTED — Nacharbeit
+
+PO-Sichtprüfung: "Kein tag sichtbar -> Nacharbeit erforderlich." Widerspricht dem
+E8-Abschluss-Smoke (live verifiziert '▷ tags: ● to-review'). Ursachen-Analyse läuft
+(Investigator). Reopened als E9-B05, umgehängt unter bt-tct9.
