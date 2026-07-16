@@ -1,11 +1,11 @@
 ---
 # bt-1u0t
 title: Quit-Flow zweistufig (Lobby-Zwischenstopp) + Text-Fix
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-15T21:06:05Z
-updated_at: 2026-07-15T21:06:05Z
+updated_at: 2026-07-16T01:04:40Z
 parent: bt-ntoz
 ---
 
