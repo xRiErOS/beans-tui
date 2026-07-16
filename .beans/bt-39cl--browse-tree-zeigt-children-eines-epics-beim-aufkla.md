@@ -1,11 +1,11 @@
 ---
 # bt-39cl
 title: Browse-Tree zeigt Children eines Epics beim Aufklappen nicht an
-status: in-progress
+status: completed
 type: bug
 priority: high
 created_at: 2026-07-16T20:20:40Z
-updated_at: 2026-07-16T22:10:52Z
+updated_at: 2026-07-16T22:41:25Z
 parent: bt-tct9
 ---
 
@@ -175,3 +175,146 @@ Akzeptanz:
 - [ ] Epic mit Mix (1 offen, 2 archiviert): offene Children sichtbar, KEIN Platzhalter (nur Voll-Verdeckungs-Fall) — ODER Implementer begründet abweichend, falls Mix-Hinweis konsistenter
 - [ ] Tabellentest für filteredBeanNode-Fälle + Golden falls Tree-Render betroffen
 - [ ] tmux-Smoke im Repro-Repo (Investigation-Setup) beider Fälle
+
+## Fix umgesetzt (2026-07-17)
+
+**Commit:** 09bb044 fix(tui): Archiv-Platzhalter im Browse-Tree
+
+**Root Cause (Recap):** filteredBeanNode (view_browse_repo.go) setzte hasKids
+aus der ungefilterten Kinderzahl, rendert im `open`-Zweig aber nur
+match-Treffer -- bei Voll-Verdeckung (alle Direct-Children archiviert,
+showArchived=false) blieb der Marker ▾, aber es folgten 0 Zeilen.
+
+**Implementierung:**
+- `treeNode` (view_browse_repo.go) um zwei Felder erweitert: `placeholder bool`,
+  `hiddenCount int` (N). id bleibt "" -- nie ein legitimes Cursor-Ziel.
+- `flattenTreeFiltered`/`filteredBeanNode` bekommen einen neuen Parameter
+  `archiveOnly bool`. `visibleNodes()` übergibt `!m.treeActive()` -- so
+  feuert der Platzhalter-Zweig NUR im reinen Archiv-Default-Fall (kein
+  Search/Facet aktiv), exakt D01s Scope-Guard ("bei aktiver Suche/Facette
+  gilt der bestehende Pfad").
+- Neuer Zweig in filteredBeanNode: `archiveOnly && len(children)>0 &&
+  !anyChildHit` -> synthetische Platzhalter-Node statt der (leeren)
+  childNodes. N = Anzahl Direct-Children, die `match()` nicht bestehen
+  (unter archiveOnly äquivalent zu "archiviert", da Search/Facets dort
+  beide neutral sind).
+- `treeRowText`: neuer Zweig rendert `"<N> archiviert — f→Archive"`
+  (theme.Muted, PO-Wortlaut wörtlich), blanke Marker-Breite (2 Zeichen,
+  B03-Konvention).
+- **Selektierbarkeits-Entscheidung: NICHT selektierbar, Cursor überspringt.**
+  `treeCursorMove` ruft neu `skipPlaceholder(nodes, pos, delta)`: läuft in
+  delta-Richtung weiter, fällt bei Listen-Ende auf die GEGENRICHTUNG zurück
+  (Platzhalter kann nie index 0 sein -- folgt immer direkt seinem Parent).
+  `mouseTreeClick` (mouse.go) bekommt denselben No-Op-Guard für einen Klick
+  auf die Platzhalter-Zeile. `focusedBean` (update.go:1143) zusätzlich
+  defensiv um `|| nodes[pos].placeholder` erweitert (mirrort den
+  bestehenden orphan-Guard).
+
+**Tests (neu, internal/tui/archive_placeholder_test.go):**
+- `TestFilteredBeanNodePlaceholderCases` (Tabellentest, 5 Subtests): Voll-
+  Verdeckung -> Platzhalter mit N=3; Mix (1 offen+2 archiviert) -> offener
+  Child sichtbar, kein Platzhalter; showArchived=true -> unverändert, kein
+  Platzhalter; Epic ohne Children -> kein Marker/kein Platzhalter; Search
+  aktiv -> Scope-Guard greift, kein Platzhalter.
+- `TestTreeRowTextPlaceholderPattern`: exaktes Render-Pattern.
+- `TestTreeCursorMoveSkipsPlaceholderDownward`/`...Upward`: Cursor-Navigation
+  überspringt die Platzhalter-Zeile in beide Richtungen inkl. Listen-Ende-
+  Fallback.
+- `TestMouseTreeClickOnPlaceholderIsNoOp`: echter geometrie-aufgelöster Klick
+  (treeClickAt) auf die Platzhalter-Zeile ist No-Op.
+
+RED verifiziert: `git stash` der drei Produktionsdateien -> Kompilierfehler
+(treeNode hat weder `placeholder` noch `hiddenCount`) -- alle neuen Tests
+schlagen fehl, danach `git stash pop` + GREEN bestätigt.
+
+**Gates:** `go build -o bin/bt .` grün · `gofmt -l internal/tui/` leer ·
+`go vet ./...` leer · `go test ./...` 2x grün (1x cached, 1x `-count=1`
+uncached, internal/tui ~142s beide Male) · keine Golden-Fixture-Änderung
+(kein Voll-Verdeckungs-Fall in bestehenden Fixtures).
+
+**tmux-Smoke (Repro-Repo, Investigation-Setup + neuer Mix-Epic
+repro-39cl-ie18):**
+
+Capture 1 (80x24, Voll-Verdeckung nach `l` auf repro-39cl-9y6h):
+```
+▌▾ i E repro-39cl-9y6h Repro…
+     3 archiviert — f→Archive
+ ▸ i E repro-39cl-ie18 Repro…
+   i E repro-39cl-700c Repro…
+```
+
+Capture 2 (120x40, nach f→Archive→space(ON)→esc, erneut l -- echte Children):
+```
+▌▾ i E repro-39cl-9y6h Repro Epic mit a…
+     c T repro-39cl-l4i7 Child 1 comple…
+     c T repro-39cl-xldd Child 2 comple…
+     s T repro-39cl-lyrn Child 3 scrapp…
+ ▸ i E repro-39cl-ie18 Repro Epic Mix o…
+   i E repro-39cl-700c Repro Epic ohne …
+```
+
+Capture 3 (120x40, showArchived wieder OFF, Mix-Epic ie18 expandiert):
+```
+ ▾ i E repro-39cl-9y6h Repro Epic mit a…
+     3 archiviert — f→Archive
+▌▾ i E repro-39cl-ie18 Repro Epic Mix o…
+     t T repro-39cl-dw6s Mix Child Open
+   i E repro-39cl-700c Repro Epic ohne …
+```
+Bestätigt: Voll-Verdeckung (Capture 1) + Toggle zu echten Children
+(Capture 2) + Mix ohne Platzhalter, offener Child sichtbar, koexistiert mit
+dem weiter offenen Voll-Verdeckungs-Platzhalter (Capture 3). 80x24 UND
+120x40 abgedeckt.
+
+**Deviations/ERRATA:** keine -- Zeilenreferenzen aus der Investigation
+(filteredBeanNode ~303-328) stimmten mit dem tatsächlichen Code überein.
+
+## D01-Akzeptanz (abgehakt)
+
+- [x] Repro-Szenario (Epic, alle Children archiviert): Expand zeigt
+  Platzhalter-Zeile mit korrektem N
+- [x] showArchived=true: unverändert, kein Platzhalter
+- [x] Epic mit Mix (1 offen, 2 archiviert): offene Children sichtbar, KEIN
+  Platzhalter
+- [x] Tabellentest für filteredBeanNode-Fälle + Golden falls Tree-Render
+  betroffen (keine Golden-Änderung nötig, kein bestehender Voll-
+  Verdeckungs-Fixture)
+- [x] tmux-Smoke im Repro-Repo (Investigation-Setup) beider Fälle (plus Mix)
+
+## Fix-Runde R1 (Review CHANGES_REQUIRED, 2026-07-17)
+
+**Commit:** 3a79433 fix(tui): Cursor-Restore meidet Platzhalter
+
+**B01 (Pflicht, behoben):** applyLoaded (update.go) Cursor-Restore war nicht
+platzhalter-sicher:
+- (a) id-Match-Loop: `n.id == m.cursorID` ohne Ausschluss der id-losen
+  Platzhalter-Node -- bei `cursorID == ""` (z. B. nach leerem Load) matchte
+  der erste Platzhalter, cursorFound fälschlich true. Fix: Guard
+  `n.id != "" && n.id == m.cursorID`.
+- (b) positionaler oldPos-Fallback konnte auf einen Platzhalter-Index im
+  neuen gefilterten Baum clampen. Fix: `nodes[skipPlaceholder(nodes,
+  oldPos, 1)].id` (dieselbe Helper wie treeCursorMove).
+
+**RED→GREEN (gegen R0-Stand 09bb044, R1-Produktionsdiff gestasht):**
+```
+--- FAIL: TestApplyLoadedCursorRestoreSkipsPlaceholderOnEmptyCursorID
+    cursor restored onto the placeholder row (pos 1), want a real row
+--- FAIL: TestApplyLoadedOldPosFallbackSkipsPlaceholder
+    cursorID = "", want ep-full (oldPos fallback slid off the placeholder)
+```
+Nach stash pop (Fix aktiv): beide PASS. Repro-Pfad exakt nach Reviewer-
+Muster: applyLoaded(leer) -> applyLoaded(gleiche Beans), Epic expanded.
+
+**I01 (non-blocking, umgesetzt):** keyTree right/left/enter mit explizitem
+`n.placeholder`-Guard statt zufälliger Sicherheit via hasKids=false.
+Lock-Test `TestKeyTreeExpandKeysNoOpOnPlaceholder` (passt auch auf altem
+Code -- erwartungsgemäß, Härtung, kein Bug; hält den Vertrag fest, falls
+placeholder je hasKids-Semantik bekäme).
+
+**I02 (non-blocking, umgesetzt):** renderDetailPane prüft `placeholder`
+explizit neben `orphan` (Konsistenz zum focusedBean-Guard-Stil; Verhalten
+identisch, da placeholder.bean ohnehin nil -> "(no selection)").
+
+**Gates R1:** Build grün · `go test ./... -count=1` voll grün (internal/tui
+143s) · gofmt leer · vet leer · working tree clean · Branch unverändert
+fix/39cl-archiv-platzhalter.

@@ -891,9 +891,17 @@ func (m model) applyLoaded(msg beansLoadedMsg) (model, tea.Cmd) {
 	if len(nodes) == 0 {
 		m.cursorID = ""
 	} else {
+		// B01 (bt-39cl Review R1): both restore paths must be placeholder-
+		// safe. (a) The id-match loop requires n.id != "" -- a placeholder's
+		// id IS "" (view_browse_repo.go treeNode doc), so a stale
+		// m.cursorID == "" (e.g. a previous empty load) would otherwise
+		// "find" the first placeholder and leave the cursor parked on a
+		// non-selectable row. (b) The positional oldPos fallback runs
+		// through skipPlaceholder so a clamp landing on a placeholder index
+		// in the NEW filtered tree slides onto the nearest real row instead.
 		cursorFound := false
 		for _, n := range nodes {
-			if n.id == m.cursorID {
+			if n.id != "" && n.id == m.cursorID {
 				cursorFound = true
 				break
 			}
@@ -902,7 +910,7 @@ func (m model) applyLoaded(msg beansLoadedMsg) (model, tea.Cmd) {
 			if oldPos >= len(nodes) {
 				oldPos = len(nodes) - 1
 			}
-			m.cursorID = nodes[oldPos].id
+			m.cursorID = nodes[skipPlaceholder(nodes, oldPos, 1)].id
 		}
 	}
 
@@ -1140,7 +1148,7 @@ func (m model) focusedBean() *data.Bean {
 	default: // viewBrowseRepo (T8)
 		nodes := m.visibleNodes()
 		pos := m.cursorPos(nodes)
-		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan {
+		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan || nodes[pos].placeholder {
 			return nil
 		}
 		return nodes[pos].bean
@@ -1536,14 +1544,25 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down":
 		return m.treeCursorMove(nodes, 1), nil
 	case "right":
+		// I01 (bt-39cl Review R1): explicit placeholder guard -- a
+		// placeholder happens to no-op through setExpanded anyway
+		// (hasKids=false), but that is incidental, not a contract; the
+		// guard makes "never a legitimate target" explicit (same doctrine
+		// as skipPlaceholder/mouseTreeClick).
+		if nodes[pos].placeholder {
+			return m, nil
+		}
 		return m.setExpanded(nodes[pos], true), nil
 	case "left":
+		if nodes[pos].placeholder { // I01, see "right" above
+			return m, nil
+		}
 		return m.setExpanded(nodes[pos], false), nil
 	}
 
 	if keybind.Matches(msg, keys.Enter) {
 		n := nodes[pos]
-		if !n.hasKids {
+		if n.placeholder || !n.hasKids { // I01: placeholder explicit, not incidental via hasKids
 			return m, nil // leaf: no-op for now (E2 opens detail focus instead)
 		}
 		return m.setExpanded(n, !n.open), nil
