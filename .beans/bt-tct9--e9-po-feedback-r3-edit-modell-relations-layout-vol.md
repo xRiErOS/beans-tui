@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T12:28:39Z
+updated_at: 2026-07-16T13:32:56Z
 parent: bt-apmy
 ---
 
@@ -132,3 +132,16 @@ BEWUSST NICHT gefixt: mirrort exakt das bereits produktive clampModalWidth-Verha
 (8 Aufrufstellen), praktisch unerreichbar (keine realen <28-Spalten-Terminals; kein Picker
 vor erstem WindowSizeMsg öffenbar). Falls Minimal-Terminalbreiten je relevant werden:
 gemeinsames Ticket für clampModalWidth+wideModalWidth. F02/F03 (Test-Härtungen) → Prelude T6.
+
+
+## T7-Deviation D01 (2026-07-16) — offene PO-Frage Q03
+
+F01-Kernmechanik umgesetzt, aber: `keys.Fullscreen` (v) wurde NICHT in die
+Browse-/Backlog-Footer aufgenommen (bean-Wortlaut hätte es verlangt). Messung: 14 Einträge
+kippen den Footer bei 80 Spalten von 2 auf 3 Zeilen (167 > 152 Zellen) — exakt die
+Regression, die D02 (Sort-Entfernung) gerade behoben hat; D06 erlaubt max 2 Zeilen.
+`v` ist voll funktional und in helpGroups() ('?') dokumentiert — mirrort den
+PO-bestätigten D02-Präzedenzfall (Taste funktional, nur im Help).
+
+**Q03 (PO):** v Help-only akzeptiert — oder Footer-Sichtbarkeit gewünscht (dann müsste
+ein anderer Eintrag weichen, PO-Wahl welcher)? Bis zur Antwort gilt Help-only.
