@@ -1,11 +1,11 @@
 ---
 # bt-1lsu
 title: T4 — Tag-Definition entfernen (Delete)
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:30Z
-updated_at: 2026-07-16T18:01:26Z
+updated_at: 2026-07-16T18:19:13Z
 parent: bt-362n
 blocked_by:
     - bt-r92i
@@ -400,3 +400,11 @@ Sonst keine Abweichungen vom Bean-Body.
   Rename nutzt den Input-Submodus direkt ohne Extra-Confirm), wäre das ein
   eigenes, neues Bool-Paar nach demselben Muster, nicht eine Erweiterung
   dieses Felds.
+
+## Review-Findings Runde 1 (2026-07-16, T4-Review, Verdict CHANGES_REQUIRED)
+
+- **B01 (medium, update.go:459-484 applyTagDefsSaved / view_tag_management.go:512-526 keyTagMgmtDeleteConfirm):** applyTagDefsSaved re-findet den Cursor nach JEDEM tagDefsSavedMsg via strings.TrimSpace(m.tagMgmtInput.Value()). Vor T4 sicher (einziger Aufrufer = Create-Submit). T4s Delete-Confirm ist ein ZWEITER saveTagDefsCmd-Aufrufer, der das Input-Feld nie anfasst — und T3s esc-Abbruch löscht Value() NICHT. Repro: Registry {alpha,bravo} → Create-Input 'bravo' tippen → esc → Cursor auf alpha → d→enter (Delete alpha) → Cursor springt auf bravo statt Default. FIX (Empfehlung Reviewer, sauberer Weg): tagDefsSavedMsg um explizites refindName-Feld erweitern — Aufrufer geben den Namen explizit mit (Create: der neue Name; Delete: Ziel-Default), statt implizit m.tagMgmtInput.Value() zu lesen. Macht 'Notes for T5: mode-agnostisch' real. Minimal-Alternative: SetValue("") im Delete-Enter-Case. + Regressionstest: 'Create abgebrochen → unabhängiges Delete → Cursor darf nicht auf stale Text springen' (RED mit altem Code belegen).
+- **I01 (low):** Singular-Zweig count==1 ('Still used by 1 bean') in tagMgmtDeleteConfirmBox ohne dedizierten Test — Bug-Klasse hat im Repo Präzedenz (box_confirm_delete.go I02-Doc-Stamp). Test analog zu count==0/count==7 ergänzen.
+- **I02 (low, view_tag_management_test.go:553-580):** TestKeyTagMgmtInputCapturesEveryKeyNoLeak prüft laut Kommentar 'd darf Delete-Confirm nicht öffnen' via m.overlay — die D15-Implementierung berührt overlay nie: Assertion tot (Mutations-Probe belegt). m.tagMgmtDeleteConfirm-Check ergänzen/ersetzen.
+
+Fix-Runde beim selben Implementer; Re-Review beim selben Reviewer.
