@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-07-16T20:13:14Z
-updated_at: 2026-07-16T21:19:56Z
+updated_at: 2026-07-16T21:36:06Z
 parent: bt-362n
 ---
 
@@ -224,3 +224,25 @@ abgesichert (`TestTagInputArrowKeysDoNotLeakIntoTypedText`). Dynamische Hint-Zei
 in `tagInputBox` ("enter:select" vs. "enter:create") war nicht explizit gefordert,
 aber direkte Konsequenz aus dem verzweigten enter-Verhalten — ohne sie wäre der Hint
 irreführend.
+
+
+### Nachtrag Fix-Runde (Review-Findings, 2026-07-16)
+
+Review APPROVED mit zwei non-blocking Findings, beide behoben (Commit 9a42af6):
+
+1. **Test-Lücke (medium):** Die Mutation `tagInputFiltered[tagInputSuggestCursor]`
+   → `[0]` überlebte die Suite (einziger Enter-auf-Vorschlag-Test hatte genau 1
+   Treffer, Cursor trivial 0). Neuer Test
+   `TestTagInputEnterSelectsCursoredSuggestionNotFirst`: 3 Treffer, Cursor per Down
+   auf Index 1, enter MUSS den gecursorten Tag wählen. RED-Beweis gegen die
+   temporär eingespielte `[0]`-Mutation:
+   `enter must assign the CURSORED suggestion "backend", tagPending = map[urgent:true]`
+   → FAIL. Mutation zurückgenommen → PASS.
+2. **Doc-Kommentar (low):** keyLobby-Begründung in `types.go` +
+   `box_picker_tag.go` korrigiert — keyLobby routet navKey() VOR dem
+   Textinput-Update, das i/k-Verschlucken dort ist ein BESTEHENDER Bug
+   (bean bt-l8e7 im Haupt-Repo), keine bewusste Abwägung; der raw-KeyType-
+   Intercept hier ist das korrekte Muster.
+
+Gates: voller Lauf ohne `-short` grün (`ok beans-tui/internal/tui 139.135s`),
+gofmt leer, go vet sauber, working tree clean.
