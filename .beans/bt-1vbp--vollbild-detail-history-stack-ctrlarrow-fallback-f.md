@@ -1,11 +1,11 @@
 ---
 # bt-1vbp
 title: Vollbild-Detail History-Stack — ctrl+arrow + [/]-Fallback (F01 History)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:59Z
-updated_at: 2026-07-16T14:03:56Z
+updated_at: 2026-07-16T14:31:11Z
 parent: bt-tct9
 blocked_by:
     - bt-13l7
@@ -157,17 +157,142 @@ strukturell analog zu den bestehenden). `fullscreenListLocalBindings()` (analog,
 
 ## Akzeptanz-Checkliste
 
-- [ ] Relations-Sprung im Detail-Vollbild pusht das VORHERIGE Bean auf `navBack`, leert
+- [x] Relations-Sprung im Detail-Vollbild pusht das VORHERIGE Bean auf `navBack`, leert
       `navForward`
-- [ ] `ctrl+links`/`[` (HistoryBack): No-Op bei leerem Stack ODER außerhalb
+- [x] `ctrl+links`/`[` (HistoryBack): No-Op bei leerem Stack ODER außerhalb
       `fullscreenDetail`; sonst korrekter Pop/Push-Tausch
-- [ ] `ctrl+rechts`/`]` (HistoryForward): symmetrisch
-- [ ] Mehrere Sprünge → N×Back → N×Forward landet exakt beim Ausgangsbean
-- [ ] `[`/`]` funktionieren als Fallback UNABHÄNGIG davon, ob `ctrl+left`/`ctrl+right` im
+- [x] `ctrl+rechts`/`]` (HistoryForward): symmetrisch
+- [x] Mehrere Sprünge → N×Back → N×Forward landet exakt beim Ausgangsbean
+- [x] `[`/`]` funktionieren als Fallback UNABHÄNGIG davon, ob `ctrl+left`/`ctrl+right` im
       genutzten Terminal ankommen (tmux-Smoke-Beleg im Commit-Body, beide Pfade einzeln
       geprüft)
-- [ ] History-Keys sichtbar NUR im Detail-Vollbild-Footer (nicht im Listen-Vollbild, nicht
+- [x] History-Keys sichtbar NUR im Detail-Vollbild-Footer (nicht im Listen-Vollbild, nicht
       im Split-Modus) UND vollständig in `helpGroups()` dokumentiert
-- [ ] `navBack`/`navForward` sind Copy-on-Write (kein In-Place-Mutieren, `cloneStringSlice`
+- [x] `navBack`/`navForward` sind Copy-on-Write (kein In-Place-Mutieren, `cloneStringSlice`
       durchgängig verwendet)
-- [ ] Voller Testlauf grün, gofmt/vet leer
+- [x] Voller Testlauf grün, gofmt/vet leer
+
+
+## Summary
+
+History-Stack (`ctrl+left`/`ctrl+right`, Fallback `[`/`]`) für Detail-Vollbild
+implementiert: `keys.HistoryBack`/`HistoryForward` (keymap.go), Push in
+`activateDetailField`s fullscreenDetail-Zweig (update.go), Pop/Push-Handler in
+`keyFullscreen` (view_fullscreen.go), Footer-Sichtbarkeit via neue
+`fullscreenDetailLocalBindings()`/`fullscreenListLocalBindings()`
+(footer_context.go) + `helpGroups()`-Eintrag. `cloneStringSlice` (types.go)
+als `[]string`-Pendant zu `cloneBoolMap` für die I01-Copy-on-Write-Konvention.
+
+Zwei vom Supervisor entschiedene Abweichungen vom ursprünglichen
+design-spec.md §15-Text (in types.go's navBack/navForward-Doc-Stamp verankert):
+
+1. **Stack-Leeren bei Vollbild-Exit** (Deviation vs. "NICHT geleert"): ALLE
+   drei Vollbild-Exit-Choke-Points (keyDetailFocus b==nil-Guard,
+   keyDetailFocus Back-Case section-level esc-exit, keyFullscreen
+   fullscreenList esc-exit) leeren jetzt `navBack`/`navForward` — verhindert
+   History-Leak zwischen unabhängigen Vollbild-Sessions.
+2. **Verschwundenes History-Bean** (F01-Analogie zum b==nil-Guard-Fix):
+   Back/Forward LOOPEN über tote Einträge hinweg (idx.ByID-Check je Pop)
+   statt auf ihnen zu landen — ein leerer ODER vollständig toter Stack ist
+   ein sauberer No-Op, kein Trap. Getestet:
+   `TestHistoryBackSkipsVanishedEntry`,
+   `TestHistoryBackAllEntriesVanishedIsCleanNoOp`,
+   `TestHistoryForwardSkipsVanishedEntry`.
+
+## Test-Output
+
+RED (Compile-Fehler, referenzierte Symbole existierten noch nicht):
+```
+internal/tui/footer_context_test.go:231:34: undefined: fullscreenDetailLocalBindings
+internal/tui/footer_context_test.go:245:34: undefined: fullscreenListLocalBindings
+internal/tui/types_test.go:21:9: undefined: cloneStringSlice
+internal/tui/types_test.go:43:9: undefined: cloneStringSlice
+FAIL	beans-tui/internal/tui [build failed]
+```
+
+GREEN (Ziel-Testlauf nach Implementierung, alle History/Fullscreen/
+CloneStringSlice-Tests, `-v`): alle PASS (inkl. `TestHistoryBackPopsAndPushesForward`
+Subtests ctrl+left + `[`-Fallback einzeln, `TestHistoryForwardPopsAndPushesBack`
+Subtests ctrl+right + `]`-Fallback einzeln, `TestHistoryBackForwardRoundTripReturnsToOriginalBean`,
+`TestHistoryBackNoOpOutsideFullscreenDetail`/`TestHistoryForwardNoOpOutsideFullscreenDetail`
+je 3 Subtests Split-Detail/Listen-Vollbild/Tree-Backlog, esc-Exit-Clear-Tests,
+b==nil-Guard-Clear-Test, Vanished-Entry-Skip-Tests, `TestHelpGroupsIncludeHistoryBindings`,
+`TestHistoryBindingsUnbelegtElsewhere`).
+
+Voller Lauf: `command go test ./... -short -count=1` — 2x grün
+(`beans-tui/internal/tui ok`, alle Packages ok). `command go test ./... -count=1`
+(voll, kein -short): grün, `beans-tui/internal/tui 138.345s`.
+`command go test ./... -race -count=1`: grün, `beans-tui/internal/tui 142.187s`.
+`command gofmt -l .`: leer. `command go vet ./...`: leer.
+
+## Golden-Gegenbeleg
+
+`command go test ./internal/tui/... -run "TestTreeGolden|TestBacklogGolden|TestChromeGolden" -v -count=2`
+— alle PASS (2x), ohne `-update`. `git diff --stat -- internal/tui/testdata/`
+leer (keine Golden-Drift) — Footer-Ergänzung ist fullscreenDetail-only,
+Basis-Goldens (Split-Modus) unberührt.
+
+## Smoke
+
+tmux 3.7b, `TERM=xterm-256color` (macOS lokale Session, kein SSH). Live gegen
+`./bin/bt` im Dogfooding-Repo selbst (`bt-tui`-Alias-Ziel).
+
+Kaskade: `v` (List-Vollbild) → `enter` auf bt-apmy → Detail-Vollbild →
+Footer zeigt `[ history back · ] history fwd · esc back` sofort. 3 Relations-
+Sprünge (bt-apmy → bt-tct9 → bt-gdkx → bt-tct9). `ctrl+left` **funktionierte
+nativ** in dieser Session (kein xterm-keys-Problem beobachtet) — 3x
+`ctrl+left` lief exakt bt-gdkx → bt-tct9 → bt-apmy (Ausgangsbean) zurück,
+4. `ctrl+left` war korrekter No-Op (blieb bt-apmy). 3x `ctrl+right` lief
+exakt bt-tct9 → bt-gdkx → bt-tct9 wieder vor (identischer Endzustand).
+Danach frischer Sprung bt-tct9 → bt-7pk2 (verifiziert: kappt alte
+Forward-History), `[`-Fallback einzeln getestet (bt-7pk2 → bt-tct9 zurück),
+`]`-Fallback einzeln getestet (bt-tct9 → bt-7pk2 vor), zweites `]` No-Op.
+`esc` verließ das Vollbild korrekt zum Split-Tree mit bt-7pk2 selektiert +
+Ahnen expandiert (bt-apmy/bt-tct9 aufgeklappt). Erneuter Eintritt in
+Detail-Vollbild auf demselben Bean + `[` bestätigte: Stack war durch den
+esc-Exit geleert (No-Op, kein Rücksprung in die alte Session-History).
+`?` (Help-Overlay) listet `[ history back` / `] history fwd` in der
+Navigation-Gruppe direkt nach `v fullscreen`.
+
+Beide Tastenpfade (ctrl+arrow UND `[`/`]`) damit live UNABHÄNGIG
+voneinander bestätigt — PO-Implementierungshinweis erfüllt.
+
+## Akzeptanz-Checkliste
+
+Alle 7 Punkte ✓ (im bean-Body oben abgehakt).
+
+## Deviations/ERRATA
+
+D01 (Supervisor-Entscheid, nicht Planner/PO-Wortlaut): design-spec.md §15
+sagt wörtlich "navBack/navForward werden beim Verlassen NICHT geleert" —
+bt-13l7s "Notes for T8" zitierte denselben Satz als "T8 muss hier nichts
+nachrüsten". Der Supervisor hat das für DIESEN Task explizit überschrieben:
+JEDER Vollbild-Exit leert jetzt beide Stacks. design-spec.md §15 selbst
+NICHT geändert (bean-Body ist die kanonische Spec-Quelle, kein Docs-Sync in
+diesem Task) — Diskrepanz ist hiermit im Commit/bean dokumentiert, damit
+T9 (Design-Spec-Konsistenz-Check) sie nicht als unentdeckten Drift meldet.
+
+D02 (Supervisor-Entscheid, Gap im bean/design-spec): verschwundenes
+History-Bean war weder im bean noch in design-spec.md spezifiziert. Gewählt:
+Skip-Loop (nicht simpler One-Shot-Pop wie im Code-Sketch) — verhindert, dass
+EIN totes Zwischenglied Back/Forward dauerhaft blockiert, obwohl gültige
+Historie weiter hinten im Stack liegt (F01-Analogie zum b==nil-Guard).
+
+I01 (kosmetisch, kein Fix nötig): view_fullscreen.go's Datei-Doc-Kommentar-
+Zeile ("file's own dispatch (handleKey's checkpoint, update.go) --
+renderFullscreenBody is") ist nach dem Edit >80 Spalten lang — gofmt/vet
+unberührt (Kommentare werden nicht umbrochen), rein optisch.
+
+## Notes for T9
+
+- design-spec.md §15 "History-Stack"-Abschnitt (Zeilen ~1090-1094, "werden
+  beim Verlassen NICHT geleert") ist jetzt INKONSISTENT mit dem tatsächlichen
+  Code-Stand (D01 oben) — T9s Design-Spec-Konsistenz-Check MUSS diese Stelle
+  aktualisieren oder als bekannte/akzeptierte Abweichung vermerken.
+- Alle 3 Vollbild-Exit-Choke-Points, die navBack/navForward leeren:
+  `keyDetailFocus`s b==nil-Guard, `keyDetailFocus`s Back-Case (section-level
+  esc-exit), `keyFullscreen`s fullscreenList esc-exit (update.go bzw.
+  view_fullscreen.go).
+- `bt-1vbp` ist laut bt-tct9-Epic-Body Kind von bt-tct9 UND laut Notes selbst
+  auch als Kind-Bean im RELATIONS-Baum von bt-tct9 sichtbar (im Smoke real
+  angetroffen) — kein Bug, nur Beobachtung für T9s Bean-Baum-Review.
