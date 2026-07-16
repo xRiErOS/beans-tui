@@ -1,11 +1,11 @@
 ---
 # bt-39cl
 title: Browse-Tree zeigt Children eines Epics beim Aufklappen nicht an
-status: todo
+status: in-progress
 type: bug
 priority: high
 created_at: 2026-07-16T20:20:40Z
-updated_at: 2026-07-16T20:47:11Z
+updated_at: 2026-07-16T20:57:19Z
 parent: bt-tct9
 ---
 
@@ -58,3 +58,81 @@ an" verwechselbar).
 
 **Priorität high bleibt bestehen** (Tree-Expand ist Grundfunktion), aber
 der ERSTE Schritt ist Repro, kein Blind-Fix.
+
+
+## Investigation 2026-07-16
+
+**Ergebnis: (a) REPRODUZIERT** — generisch, nicht an die konkrete PO-ID "a2ca" gebunden.
+
+**Root Cause:** Zusammenspiel aus dem Archiv-Default (`m.showArchived == false`,
+`box_filter_facets.go:172` `beanMatchesArchive`) und dem gefilterten Tree-Flatten
+(`view_browse_repo.go:299-330` `filteredBeanNode`). `visibleNodes()`
+(`view_browse_repo.go:199-204`) geht IMMER über `flattenTreeFiltered`, sobald
+`!m.showArchived` — also im Programm-Default, nicht nur bei aktiver Suche/Facette.
+
+In `filteredBeanNode`: `hasKids` wird aus der UNGEFILTERTEN Kinderzahl gesetzt
+(`children := idx.Children[b.ID]`, Zeile 303/311/328), der Aufklapp-Marker
+(`treeNodeMarker`, Zeile 401-409) zeigt also IMMER ▸/▾ basierend auf der rohen
+Struktur. Beim Aufklappen (offener Zweig, Zeile 314-328) werden aber nur
+Kinder aufgenommen, die `match(b)` (= `m.beanMatches`, AND aus Search+Facets+
+Archive) erfüllen. Sind ALLE direkten Kinder eines Epics `completed`/`scrapped`
+und `m.showArchived` steht auf `false` (Default, auch nach Repo-Wechsel:
+`update.go:247`), matcht keines — `anyChildHit` bleibt `false`,
+`childNodes` bleibt leer. Der Epic-Knoten selbst rendert weiter (self matcht,
+da sein eigener Status z. B. `in-progress` ist), inkl. `open: true` und
+Marker ▾ — aber OHNE eine einzige Kind-Zeile darunter. Exakt der PO-Befund:
+Epic hat Children, Aufklappen zeigt sie nicht.
+
+**Repro-Pfad (Wegwerf-Repo, generisch):**
+1. Repo: `repro-39cl` (`/tmp/.../scratchpad/repro-39cl`) — Epic `repro-39cl-9y6h`
+   (status in-progress) mit 3 Children: 2× `completed`, 1× `scrapped`.
+   Kontroll-Epic `repro-39cl-700c` ohne Children.
+2. `bin/bt` im Repo-cwd starten, Cursor auf `repro-39cl-9y6h` (bereits an Pos. 1).
+3. `l` (Right/expand) drücken → Marker wechselt ▸→▾, aber KEINE Kind-Zeilen
+   erscheinen (Capture 1, 80×24).
+4. `f` (Filter) → runter zu "Archive" → `space` (Show archived: ON) → `esc` →
+   `l` erneut → jetzt erscheinen alle 3 Children eingerückt unter dem Epic
+   (Capture 2, 120×40) — bestätigt den Archiv-Default als Ursache.
+5. Getestet bei 80×24 UND 120×40 — Terminalbreite/-höhe ist NICHT der Faktor
+   (kein Fenster-Scroll-Problem, `windowAround`-Hypothese verworfen für diesen Fall).
+
+**Capture 1 (80×24, showArchived=false, nach `l`):**
+```
+▌▾ i E repro-39cl-9y6h Repro…
+   i E repro-39cl-700c Repro…
+```
+(keine Kind-Zeilen zwischen Epic und dem zweiten Epic)
+
+**Capture 2 (120×40, showArchived=true, nach erneutem `l`):**
+```
+▌▾ i E repro-39cl-9y6h Repro Epic mit a…
+     c T repro-39cl-l4i7 Child 1 comple…
+     c T repro-39cl-xldd Child 2 comple…
+     s T repro-39cl-lyrn Child 3 scrapp…
+   i E repro-39cl-700c Repro Epic ohne …
+```
+
+**Geprüfte Hypothesen:**
+
+| Hypothese | geprüft wie | Ergebnis |
+|---|---|---|
+| `setExpanded`/`m.expanded[id]`-Toggle fehlerhaft | Code gelesen (`update.go:1622-1633`) + Marker-Wechsel ▸→▾ live beobachtet | Verworfen — Toggle funktioniert korrekt, Marker flippt |
+| Cursor/Fenster-Scroll (`windowAround`) versteckt Children | 80×24 UND 120×40 getestet, beide zeigen 0 Zeilen bei showArchived=false | Verworfen — kein Scroll-Effekt, Zeilen fehlen strukturell |
+| Archiv-Default filtert Children, Aufklapp-Marker bleibt inkonsistent zum Inhalt | Live-Toggle Filter→Archive→Show archived: Children erscheinen sofort | **BESTÄTIGT — Root Cause** |
+| Verhalten unterschiedlich je Epic (bt-apmy Gegenprobe) | bt-apmys 11 Children vermutlich überwiegend NICHT alle archiviert → matched Default-Filter, daher unauffällig im Smoke-Beleg | Konsistent mit Root-Cause-These, nicht separat live gegengeprüft (kein Zugriff auf Original-Repo-Daten nötig, Ursache ist generisch) |
+
+**Root-Cause-Datei:Zeile:** `internal/tui/view_browse_repo.go:303-328`
+(`filteredBeanNode`, `hasKids` aus ungefilterter Kinderzahl + `open`-Zweig
+schließt archivierte Kinder aus) im Zusammenspiel mit
+`internal/tui/box_filter_facets.go:172` (`beanMatchesArchive`).
+
+**Empfehlung:** Fix-Task JA. Skizze: entweder (1) Marker/`hasKids` in
+`filteredBeanNode` auf die GEFILTERTE Kinderzahl umstellen, wenn `open &&
+len(childNodes)==0` (Epic zeigt dann korrekt KEINEN Marker bzw. einen
+"nichts sichtbar"-Hinweis, wenn alle Kinder durch den Archiv-Default
+verdeckt sind), oder (2) beim Aufklappen eines Knotens, dessen sichtbare
+Kinderzahl 0 ist trotz `hasKids`, einen Inline-Hinweis rendern ("3 archiviert,
+versteckt — Show archived togglen"). (1) ist die konsistentere Lösung
+(Marker lügt sonst weiterhin), (2) ist PO-freundlicher (erklärt WARUM). Sollte
+diskutiert und in einem eigenen bean (Parent `bt-tct9`, wie die anderen
+E11-Items) angelegt werden — nicht Teil dieses Investigator-Auftrags.
