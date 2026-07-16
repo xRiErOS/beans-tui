@@ -1,11 +1,11 @@
 ---
 # bt-13l7
 title: Vollbild-Modus 'v' — Listen-/Detail-Vollbild, esc-Ausstieg (F01 Kernmechanik)
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:55Z
-updated_at: 2026-07-16T13:31:51Z
+updated_at: 2026-07-16T13:48:38Z
 parent: bt-tct9
 blocked_by:
     - bt-b0w0
@@ -497,3 +497,18 @@ innerW-2) -- siehe Smoke-Abschnitt.
   bzw. `ctrl+right`/`]` -- mirrort den bestehenden
   `m.fullscreen == fullscreenList`-Vorab-Check-Stil (neuer Block, NUR
   wirksam bei `m.fullscreen == fullscreenDetail`).
+
+
+## Review-Findings (2026-07-16, Reviewer-Verdict CHANGES_REQUIRED)
+
+| Fxx | Schwere | Fundort | Beschreibung |
+|---|---|---|---|
+| F01 | hoch | update.go:1037-1042 (keyDetailFocus b==nil-Guard); applyLoaded/applyRepoSwitched ohne Fullscreen-Reset | Vollbild-Detail wird Sackgasse, wenn fullscreenBeanID extern verschwindet (Live-Reload, Repo-Wechsel, Delete): b==nil-Guard setzt nur detailFocus=false, nie fullscreen — esc/alle Detail-Tasten wirkungslos, einziger Ausweg Quit. Im Dogfooding-Repo (parallele Agents editieren .beans/) real reproduzierbar (Reviewer-Repro: "user is trapped in a dead fullscreenDetail with no keyboard exit"). |
+| F02 | mittel-hoch | update.go:1148-1156 (Backlog-Zweig esc-Exit-Cursor-Sync) | Ist das zuletzt gezeigte Bean (nach Relations-Sprüngen) nicht backlogVisible() (hat Parent / Epic / Milestone / Status weder todo noch draft), findet die Sync-Schleife keinen Treffer — backlogList.cursor bleibt stale, Split-Backlog zeigt ein ANDERES Bean selektiert. Verletzt PO-Kriterium "mit dem aktuellen Bean selektiert" still. HÄUFIGER Fall: fast jeder Relations-Sprung verlässt die Backlog-Menge. |
+| I01 | niedrig | mouse.go/composeOverlays | Overlay-über-Vollbild + v-No-Op-bei-Overlay strukturell korrekt, aber ungepinnt. |
+| I02 | niedrig | view_browse_repo.go/view_browse_backlog.go | Resize NACH Fullscreen-Eintritt ungepinnt (architektonisch korrekt, kein Caching). |
+
+**Fix-Rezept:**
+1. F01 (Reviewer-Minimal-Fix): im b==nil-Guard zusätzlich `if m.fullscreen == fullscreenDetail { m.fullscreen = fullscreenNone }` — rettet alle Trigger an einer Stelle. Regressionstest: fullscreenDetail + fullscreenBeanID="does-not-exist" + esc → fullscreenNone.
+2. F02 (SUPERVISOR-ENTSCHEID): Fallback = View-Wechsel. Wenn Ursprung Backlog UND Exit-Ziel-Bean nicht backlogVisible(): esc wechselt nach Browse/Tree mit Cursor auf dem Bean + expandAncestorsOf (Tree kann jedes Bean zeigen) — erfüllt das PO-Kriterium maximal statt still zu desyncen. Nur bei backlogVisible bleibt der bestehende Backlog-Sync. Regressionstest analog Reviewer-Repro (Jump-Target mit Parent). Entscheid dem PO im Abschluss-Report spiegeln (Review-Punkt, analog Q03).
+3. I01/I02 mitnehmen (je ein kleiner Pin-Test, billig, sichert die adversarial geprüften Pfade).
