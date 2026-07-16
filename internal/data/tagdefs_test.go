@@ -22,10 +22,24 @@ func TestLoadTagDefsMissingFileReturnsEmpty(t *testing.T) {
 	}
 }
 
+// TestLoadTagDefsSkipsInvalidNamesDefensively (T1-Review F03, bean bt-49hh,
+// 2026-07-16, PRELUDE at bt-r92i): the ORIGINAL fixture's third entry was a
+// bare blank scalar (`  - ` with nothing after the dash) -- empirically
+// verified (throwaway yaml.v3 probe against this exact struct shape) that
+// yaml.v3 drops a bare blank list scalar BEFORE Unmarshal ever populates
+// f.Tags: len(f.Tags) == 2 for that fixture, never 3. The test therefore
+// only ever proved the Bad_Tag (invalid-charset) filter branch -- it never
+// actually exercised ValidTagName("") / the empty-string filter path at all,
+// despite the doc-comment-adjacent intent. Fixed here: an EXPLICIT `- ""`
+// scalar (quoted) DOES survive Unmarshal as a genuine "" element (verified
+// by the same probe: len(f.Tags) == 3, tags[2] == ""), so it now reaches
+// LoadTagDefs' ValidTagName filter loop for real -- ValidTagName("") is
+// false (tagNameRe requires a leading `[a-z]`), so "" is still dropped and
+// the assertion below (want exactly [good-tag]) is unchanged.
 func TestLoadTagDefsSkipsInvalidNamesDefensively(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".beans-tags.yml"),
-		[]byte("tags:\n  - good-tag\n  - Bad_Tag\n  - \n"), 0o644)
+		[]byte("tags:\n  - good-tag\n  - Bad_Tag\n  - \"\"\n"), 0o644)
 	c := &Client{RepoDir: dir}
 	got, _ := c.LoadTagDefs()
 	if len(got) != 1 || got[0] != "good-tag" {
