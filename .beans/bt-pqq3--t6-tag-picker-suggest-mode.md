@@ -1,11 +1,11 @@
 ---
 # bt-pqq3
 title: T6 — Tag-Picker Suggest-Mode
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:35Z
-updated_at: 2026-07-16T15:44:35Z
+updated_at: 2026-07-16T16:50:28Z
 parent: bt-362n
 blocked_by:
     - bt-49hh
