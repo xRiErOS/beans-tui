@@ -1,11 +1,11 @@
 ---
 # bt-1u0t
 title: Quit-Flow zweistufig (Lobby-Zwischenstopp) + Text-Fix
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-15T21:06:05Z
-updated_at: 2026-07-16T01:04:40Z
+updated_at: 2026-07-16T01:29:01Z
 parent: bt-ntoz
 ---
 
@@ -46,10 +46,148 @@ Kleine, klar begruendete Zusatzverbesserung (ueber den Wortlaut hinaus, damit di
 
 ## Akzeptanz-Checkliste
 
-- [ ] quitBox() zeigt "Really quit bt?" (Frage)
-- [ ] q+enter aus Browse/Backlog mit konfigurierten Repos fuehrt zur Lobby, TUI bleibt offen
-- [ ] q+enter aus der Lobby beendet die TUI
-- [ ] Randfall (keine konfigurierten Repos) beendet weiterhin direkt -- dokumentiert als bewusste Deviation
-- [ ] keyLobby()s eigener esc/q-Case UNVERAENDERT (kein Seiteneffekt)
-- [ ] 3 Haupt-Goldens bleiben unveraendert (Verifikation ohne -update)
-- [ ] Voller Testlauf (inkl. -race) gruen, gofmt/vet leer
+- [x] quitBox() zeigt "Really quit bt?" (Frage)
+- [x] q+enter aus Browse/Backlog mit konfigurierten Repos fuehrt zur Lobby, TUI bleibt offen
+- [x] q+enter aus der Lobby beendet die TUI
+- [x] Randfall (keine konfigurierten Repos) beendet weiterhin direkt -- dokumentiert als bewusste Deviation
+- [x] keyLobby()s eigener esc/q-Case UNVERAENDERT (kein Seiteneffekt)
+- [x] 3 Haupt-Goldens bleiben unveraendert (Verifikation ohne -update)
+- [x] Voller Testlauf (inkl. -race) gruen, gofmt/vet leer
+
+
+
+## Summary (2026-07-16, Agent)
+
+A1+A2 implementiert in `internal/tui/box_confirm_quit.go`: `quitBox()`
+zeigt jetzt "Really quit bt?" (Frage statt Aussage). `keyConfirmQuit`s
+`enter`-Zweig loest die zweistufige Kaskade auf: geteiltes Praedikat
+`quitBoxWillGoToLobby()` (`m.view != viewLobby && len(m.settings.Repos) >
+0`) entscheidet, ob `enter` zur Lobby (`m.openLobby()`, Stufe 1) oder zu
+`tea.Quit` (Stufe 2 bzw. Randfall) fuehrt -- von `keyConfirmQuit` UND
+`quitBox()`s Hint-Zeile gemeinsam genutzt (kein Duplikat, kein Drift-Risiko).
+`keyLobby()`s eigener esc/q/ctrl+c-Case (view_lobby.go) unangetastet.
+
+## Test-Output (RED -> GREEN je Haeppchen)
+
+Alle 5 neuen Tests in `internal/tui/box_confirm_quit_test.go` zuerst
+gegen den Alt-Code laufen lassen (RED), dann gegen den neuen Code (GREEN).
+
+**(a) A1 Text-Fix** -- `TestQuitBoxTextIsQuestion`
+RED: `quitBox() does not contain the question form, got: ... "Really quit bt."`
+GREEN: `--- PASS: TestQuitBoxTextIsQuestion (0.00s)`
+
+**(b) A2 Browse-q-enter-Lobby** -- `TestKeyConfirmQuitEnterGoesToLobbyWhenReposConfiguredAndNotInLobby`
+RED: `confirmQuit must be cleared once the cascade resolves (Lobby or Quit)`
+GREEN: `--- PASS: TestKeyConfirmQuitEnterGoesToLobbyWhenReposConfiguredAndNotInLobby (0.00s)`
+
+**(c) Lobby-q-enter-Exit** -- `TestKeyConfirmQuitEnterQuitsWhenAlreadyInLobby`
+War bereits GREEN gegen den ALTEN Code (unbedingtes `tea.Quit` deckte
+diesen Fall zufaellig ab) -- kein echtes RED hier, da Stufe 2 mit dem
+alten unconditional-Quit ununterscheidbar ist. Nach der Implementierung
+weiterhin GREEN, jetzt aus dem RICHTIGEN Zweig (`m.view==viewLobby`)
+statt aus dem alten Blanket-Quit: `--- PASS:
+TestKeyConfirmQuitEnterQuitsWhenAlreadyInLobby (0.00s)`
+
+**(d) Randfall ohne Repos** -- `TestKeyConfirmQuitEnterQuitsWhenNoReposConfigured`
+Gleiche Lage wie (c): alter Code quittete unbedingt, deckt den Randfall
+zufaellig ab (RED entfaellt aus demselben Grund). GREEN nach
+Implementierung, jetzt ueber den EXPLIZITEN Randfall-Zweig:
+`--- PASS: TestKeyConfirmQuitEnterQuitsWhenNoReposConfigured (0.00s)`
+
+**Hint-Text-Zusatzverbesserung** -- `TestQuitBoxHintTextContextSensitive` (3 Subtests)
+RED: `stage 1` Subtest failed (`quitBox() hint does not mention 'go to lobby'`); `stage 2`+`randfall` Subtests bereits GREEN gegen Alt-Code (Text war immer "quit").
+GREEN: alle 3 Subtests PASS nach Implementierung.
+
+**Alt-Test umbenannt** -- `update_test.go`: `TestQuitConfirm` ->
+`TestQuitConfirmNoReposConfigured` (kein RED/GREEN-Zyklus noetig, reines
+Doku-/Scoping-Fix -- der Test blieb die ganze Zeit gruen, da seine
+Fixture nie `config.yaml` laedt und damit IMMER den Randfall testet;
+sein alter Name/Docstring las sich aber wie "q+enter aus Browse quittet
+immer", was A2 nur noch bedingt wahr macht).
+
+**Voll-Gate (nach Implementierung + DRY-Refactor von
+`quitBoxWillGoToLobby()`):**
+- `command go build -o bin/bt .` gruen
+- `gofmt -l .` leer, `command go vet ./...` leer
+- Goldens ohne `-update`: `TestTreeGolden`/`TestBacklogGolden`/`TestChromeGolden` alle PASS (unveraendert, wie erwartet -- confirmQuit ist in keinem der 3 Haupt-Snapshots sichtbar)
+- `command go test ./... -count=1` 2x GRUEN (Lauf 1: internal/tui 137.46s; Lauf 2: internal/tui 139.06s [dieser Lauf inkl. `-race`])
+- `command go test ./... -race -count=1` GRUEN (internal/tui 139.06s)
+
+## Smoke (real, tmux, echtes Binary gegen dieses Repo)
+
+Alle 4 PO-Faelle live durchgespielt (tmux capture-pane-Belege,
+Prozess-Lebenszyklus via `ps -ef` verifiziert, nicht nur Unit-Level):
+
+1. **Browse (Repos konfiguriert) -> q -> enter -> Lobby, Prozess LEBT:**
+   `bin/bt .` mit `HOME` auf temp-Config (`repos: [.../beans-tui-repository]`).
+   `q` zeigt Modal "Really quit bt?" / Hint "enter: go to lobby   esc: cancel".
+   `enter` -> Lobby-View erscheint (Repo-Tabelle mit `14/68`), `ps -ef`
+   zeigt den `bt`-Prozess weiterhin laufend (PID 78384).
+2. **Lobby (client==nil, Kaltstart) -> q -> enter -> Exit, sauber:**
+   `bin/bt` OHNE Pfad-Arg, cwd AUSSERHALB jedes Repos, 2 Repos in
+   config.yaml (`decideStartup` -> `startupLobby`, `client==nil`) --
+   Footer zeigt `esc/q:quit` (lobbyBackHint bestaetigt `client==nil`).
+   `q` -> Modal "enter: quit   esc: cancel" (NICHT "go to lobby",
+   korrekt -- Stufe 2). `enter` -> Prozess beendet, Terminal sauber
+   restauriert (leerer Pane, Shell-Prompt zurueck), `ps -ef` findet
+   KEINEN `bt`-Prozess mehr, `tmux list-panes` zeigt `pane_dead=0`
+   (Pane selbst lebt weiter, kein Zombie).
+3. **esc am Confirm bricht ab (unveraendert):** aus Browse `q` dann
+   `esc` -> Modal verschwindet, Browse-View unveraendert sichtbar,
+   Prozess laeuft weiter (`ps -ef` zeigt PID 78967 aktiv). Danach mit
+   `ctrl+c` (Hard-Quit, bt-7jr8-Kontrakt) sauber beendet.
+4. **Randfall (keine Repos konfiguriert) -> q -> enter -> Exit direkt:**
+   `bin/bt <repo-pfad>` mit `HOME` auf leeres Config-Verzeichnis (kein
+   `config.yaml`, `ls $HOME/.config/beans-tui/` leer). `q` zeigt "enter:
+   quit" (kein Lobby-Hint, korrekt). `enter` -> Prozess terminiert SOFORT
+   (kein Lobby-Zwischenstopp), Shell-Prompt "took 4s" zurueck, `ps -ef`
+   findet keinen Prozess mehr.
+
+Temp-HOME-Setup (dokumentiert fuer Reproduzierbarkeit): 2
+Scratch-`$HOME`-Verzeichnisse mit je eigenem `~/.config/beans-tui/config.yaml`
+(eins mit 1-2 Repo-Eintraegen, eins ganz ohne Datei) via `tmux new-session`
++ `export HOME=...` + `cd <nicht-repo-dir>` fuer den Kaltstart-Fall. Alle
+4 Szenarien real durchgespielt, keine Unit-only-Abgrenzung noetig.
+
+## Deviations / ERRATA
+
+**ERRATUM (2026-07-16, Agent) -- Randfall-Bestaetigung, keine Abweichung
+vom Plan:** Der im bean-Text bereits dokumentierte Randfall ("Direktstart
+ohne konfigurierte Repos -> q+enter beendet direkt") wurde 1:1 wie
+spezifiziert umgesetzt (`len(m.settings.Repos) > 0`-Guard) -- keine
+Code-Abweichung vom PO-/Planner-Wortlaut. Einzige Ergaenzung: das geteilte
+`quitBoxWillGoToLobby()`-Praedikat (Planner-Sketch hatte die Bedingung
+inline in `keyConfirmQuit` UND implizit nochmal in der Hint-Logik --
+waere ohne Extraktion ein Duplikat mit Drift-Risiko gewesen; keine
+Verhaltensaenderung, nur DRY).
+
+**ERRATUM (Test-Design):** Die TDD-Schritte (b)+(c)+(d) liessen sich
+NICHT alle vier als reines RED/GREEN zeigen -- (c) und (d) waren gegen
+den ALTEN Code (unbedingtes `tea.Quit`) bereits zufaellig gruen, weil der
+Alt-Code IMMER quittete (die neuen Faelle unterscheiden sich vom Alt-Code
+nur in Fall (b), wo die Kaskade jetzt zur Lobby statt zum Exit fuehrt).
+Echtes RED gab es nur fuer (a) Text-Fix, (b) Lobby-Abzweigung und den
+Hint-Text-Subtest "stage 1". Dokumentiert statt stillschweigend als "TDD
+komplett befolgt" behauptet.
+
+## Notes for bt-d8kc (Header/Footer-Neuspezifikation R2)
+
+Kein Handlungsbedarf fuer bt-d8kc: Der Header/Footer zeigt weiterhin nur
+`q:quit` als KEY-Label (`keymap.go` `keys.Quit`, `globalBindings()`) --
+das bleibt korrekt, weil es den KEY beschreibt ("q oeffnet den
+Quit-Flow"), nicht das SOFORTIGE Ergebnis. Die neue Kaskaden-Nuance
+("geht evtl. erst zur Lobby") ist bereits vollstaendig im Confirm-Modal
+selbst geloest (`quitBox()`s eigene kontextsensitive Hint-Zeile, B08
+Planner-Zusatz) -- KEINE Aenderung an `globalBindings()`/Footer-Texten
+noetig oder gewuenscht. Falls T8 den Header/Footer ohnehin neu
+zusammenstellt: `q:quit` als Wortlaut unveraendert uebernehmen, keine
+neue "q: quit/lobby"-Doppel-Beschriftung noetig.
+
+## Voll-Gate-Beleg (Abschluss)
+
+- Build: `command go build -o bin/bt .` gruen
+- `gofmt -l .` leer, `command go vet ./...` leer
+- Goldens (tree/backlog/chrome, ohne `-update`): alle PASS, unveraendert
+- `command go test ./... -count=1`: 2x GRUEN (internal/tui 137.46s, 139.06s)
+- `command go test ./... -race -count=1`: GRUEN (internal/tui 139.06s)
+- Commit: `ce3200a` `fix(tui): PF-16 zweistufiger Quit-Flow ueber Lobby + Text-Fix (B08)`
