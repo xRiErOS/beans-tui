@@ -1,11 +1,11 @@
 ---
 # bt-r92i
 title: T2 — Tag-Management-Page Grundgerüst (read-only)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:24Z
-updated_at: 2026-07-16T15:44:24Z
+updated_at: 2026-07-16T16:01:31Z
 parent: bt-362n
 blocked_by:
     - bt-49hh
@@ -172,3 +172,7 @@ rein lesend).
   `.beans-tags.yml` durch bloßes Öffnen · Goldens Gegenbeleg grün ·
   tmux-Smoke 120+80 belegt · voller Lauf grün · Commit `feat(tui): E10
   Tag-Management-Page — Grundgerüst`.
+
+## PRELUDE aus T1-Review (2026-07-16, F03, low)
+
+Als erster eigener Commit (test-only): `TestLoadTagDefsSkipsInvalidNamesDefensively` (internal/data/tagdefs_test.go:25-34) — der dritte YAML-Eintrag (leerer Scalar) wird von yaml.v3 schon VOR dem Unmarshal verworfen (empirisch len(f.Tags)==2, nicht 3); der Test beweist damit nur die Bad_Tag-Filterung, nicht den Leer-String-Fall. Test um einen echten Leer-String ergänzen, der bis zum Filter durchreicht (z.B. YAML-Zeile `- ""`).

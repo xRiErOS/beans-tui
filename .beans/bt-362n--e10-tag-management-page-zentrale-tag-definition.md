@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-16T15:39:48Z
+updated_at: 2026-07-16T16:01:21Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
@@ -256,3 +256,7 @@ Floating-Overlay ist.
 
 Volle Herleitung, Akzeptanzkriterien, TDD-/Golden-/tmux-Vorgaben je Task:
 `docs/plans/tag-management/epic-E10-plan.md`.
+
+## Review-Merkposten aus T1 (2026-07-16, F04 — gilt für T3-T6)
+
+SaveTagDefs/Add|Remove|RenameTagDefName validieren bewusst NICHT gegen ValidTagName (nur LoadTagDefs filtert defensiv) — Validierung gehört an die Eingabegrenze (D11, bean bt-49hh Notes). PFLICHT für jeden T3-T6-Reviewer: sicherstellen, dass jeder neue Aufrufer vor SaveTagDefs tatsächlich validiert.

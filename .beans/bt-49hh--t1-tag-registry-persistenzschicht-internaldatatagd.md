@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:20Z
-updated_at: 2026-07-16T15:48:13Z
+updated_at: 2026-07-16T16:01:21Z
 parent: bt-362n
 ---
 
@@ -249,3 +249,11 @@ Abweichung vom Spezifizierten.
 - `.beans-tags.yml` existiert in diesem Repo NICHT (nach Task-Ende sauber
   entfernt) — T2/T3/T4/T6s eigene tmux-Smokes starten alle bei einer
   leeren/fehlenden Registry (LoadTagDefs liefert `(nil, nil)`).
+
+## Review-Findings (2026-07-16, T1-Review, Verdict APPROVED)
+
+5 low-Findings, kein Blocker. Hier verankert:
+- **F01:** Commit-Titel b318839 hat 53 Zeichen (Limit 50) — kosmetisch, keine Historie-Neuschreibung (Risiko>Nutzen). Merkregel an alle Folge-Implementer: Titel-Länge vor Commit prüfen.
+- **F02 (Trade-off-Doku, nachgetragen):** SaveTagDefs schreibt via direktem os.WriteFile, NICHT atomar (kein temp+rename) — akzeptierter Trade-off: mirrort das bestehende Muster in internal/config/settings.go:167/state.go:79 (kein neues Risiko im Repo), und D02s tolerant-corrupt-Load degradiert einen Crash mitten im Write zu leerer Registry statt Panic.
+- **F05:** updated_at war beim Abschluss-Commit stale — durch dieses Update nachgezogen.
+- F03 → Prelude an T2 (bt-r92i), F04 → Merkposten am Epic (bt-362n).
