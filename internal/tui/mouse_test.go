@@ -853,19 +853,32 @@ func TestMouseDetailClickReachableFromBacklogView(t *testing.T) {
 	}
 }
 
-// TestDetailClickBacklogThreeLineFooterAt80Cols pins clickPaneGeometry's
-// dynamic footH (lipgloss.Height(localKeys)+2, mouse.go) against the ONE
-// real situation where it differs between the two chromes: the Backlog view
-// at 80 columns, whose Q06 footer list + Sort wraps to THREE lines while the
-// Browse footer stays at two (bt-d8kc Deviations, "Backlog-Footer 3 Zeilen
-// bei 80 Spalten"). Every other clickPaneGeometry/detail-click test runs at
-// Width 100, where both footers are 2 lines -- a detailClickRow that picked
-// the WRONG chrome (browseRepoChrome instead of backlogChrome) or hardcoded
-// a 2-line footer would have passed all of them (E8-T8-Review I01, bean
-// bt-6ppq). The pin is the click/render boundary pair: the LAST real body
-// row must hit, the pane's bottom-border row (one below) must not -- off by
-// one in footH breaks exactly one of the two.
-func TestDetailClickBacklogThreeLineFooterAt80Cols(t *testing.T) {
+// TestDetailClickBacklogFooterAt80Cols pins clickPaneGeometry's dynamic
+// footH (lipgloss.Height(localKeys)+2, mouse.go) at the 80-column boundary
+// width -- LESSONS-LEARNED Eintrag 4's own Grenzbreiten precedent (wrap bugs
+// are structurally invisible at "comfortable" 100/120-column widths, only a
+// boundary-width render exposes them).
+//
+// RENAMED/RE-GROUNDED by D02 (bean bt-tct9/bt-1e0t, PO-bestätigt Option b +
+// Präzisierung, 2026-07-16): this test used to be named
+// …ThreeLineFooterAt80Cols and existed specifically because the Backlog
+// footer's Q06 list + Sort wrapped to THREE lines at 80 columns while the
+// Browse footer stayed at two (bt-d8kc Deviations) -- the ONE situation
+// where clickPaneGeometry's two callers (treeClickRow/backlogClickRow)
+// differed, so a detailClickRow that picked the WRONG chrome or hardcoded a
+// 2-line footer would have passed every OTHER clickPaneGeometry test (all
+// of which run at Width 100, both chromes 2 lines) yet failed here (E8-T8-
+// Review I01, bean bt-6ppq). D02 removes Sort from the Backlog footer, so
+// backlogLocalBindings() is now IDENTICAL to browseRepoLocalBindings() --
+// the Backlog footer is 2 lines at 80 columns too, and that discriminating
+// divergence is gone for good (documented here, not silently dropped): a
+// wrong-chrome bug can no longer be caught by a height mismatch at this
+// width. What remains valuable and is still pinned below: the dynamic footH
+// mechanism itself (footerY == originY+bodyH+2, computed from the REAL
+// rendered backlogChrome footer, not a hardcoded constant) and the click/
+// render boundary pair at the Grenzbreite -- the LAST real body row must
+// hit, the pane's bottom-border row (one below) must not.
+func TestDetailClickBacklogFooterAt80Cols(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	m = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 30})
 	m.view = viewBacklog
@@ -879,30 +892,29 @@ func TestDetailClickBacklogThreeLineFooterAt80Cols(t *testing.T) {
 	// section body is guaranteed taller than the pane) + BODY section open:
 	// the accordion content extends past the pane bottom, so a click below
 	// the last body row has real content to (wrongly) resolve to if footH
-	// under-counts the 3-line footer.
+	// under-counts the footer.
 	vis[0].Body = strings.Repeat("body filler line\n\n", 30)
 	m.accOpen = bodySectionIdx + 1
 
-	// Preconditions (fixture reality, not the behavior under test): the
-	// Backlog footer at 80 cols spans 3 lines, the Browse footer only 2 --
-	// exactly the divergence that gives this test its discriminating power.
-	// If a future footer respec changes either height, update the fixture
-	// (e.g. a narrower width) so the 3-vs-2 divergence is preserved.
+	// Precondition (fixture reality, not the behavior under test, post-D02):
+	// the Backlog and Browse footers are now BOTH 2 lines at 80 cols (D02
+	// collapsed the former 3-vs-2 divergence -- see doc comment above). If a
+	// future footer respec changes this, update the assertion below.
 	head, localKeys := m.backlogChrome(m.width - 2)
-	if got := lipgloss.Height(localKeys); got != 3 {
-		t.Fatalf("precondition: backlog footer at 80 cols = %d lines, want 3", got)
+	if got := lipgloss.Height(localKeys); got != 2 {
+		t.Fatalf("precondition: backlog footer at 80 cols = %d lines, want 2 (post-D02, matches Browse)", got)
 	}
 	if _, browseKeys := m.browseRepoChrome(m.width - 2); lipgloss.Height(browseKeys) != 2 {
-		t.Fatalf("precondition: browse footer at 80 cols = %d lines, want 2 (divergence vs backlog is what this test exercises)", lipgloss.Height(browseKeys))
+		t.Fatalf("precondition: browse footer at 80 cols = %d lines, want 2", lipgloss.Height(browseKeys))
 	}
 
 	bodyH, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
 
 	// Render-grounded anchor: locate the footer's first line (Q06 order
 	// starts with "tab focus in"; renderBindings glues key/desc with NBSP)
-	// in the REAL View() and assert the geometry accounts for all three
-	// footer lines: pane bottom border + divider sit between the last body
-	// row and the footer (the status line renders BELOW the footer), so
+	// in the REAL View() and assert the geometry accounts for both footer
+	// lines: pane bottom border + divider sit between the last body row and
+	// the footer (the status line renders BELOW the footer), so
 	// footerY == originY + bodyH + 2.
 	lines := screenLines(m)
 	footerY := -1
@@ -931,19 +943,19 @@ func TestDetailClickBacklogThreeLineFooterAt80Cols(t *testing.T) {
 	tm, _ := m.handleMouse(click)
 	nm := tm.(model)
 	if !nm.detailFocus || nm.secCursor != bodySectionIdx {
-		t.Fatalf("click on the LAST body row (Y=%d): detailFocus=%v secCursor=%d, want true/%d (footH over-counts the 3-line footer?)", borderY-1, nm.detailFocus, nm.secCursor, bodySectionIdx)
+		t.Fatalf("click on the LAST body row (Y=%d): detailFocus=%v secCursor=%d, want true/%d (footH over-counts the footer?)", borderY-1, nm.detailFocus, nm.secCursor, bodySectionIdx)
 	}
 
 	// The pane's bottom-border row and the footer row itself must NOT
-	// resolve to any Detail hit (clickRow >= bodyH) -- with a 2-line footH
-	// assumption the border row falls back INSIDE bodyH and lands in the
+	// resolve to any Detail hit (clickRow >= bodyH) -- an under-counted
+	// footH would let the border row fall back INSIDE bodyH and land in the
 	// open BODY body (the bug class this test pins).
 	for _, y := range []int{borderY, footerY} {
 		click := tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: x, Y: y}
 		tm, _ := m.handleMouse(click)
 		nm := tm.(model)
 		if nm.detailFocus {
-			t.Fatalf("click below the pane (Y=%d) must not resolve to a Detail hit (footH under-counts the 3-line footer)", y)
+			t.Fatalf("click below the pane (Y=%d) must not resolve to a Detail hit (footH under-counts the footer)", y)
 		}
 	}
 }

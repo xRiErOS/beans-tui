@@ -541,40 +541,51 @@ func TestBacklogChromeFooterShowsFocusInFocusOut(t *testing.T) {
 	}
 }
 
-// TestBacklogChromeFooterMatchesQ06ListPlusSort guards Q06's finale,
-// PO-verbatim Footer-Liste PLUS the Planner-Entscheidung (bean bt-d8kc,
-// ERRATUM vs. the literal Q06 wording, which never mentions Sort since
-// Backlog is the only view Sort applies to): Sort stays ADDITIONALLY at the
-// end, a Backlog-exclusive extra, not withdrawn without explicit PO
-// instruction.
-func TestBacklogChromeFooterMatchesQ06ListPlusSort(t *testing.T) {
+// TestBacklogChromeFooterMatchesQ06List guards Q06's finale, PO-verbatim
+// Footer-Liste (mirrors TestBrowseRepoChromeFooterMatchesQ06List,
+// view_browse_repo_test.go, EXACTLY -- D02, bean bt-tct9/bt-1e0t,
+// PO-bestätigt Option b + Präzisierung, 2026-07-16, SUPERSEDES the former
+// TestBacklogChromeFooterMatchesQ06ListPlusSort/bean bt-d8kc ERRATUM: Sort
+// no longer appends to the Backlog footer, S stays functional but moves to
+// Help-overlay-only documentation). backlogChrome's footer is now BYTE-
+// IDENTICAL to browseRepoChrome's -- both render browseRepoLocalBindings()
+// verbatim, no per-view divergence left.
+func TestBacklogChromeFooterMatchesQ06List(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	_, localKeys := m.backlogChrome(500) // wide enough for the whole list on one line
 	plain := stripHint(localKeys)
-	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking · S Sort"
+	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking"
 	if plain != want {
 		t.Errorf("backlogChrome footer = %q, want exactly %q", plain, want)
 	}
 }
 
-// TestBacklogLocalBindingsIncludesSort is the direct binding-list guard
-// (bean bt-d8kc TDD-Schritte, named explicitly): backlogLocalBindings()
-// carries keys.Sort, browseRepoLocalBindings() (the Tree's own list) does
-// NOT -- Sort is Backlog-exclusive (sortBacklog/nextBacklogSort have no Tree
-// analog).
-func TestBacklogLocalBindingsIncludesSort(t *testing.T) {
-	found := false
-	for _, b := range backlogLocalBindings() {
-		if strings.Join(b.Keys(), ",") == strings.Join(keys.Sort.Keys(), ",") {
-			found = true
-		}
+// TestBacklogLocalBindingsOmitsSort is the direct binding-list guard (D02,
+// bean bt-1e0t TDD-Schritte, named explicitly) -- SUPERSEDES the former
+// TestBacklogLocalBindingsIncludesSort (pre-D02, bean bt-d8kc), which
+// asserted the exact OPPOSITE (Sort as a deliberate Backlog-exclusive
+// footer addition). PO-bestätigt D02 (bean bt-tct9, Option b + Präzisierung)
+// reverses that call: `S Sort` flies out of the Backlog footer entirely --
+// backlogLocalBindings() now returns browseRepoLocalBindings() UNCHANGED,
+// no appended Sort. The key stays fully functional (keyBacklog's Sort case,
+// below, untouched) and stays documented -- just Help-overlay-only now
+// (helpGroups(), keymap.go, already lists it under "Actions", no change
+// needed there). Neither view-local footer list carries it any more, so a
+// single loop suffices (no split browseRepoLocalBindings() assertion left
+// to make, both lists are now identical on this point).
+func TestBacklogLocalBindingsOmitsSort(t *testing.T) {
+	cases := []struct {
+		name string
+		list []keybind.Binding
+	}{
+		{"backlogLocalBindings", backlogLocalBindings()},
+		{"browseRepoLocalBindings", browseRepoLocalBindings()},
 	}
-	if !found {
-		t.Fatalf("backlogLocalBindings() = %v, want it to include keys.Sort %v", backlogLocalBindings(), keys.Sort.Keys())
-	}
-	for _, b := range browseRepoLocalBindings() {
-		if strings.Join(b.Keys(), ",") == strings.Join(keys.Sort.Keys(), ",") {
-			t.Error("browseRepoLocalBindings() unexpectedly includes keys.Sort -- Sort is Backlog-exclusive")
+	for _, c := range cases {
+		for _, b := range c.list {
+			if strings.Join(b.Keys(), ",") == strings.Join(keys.Sort.Keys(), ",") {
+				t.Errorf("%s() unexpectedly includes keys.Sort -- D02 moved Sort to Help-overlay-only (bean bt-1e0t)", c.name)
+			}
 		}
 	}
 }

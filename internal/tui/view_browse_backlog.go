@@ -228,21 +228,37 @@ func (m model) backlogChrome(innerW int) (head, localKeys string) {
 // backlogLocalBindings is the Backlog view's own Footer Zone 3 local set --
 // D06+Q06 (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc) REBUILD this from
 // scratch, superseding PF-11's list, mirroring browseRepoLocalBindings'
-// exact Q06 order (view_browse_repo.go) PLUS Sort appended at the end.
+// exact Q06 order (view_browse_repo.go) verbatim.
 //
-// ERRATUM vs. Q06's literal wording (bean bt-d8kc, documented Planner-
-// Entscheidung, not a silent omission): Q06's PO-verbatim list is phrased
-// once for BOTH Browse and Backlog and never mentions Sort (`S`) -- Sort has
-// no Tree analog (sortBacklog/nextBacklogSort are Backlog-only), so the
-// shared list simply never had occasion to name it. Sort stays a
-// Backlog-EXCLUSIVE addition here rather than being silently dropped: it is
-// a pre-existing, frequently-used, currently-visible feature, and no PO
-// instruction asked for its removal ("kein Entzug ohne PO-Anweisung").
-// Filter (already shown here pre-T7) is no longer an asymmetry vs. Tree --
-// Q06's list adds it to Tree too now, reconciling the two lists' shape
-// except for this one documented Sort exception.
+// D02 (design-spec.md §15 PF-17, bean bt-tct9/bt-1e0t, PO-bestätigt Option b
+// + Präzisierung, 2026-07-16) SUPERSEDES the former ERRATUM below: the
+// Backlog footer previously appended `keys.Sort` as a documented Backlog-
+// exclusive addition (bean bt-d8kc) so the feature stayed discoverable
+// without a PO instruction to remove it. The PO has now given that
+// instruction explicitly: "'S Sort' fliegt aus dem Backlog-Footer; die
+// S-Taste bleibt funktional, wird aber NUR im Help-Overlay ('?')
+// dokumentiert." `S` stays fully wired (keyBacklog's Sort case, unchanged,
+// below) and stays documented -- just Help-overlay-only now (helpGroups(),
+// keymap.go, already lists it under "Actions", untouched by this change).
+// The runtime state indicator (`· sort <modus>` search-line suffix,
+// treeSearchLine, view_browse_repo.go, E8/D02) is unaffected -- it was
+// always the primary visible surface for the active sort mode, the footer
+// entry was a secondary discoverability aid the PO judged unnecessary.
+// Trigger: at <82 columns the old 14-entry list (13 + Sort) wrapped to
+// THREE footer lines where the Tree's 13-entry list stayed at two (D06
+// permits at most two) -- removing Sort restores parity with
+// browseRepoLocalBindings, both lists are now IDENTICAL.
+//
+// Former ERRATUM text (historical, superseded by D02 above, kept for
+// audit trail): "Q06's PO-verbatim list is phrased once for BOTH Browse and
+// Backlog and never mentions Sort (`S`) -- Sort has no Tree analog
+// (sortBacklog/nextBacklogSort are Backlog-only), so the shared list simply
+// never had occasion to name it. Sort stays a Backlog-EXCLUSIVE addition
+// here rather than being silently dropped: it is a pre-existing,
+// frequently-used, currently-visible feature, and no PO instruction asked
+// for its removal ('kein Entzug ohne PO-Anweisung')."
 func backlogLocalBindings() []keybind.Binding {
-	return append(append([]keybind.Binding{}, browseRepoLocalBindings()...), keys.Sort)
+	return browseRepoLocalBindings()
 }
 
 // viewBacklog renders the two-pane master-detail Backlog view -- mirrors
