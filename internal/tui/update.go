@@ -1140,7 +1140,7 @@ func (m model) focusedBean() *data.Bean {
 	default: // viewBrowseRepo (T8)
 		nodes := m.visibleNodes()
 		pos := m.cursorPos(nodes)
-		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan {
+		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan || nodes[pos].placeholder {
 			return nil
 		}
 		return nodes[pos].bean

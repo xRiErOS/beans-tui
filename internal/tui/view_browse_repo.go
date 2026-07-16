@@ -10,6 +10,7 @@ package tui
 // view_browse_project.go:382-398).
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -32,6 +33,18 @@ type treeNode struct {
 	hasKids bool
 	open    bool
 	orphan  bool // true only for the synthetic orphan-root node itself
+
+	// placeholder + hiddenCount (D01, bean bt-39cl): a synthetic, non-
+	// selectable hint row rendered as the ONLY child of an expanded node
+	// whose Direct-Children are ALL filtered out by the archive default
+	// (filteredBeanNode's own archiveOnly branch, below) -- "the marker
+	// lies otherwise" (D01 PO-Wortlaut): the expand marker stays ▾ (the
+	// epic DOES have children), this row explains WHY none of them render.
+	// id is deliberately left "" -- never a legitimate cursor target
+	// (treeCursorMove/skipPlaceholder skip it structurally instead of
+	// relying on a sentinel ID nobody could accidentally collide with).
+	placeholder bool
+	hiddenCount int // N = count of direct children hidden by the archive default (D01 "Zählwert N")
 }
 
 // flattenTree walks idx depth-first (Roots() -> Children, expand-state from
@@ -198,7 +211,16 @@ func collectCycleOrphans(idx *data.Index, orphans []*data.Bean) []*data.Bean {
 // silently-bypassed predicate").
 func (m model) visibleNodes() []treeNode {
 	if m.treeActive() || !m.showArchived {
-		return flattenTreeFiltered(m.idx, m.expanded, m.beanMatches)
+		// archiveOnly (D01, bean bt-39cl): true iff the filtered flattening
+		// is reached ONLY because of the archive default (no search/facet
+		// narrowing) -- exactly the `!m.treeActive()` half of this very
+		// condition. Gates filteredBeanNode's Voll-Verdeckungs-Platzhalter
+		// so it renders ONLY in the pure archive-default view -- "bei
+		// aktiver Suche/Facette gilt der bestehende Pfad" (D01 Implementer-
+		// Vorgabe, scope-guard against Scope-Creep into the search/facet
+		// case, which already has its own, unrelated "0 sichtbare
+		// Kinder"-story: the collapsed-context-row devd-DD2-178 parity).
+		return flattenTreeFiltered(m.idx, m.expanded, m.beanMatches, !m.treeActive())
 	}
 	return flattenTree(m.idx, m.expanded)
 }
@@ -245,7 +267,7 @@ func (m model) beanMatchesSearch(b *data.Bean) bool {
 // Every real root, the orphan bucket, AND the cycle-bean sweep go through
 // the SAME predicate: an orphan/cycle bucket with zero matches is omitted
 // entirely, matching entries render exactly like the unfiltered tree.
-func flattenTreeFiltered(idx *data.Index, expanded map[string]bool, match func(*data.Bean) bool) []treeNode {
+func flattenTreeFiltered(idx *data.Index, expanded map[string]bool, match func(*data.Bean) bool, archiveOnly bool) []treeNode {
 	if idx == nil {
 		return nil
 	}
@@ -253,7 +275,7 @@ func flattenTreeFiltered(idx *data.Index, expanded map[string]bool, match func(*
 	var nodes []treeNode
 	ancestors := map[string]bool{}
 	for _, b := range idx.Roots() {
-		if ns, hit := filteredBeanNode(idx, b, 0, expanded, ancestors, match); hit {
+		if ns, hit := filteredBeanNode(idx, b, 0, expanded, ancestors, match, archiveOnly); hit {
 			nodes = append(nodes, ns...)
 		}
 	}
@@ -262,7 +284,7 @@ func flattenTreeFiltered(idx *data.Index, expanded map[string]bool, match func(*
 	cycles := collectCycleOrphans(idx, orphans)
 	var orphanNodes []treeNode
 	for _, b := range orphans {
-		if ns, hit := filteredBeanNode(idx, b, 1, expanded, ancestors, match); hit {
+		if ns, hit := filteredBeanNode(idx, b, 1, expanded, ancestors, match, archiveOnly); hit {
 			orphanNodes = append(orphanNodes, ns...)
 		}
 	}
@@ -296,7 +318,7 @@ func flattenTreeFiltered(idx *data.Index, expanded map[string]bool, match func(*
 // flattenTreeFiltered's own doc comment). ancestors guards a Parent-cycle
 // exactly like appendBeanNode's own defensive guard (only threaded through
 // the EXPANDED/recursing branch, mirroring appendBeanNode).
-func filteredBeanNode(idx *data.Index, b *data.Bean, depth int, expanded map[string]bool, ancestors map[string]bool, match func(*data.Bean) bool) ([]treeNode, bool) {
+func filteredBeanNode(idx *data.Index, b *data.Bean, depth int, expanded map[string]bool, ancestors map[string]bool, match func(*data.Bean) bool, archiveOnly bool) ([]treeNode, bool) {
 	if ancestors[b.ID] {
 		return nil, false
 	}
@@ -315,7 +337,7 @@ func filteredBeanNode(idx *data.Index, b *data.Bean, depth int, expanded map[str
 	var childNodes []treeNode
 	anyChildHit := false
 	for _, c := range children {
-		if ns, hit := filteredBeanNode(idx, c, depth+1, expanded, ancestors, match); hit {
+		if ns, hit := filteredBeanNode(idx, c, depth+1, expanded, ancestors, match, archiveOnly); hit {
 			anyChildHit = true
 			childNodes = append(childNodes, ns...)
 		}
@@ -325,7 +347,28 @@ func filteredBeanNode(idx *data.Index, b *data.Bean, depth int, expanded map[str
 	if !self && !anyChildHit {
 		return nil, false
 	}
-	nodes := append([]treeNode{{id: b.ID, bean: b, depth: depth, hasKids: len(children) > 0, open: true}}, childNodes...)
+	nodes := []treeNode{{id: b.ID, bean: b, depth: depth, hasKids: len(children) > 0, open: true}}
+
+	// D01 (bean bt-39cl) Voll-Verdeckungs-Fall: node is open, HAS children
+	// structurally, but every single one of them was filtered out (anyChildHit
+	// false) -- WITHOUT this branch the marker would render ▾ (hasKids=true,
+	// self alone kept the parent visible) yet zero rows would follow it, the
+	// exact "Marker lügt" bug the Investigation traced to filteredBeanNode.
+	// archiveOnly scopes this to the pure archive-default view (visibleNodes'
+	// own doc comment) -- when it's false (search/facet narrowing active),
+	// the pre-existing behavior (silently zero child rows) is left as-is,
+	// deliberately out of scope (D01 Implementer-Vorgabe).
+	if archiveOnly && len(children) > 0 && !anyChildHit {
+		hidden := 0
+		for _, c := range children {
+			if !match(c) {
+				hidden++
+			}
+		}
+		nodes = append(nodes, treeNode{depth: depth + 1, placeholder: true, hiddenCount: hidden})
+	} else {
+		nodes = append(nodes, childNodes...)
+	}
 	return nodes, true
 }
 
@@ -393,8 +436,35 @@ func (m model) treeCursorMove(nodes []treeNode, delta int) model {
 	if pos > len(nodes)-1 {
 		pos = len(nodes) - 1
 	}
+	pos = skipPlaceholder(nodes, pos, delta)
 	m.cursorID = nodes[pos].id
 	return m
+}
+
+// skipPlaceholder (D01, bean bt-39cl -- Implementer-Entscheidung: NICHT
+// selektierbar, Cursor überspringt statt No-Op, siehe bean Notes) advances
+// pos in delta's own direction past any archive-hint placeholder row
+// (filteredBeanNode, above) -- a pure hint, never a legitimate cursor
+// target. Falls back to scanning the OPPOSITE direction once delta's own
+// direction runs off the list end (placeholder sitting as the very last
+// visible row, its parent epic being the last root) -- guaranteed to
+// terminate: index 0 can never be a placeholder (it always immediately
+// follows its own parent's row, appendBeanNode/filteredBeanNode's shared
+// depth-first order), so a backward scan always finds real ground.
+func skipPlaceholder(nodes []treeNode, pos, delta int) int {
+	if delta == 0 {
+		delta = 1
+	}
+	step := delta
+	for nodes[pos].placeholder {
+		next := pos + step
+		if next < 0 || next >= len(nodes) {
+			step = -step
+			next = pos + step
+		}
+		pos = next
+	}
+	return pos
 }
 
 // treeNodeMarker returns the expand marker (▾ open / ▸ closed / blank leaf).
@@ -413,6 +483,14 @@ func treeNodeMarker(n treeNode) string {
 func treeRowText(n treeNode) string {
 	indent := strings.Repeat("  ", n.depth)
 	marker := treeNodeMarker(n)
+	if n.placeholder {
+		// D01 (bean bt-39cl): "N archiviert — f→Archive", theme.Muted (the
+		// existing Hint-Ton convention, e.g. Overlay-Hints) -- gedimmt, per
+		// PO-Wortlaut. hasKids is zero-value false on a placeholder node, so
+		// treeNodeMarker already returned the blank "  " above -- same width
+		// as every ▾/▸ marker, no layout shift (B03 precedent).
+		return indent + marker + theme.Muted.Render(fmt.Sprintf("%d archiviert — f→Archive", n.hiddenCount))
+	}
 	if n.orphan {
 		return indent + marker + theme.Dim.Render("(orphaned)")
 	}

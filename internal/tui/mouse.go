@@ -231,6 +231,12 @@ func (m model) mouseTreeClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m.mouseDetailClick(msg)
 	}
 	n := nodes[idx]
+	if n.placeholder {
+		// D01 (bean bt-39cl): the archive-hint row is non-selectable -- a
+		// click on it is a No-Op (mirrors skipPlaceholder's keyboard-side
+		// decision: it is never a legitimate cursor target).
+		return m, nil
+	}
 	m.cursorID = n.id
 
 	// Doppelklick = zweiter Klick auf DENSELBEN Node-Index innerhalb des
