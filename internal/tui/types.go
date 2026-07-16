@@ -247,12 +247,32 @@ type model struct {
 	// are the free-text new-tag sub-mode (`n`), mirroring searchInput's
 	// "one persistent textinput.Model, reset+focused on open" convention
 	// (openSearchInput).
-	tagItems       []tagCount
-	tagOriginal    map[string]bool
-	tagPending     map[string]bool
-	tagInput       textinput.Model
-	tagInputActive bool
-	tagInputErr    string
+	//
+	// Typeahead (bean bt-9ipw): tagInputFiltered is tagItems narrowed by a
+	// case-insensitive substring match against tagInput's live value
+	// (filterTagItems, mirrors filteredRepos()'s "empty query -> full list"
+	// contract, view_lobby.go) -- recomputed only when the input's value
+	// actually changes (openTagInput seeds it once on open, keyTagInput
+	// recomputes on every value-changing keystroke). tagInputSuggestCursor
+	// is a plain int cursor over tagInputFiltered (NOT a listState -- the
+	// plan's own »Item 7« text calls for a bare field here), reset to 0
+	// whenever tagInputFiltered is recomputed. Deliberately intercepted via
+	// the RAW tea.KeyUp/tea.KeyDown KeyType in keyTagInput, NEVER via
+	// navKey's letter-alias table (keys.Up/keys.Down also bind "i"/"k") --
+	// this is a free-text capture field, so "i"/"k" must stay literal,
+	// typeable characters (e.g. a tag named "risk"). keyLobby's own
+	// repoQuery filter routes navKey() BEFORE its textinput update and thus
+	// SWALLOWS typed "i"/"k"/"j"/"l" -- that is an EXISTING BUG there (bean
+	// bt-l8e7), NOT a precedent to follow; the raw-KeyType intercept here is
+	// the correct pattern for any free-text field with nav keys.
+	tagItems              []tagCount
+	tagOriginal           map[string]bool
+	tagPending            map[string]bool
+	tagInput              textinput.Model
+	tagInputActive        bool
+	tagInputErr           string
+	tagInputFiltered      []tagCount
+	tagInputSuggestCursor int
 
 	// Parent-Picker `a` (E3 Task 3, bean bt-p1uz, box_picker_parent.go):
 	// parentItems is the row list built fresh at open time

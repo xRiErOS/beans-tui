@@ -250,23 +250,66 @@ func (m model) toggleTagPending() model {
 }
 
 // openTagInput enters the free-text new-tag capture sub-mode (port
-// openSearchInput's convention: reset value, focus, blink).
+// openSearchInput's convention: reset value, focus, blink). Typeahead (bean
+// bt-9ipw): tagInputFiltered is seeded from an EMPTY query -- filterTagItems
+// treats "" as "match everything" (mirrors filteredRepos()'s own contract,
+// view_lobby.go), so every existing tag is offered as a suggestion even
+// before the user types a single character; tagInputSuggestCursor starts at
+// the top row.
 func (m model) openTagInput() (tea.Model, tea.Cmd) {
 	m.tagInputActive = true
 	m.tagInputErr = ""
 	m.tagInput.SetValue("")
 	m.tagInput.Focus()
+	m.tagInputFiltered = filterTagItems(m.tagItems, "")
+	m.tagInputSuggestCursor = 0
 	return m, textinput.Blink
 }
 
-// keyTagInput drives the free-text new-tag input. enter validates against
-// data.ValidTagName: invalid -> tagInputErr is set and the input STAYS open
-// for a retry (no submit, plan »Task 2« Step 1: "invalider Name -> Inline-
-// Fehler, kein Submit"); valid -> the tag is added to tagItems (deduping
-// against an existing row, e.g. a name the picker's own count list already
-// carries) as pending=true, and the input closes. esc closes the input
-// WITHOUT touching the outer picker's pending/original state (only the
-// input sub-mode itself is discarded).
+// filterTagItems returns the subset of items whose tag contains query as a
+// case-insensitive substring (strings.Contains, deliberately NO fuzzy
+// scoring/Bleve -- YAGNI, bean bt-9ipw's own "Nicht jetzt" section). An
+// empty (or whitespace-only) query matches every row, preserving items' own
+// order -- items is already sorted via sortTagCountsDefinedFirst at every
+// call site (collectTagCounts/keyTagInput's new-tag insert), so the
+// suggestion list's order stays defined-first/count-desc/alpha throughout,
+// same as tagPickerBox's own row list.
+func filterTagItems(items []tagCount, query string) []tagCount {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return append([]tagCount(nil), items...)
+	}
+	out := make([]tagCount, 0, len(items))
+	for _, it := range items {
+		if strings.Contains(strings.ToLower(it.tag), q) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// keyTagInput drives the free-text new-tag/Typeahead input (bean bt-9ipw).
+// esc closes the input WITHOUT touching the outer picker's pending/original
+// state (only the input sub-mode itself is discarded). up/down move
+// tagInputSuggestCursor over tagInputFiltered, clamped to its bounds --
+// intercepted via the RAW tea.KeyUp/tea.KeyDown KeyType, NEVER via navKey's
+// letter-alias table ("i"/"k" must stay literal, typeable characters here;
+// keyLobby swallowing them in its repoQuery filter is an EXISTING BUG, bean
+// bt-l8e7, not a precedent -- full rationale in types.go's own doc-stamp).
+// enter branches on tagInputFiltered: non-empty ->
+// EXISTING-tag path, assigning the cursored suggestion to tagPending
+// (Copy-on-Write, mirrors toggleTagPending) with NO tagItems mutation and NO
+// Registry write (D11, the tag is already present); empty (no substring
+// match at all) -> TODAY's create-path, UNCHANGED from before Typeahead:
+// data.ValidTagName gates the submit (invalid -> tagInputErr set, input
+// STAYS open for a retry), a valid name is appended to tagItems (deduped)
+// and set pending=true. Every other key falls through to
+// m.tagInput.Update(msg); tagInputFiltered/tagInputSuggestCursor are
+// recomputed ONLY when that Update actually changed the input's value
+// (mirrors keyLobby's own prev/current repoQuery-changed guard,
+// view_lobby.go) -- a value-preserving keystroke (e.g. left/right cursor
+// movement inside the textinput) must not reset the suggestion cursor the
+// user just navigated to.
 func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
@@ -274,7 +317,38 @@ func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tagInput.Blur()
 		m.tagInputErr = ""
 		return m, nil
+	case tea.KeyUp:
+		if len(m.tagInputFiltered) > 0 {
+			m.tagInputSuggestCursor--
+			if m.tagInputSuggestCursor < 0 {
+				m.tagInputSuggestCursor = 0
+			}
+		}
+		return m, nil
+	case tea.KeyDown:
+		if len(m.tagInputFiltered) > 0 {
+			m.tagInputSuggestCursor++
+			if m.tagInputSuggestCursor >= len(m.tagInputFiltered) {
+				m.tagInputSuggestCursor = len(m.tagInputFiltered) - 1
+			}
+		}
+		return m, nil
 	case tea.KeyEnter:
+		if len(m.tagInputFiltered) > 0 {
+			tag := m.tagInputFiltered[m.tagInputSuggestCursor].tag
+			m.tagInputActive = false
+			m.tagInput.Blur()
+			m.tagInput.SetValue("")
+			m.tagInputErr = ""
+			out := cloneBoolMap(m.tagPending)
+			out[tag] = true
+			m.tagPending = out
+			if idx := tagItemIndex(m.tagItems, tag); idx >= 0 {
+				m.menu.cursor = idx
+			}
+			return m, nil
+		}
+
 		name := strings.TrimSpace(m.tagInput.Value())
 		if !data.ValidTagName(name) {
 			m.tagInputErr = "invalid tag name (a-z0-9, hyphen-separated, lowercase)"
@@ -304,8 +378,13 @@ func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	prev := m.tagInput.Value()
 	var cmd tea.Cmd
 	m.tagInput, cmd = m.tagInput.Update(msg)
+	if v := m.tagInput.Value(); v != prev {
+		m.tagInputFiltered = filterTagItems(m.tagItems, v)
+		m.tagInputSuggestCursor = 0
+	}
 	return m, cmd
 }
 
@@ -393,13 +472,40 @@ func (m model) tagPickerBox() string {
 	return modalPanel("Tags", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
 }
 
-// tagInputBox renders the free-text new-tag capture prompt.
+// tagInputBox renders the free-text new-tag/Typeahead capture prompt. The
+// hint line reflects enter's ACTUAL branch (keyTagInput's own doc-stamp):
+// "select" while tagInputFiltered has a suggestion to accept, "create" once
+// it's empty (no substring match). The suggestion list itself (bean
+// bt-9ipw) renders below the input, one line per tagInputFiltered row,
+// mirroring tagPickerBox's row shape (marker column + "▸" cursor + usage
+// count) so the two overlays read as one visual language.
 func (m model) tagInputBox() string {
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("enter:create  esc:cancel") + "\n\n")
+	hint := "enter:create  esc:cancel"
+	if len(m.tagInputFiltered) > 0 {
+		hint = "up/down:navigate  enter:select  esc:cancel"
+	}
+	b.WriteString(theme.Muted.Render(hint) + "\n\n")
 	b.WriteString(m.tagInput.View() + "\n")
 	if m.tagInputErr != "" {
 		b.WriteString("\n" + lipgloss.NewStyle().Foreground(theme.Red).Render(m.tagInputErr) + "\n")
+	}
+	if len(m.tagInputFiltered) > 0 {
+		b.WriteString("\n")
+		for i, it := range m.tagInputFiltered {
+			marker := " "
+			if it.defined {
+				marker = tagManagementMarkerStyle.Render(tagManagementMarkerGlyph)
+			}
+			cursor := "  "
+			label := it.tag
+			if i == m.tagInputSuggestCursor {
+				cursor = theme.Accent.Render("▸ ")
+				label = theme.Header.Render(label)
+			}
+			count := theme.Muted.Render(fmt.Sprintf(" (%d)", it.count))
+			b.WriteString(cursor + marker + " " + label + count + "\n")
+		}
 	}
 	return modalPanel("New tag", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
 }
