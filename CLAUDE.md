@@ -21,6 +21,7 @@ eine Autorität; v0.4.2 exponiert keine importierbaren Packages (alles `internal
 - Keymap Single Source: `internal/tui/keymap.go` — Help-Overlay wird daraus generiert.
 - Theme-Token nur aus `internal/theme/` (Catppuccin Macchiato, TrueColor) — keine Hex-Literale in Views.
 - Review-Flow-Konvention (gilt für **Epic-/Milestone-beans**): Tag `to-review` (Agent) → PO passt (`completed`) oder rejected (Tag `rework` + `## Review <datum>`-Body-Abschnitt). Agent setzt bei Epics/Milestones NIE `completed`. **Implementierungs-Task-beans** sind dagegen agent-abschließbar (completed nach grünen Tests + Review-Durchlauf) — Plan-Ritual in docs/plans/v1-port/implementation-plan.md.
+- **Footer-/Wrap-Änderungen brauchen einen tmux-Smoke bei Grenzbreite (80 Spalten)** — Unit-Tests bei 100/120 Spalten sehen Umbruch-Bugs strukturell nicht (NBSP-Wordwrap-Falle, E8/T8; Details docs/LESSONS-LEARNED.md Eintrag 4).
 - **Schneller Lauf:** `command go test ./... -short` — überspringt die sieben teuersten huh-drive-Tests in `internal/tui/box_confirm_create_test.go` (7-Felder-Create-Form-Drive über echte `tea.Update`-Roundtrips, je ~16-19s wegen huhs selbst-perpetuierender Blink-Tick-Cmds — `skipSlowHuhDriveInShortMode`, E3 Task 6/bean bt-ppzb). Bringt `internal/tui` von ~121s auf ~3-5s. Vor jedem Commit bleibt der VOLLE Lauf (ohne `-short`) Pflicht — `-short` ist nur der lokale Iterationsloop.
 
 ## Status-Quellen (via /ce-start, 2026-07-15)
