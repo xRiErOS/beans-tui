@@ -735,3 +735,450 @@ Realisierungsplan (PF-1…PF-14): `docs/plans/v1-port/epic-E7-plan.md`.
 Stand 2026-07-15 (Grilling R2): PF-15/PF-16 (D01-D06, D08, B01-B14)
 vollständig entschieden, PO-Freigabe erteilt (bean `bt-ntoz`). Realisierungsplan:
 `docs/plans/v1-port/epic-E8-plan.md`.
+
+## PF-17 — PO-Feedback-Runde 3 (2026-07-16, Live-Test v1.0/E8, bean `bt-tct9`)
+
+Sammelposten analog PF-16: D01/D02/B03/B04/B05/B06/F01, vollständige Zitate/
+Herleitung nur in `bt-tct9`, hier die verbindlichen Design-Entscheidungen.
+Realisierungsplan: `docs/plans/v1-port/epic-E9-plan.md`.
+
+**D01 — Edit-Modell: `e` wird der Ganz-Bean-`$EDITOR`, `enter` bleibt reine
+Feld-Kaskade (REVIDIERT/supersedet E8-B10, `PF-16`-Tabelle B10-Zeile).**
+PO verbatim: „'enter' öffnet im details-view die forms für das edit eines
+Feldes, 'e' öffnet egal an welcher Stelle das gesamte bean in \$EDITOR."
+Zwei getrennte Zuständigkeiten, ab jetzt ohne Überschneidung:
+
+- `enter` ist ausschließlich die PF-5-Feld-Kaskade (Section→Feld→Overlay/
+  Form/Jump) — unverändert. Auf `[2] BODY` war das seit E8-B10 ein
+  Sonderfall (`enter` öffnete dort `$EDITOR` auf dem Body) — **B10-Revision:**
+  dieser Sonderfall entfällt ersatzlos, `enter` auf `[2] BODY` wird wieder
+  der generische No-Op (die Sektion trägt keine `.fields`, exakt der
+  Vor-E8-Zustand) — PO's neues Mentalmodell reserviert „$EDITOR öffnen"
+  ausschließlich für `e`, Body-Inhalt ist über `e` (als Teil der Gesamtdatei)
+  ohnehin erreichbar. `openBodyEditor` (`editor.go`) wird durch
+  `openBeanEditor` ersetzt (nicht daneben behalten — EIN Editor-Helfer).
+- `e`/`ctrl+e` (eine `keys.Editor`-Bindung, unverändert im Keymap) öffnen ab
+  sofort UNBEDINGT denselben `openBeanEditor(b)`-Pfad — die bisherige
+  Verzweigung in `keyNodeAction` (`update.go`: `ctrl+e` immer Body,
+  `e` kontextsensitiv Titel-Form vs. Body) entfällt vollständig zugunsten
+  eines einzigen unconditional calls. „ctrl+e-Sonderpfad vereinheitlichen"
+  (PO/D01-Wortlaut) heißt konkret: es gibt nach dieser Revision NUR NOCH
+  einen Pfad, nicht mehr zwei konvergente. Erreichbar von JEDER Stelle
+  (Tree/Backlog/Detail, jede Sektion/Feld-Ebene, auch ohne aktiven
+  Detail-Fokus) — `keyNodeAction` wird bereits heute VOR dem
+  `detailFocus`/`keyBacklog`/`keyTree`-Dispatch geprüft (`handleKey`,
+  `update.go`) und wirkt auf `m.focusedBean()` (view-agnostisch), das
+  erfüllt „egal an welcher Stelle" strukturell bereits — keine
+  Dispatch-Order-Änderung nötig, nur die Handler-Logik selbst vereinfacht
+  sich. `e`/`ctrl+e` öffnen NIE MEHR das Titel-Edit-Form (`openEditTitleForm`
+  bleibt nur noch über `enter` auf dem `title:`-Feld erreichbar,
+  `activateDetailField`s `"title"`-Case unverändert).
+
+**Technisches Design „Ganz-Bean-Editor" (kein bestehender CLI-Weg, neu
+zu bauen):** `beans show <id> --raw` liefert bereits EXAKT das reale
+Datei-Format (verifiziert, `beans show bt-tct9 --raw` == on-disk
+`.beans/bt-tct9--*.md` Byte für Byte): YAML-Frontmatter zwischen zwei
+`---`-Zeilen (mit `# <id>`-Kommentarzeile, `title/status/type/priority/
+tags?/created_at/updated_at/parent?/blocking?/blocked_by?`) gefolgt vom
+Markdown-Body. Seed-Text für `$EDITOR` ist also `beans show <id> --raw`
+UNVERÄNDERT (kein selbstgebautes Markdown-Templating nötig — „beans bleibt
+die eine Autorität", design-spec.md §3.1 D02, gilt auch hier: die
+CANONICAL-Serialisierung kommt aus dem CLI, nicht aus einer eigenen
+Re-Implementierung des Dateiformats).
+
+- Neu `data.Client.ShowRaw(id string) (string, error)` (`internal/data/
+  client.go`): `c.run("show", id, "--raw")`, gibt den rohen String zurück
+  (kein JSON-Envelope bei `--raw`, kein `classifyError`-Pfad nötig — ein
+  reiner Read).
+- `openBeanEditor(b *data.Bean) (model, tea.Cmd)` (`editor.go`, ersetzt
+  `openBodyEditor`) ruft `ShowRaw` synchron NICHT direkt (Subprocess-Latenz
+  ~20-50ms, design-spec §3.1) — analog zu jedem anderen Mutation-Cmd läuft
+  der Read als eigener `tea.Cmd` (neuer `beanRawLoadedMsg`), dessen Ergebnis
+  ERST den `tea.ExecProcess`-Suspend triggert (zwei Cmd-Hops statt einem,
+  analog zum bestehenden Zwei-Schritt-Muster Read→Suspend, kein
+  synchroner Subprocess-Call im Update-Pfad). `m.editorTarget`/
+  `m.editorETag` werden wie bisher beim ÖFFNEN eingefroren (F2-Konvention,
+  `applyEditorFinished`s Lost-Update-Rationale unverändert gültig — ein
+  potenziell langlebiger `$EDITOR`-Suspend braucht das gefrorene ETag, nicht
+  ein frisches bei Submit).
+- Rückweg (Submit): `editorFinishedMsg{content,changed,err}` bleibt der
+  TYP (unverändert) — `applyEditorFinished` (`update.go`) wird umgebaut: bei
+  `changed==true` wird `content` NICHT mehr direkt als `SetBody`-Argument
+  verwendet, sondern zuerst geparst:
+  1. Split am ZWEITEN `---`-Trenner (erste Zeile ist der erste `---`) in
+     Frontmatter-Block + Body (Body = Rest NACH dem zweiten `---`, exakt
+     EIN führender Newline abgeschnitten, spiegelt `--raw`s eigenes Format).
+  2. `gopkg.in/yaml.v3` (bereits Projekt-Dependency, `internal/config/
+     settings.go`) unmarshalt den Frontmatter-Block in einen neuen,
+     schlanken Typ `rawBeanFrontmatter{Title, Status, Type, Priority string;
+     Tags, Blocking, BlockedBy []string; Parent string}` — die `# <id>`-Zeile
+     ist ein YAML-Kommentar, wird von yaml.v3 automatisch übersprungen.
+     `created_at`/`updated_at`/die ID selbst werden BEWUSST NICHT geparst
+     (kein `beans update`-Flag existiert dafür — s. „Bekannte Grenze" unten).
+  3. Diff gegen den bei `$EDITOR`-Open eingefrorenen Bean-Snapshot
+     (`m.editorSnapshot *data.Bean`, NEUES Modelfeld neben `editorTarget`/
+     `editorETag` — der volle Bean-Wert zum Öffnungszeitpunkt, nicht nur
+     ID+ETag, weil der Diff jedes Feld einzeln braucht).
+  4. EIN kombinierter `beans update`-Call trägt jede geänderte Eigenschaft
+     (mirrort SetTags/SetBlocking's Single-Etag-No-Cascade-Konvention,
+     `mutations.go`) — neue `data.Client.UpdateWhole(id string, diff
+     WholeEditDiff, etag string) error` (`internal/data/mutations.go`), mit
+     `WholeEditDiff{Title, Status, Type, Priority *string; TagsAdd,
+     TagsRemove, BlockingAdd, BlockingRemove, BlockedByAdd, BlockedByRemove
+     []string; ParentChanged bool; Parent string; Body *string}` — baut die
+     `update`-Argumentliste konditional (nur geänderte Felder tragen Flags),
+     EIN `c.update(id, etag, args...)`-Aufruf, kein Kaskaden-Risiko.
+     `ParentChanged`+`Parent==""` mapt auf `--remove-parent` (mirrort
+     `RemoveParent`), sonst `--parent <val>`.
+  5. Fehlerfall (Parse-Fehler ODER CLI-`VALIDATION_ERROR`, z.B. ein von Hand
+     getippter ungültiger `status:`-Wert): das PO-Risiko „constrained Edits
+     — no 422" (design-spec §1 Leitbild) gilt hier NICHT mehr uneingeschränkt
+     — der Ganz-Bean-Editor ist bewusst UNconstrained (Freitext-YAML), das
+     ist der ganze Punkt von D01/B01 (PO will MEHR Zugriff als die
+     Overlays bieten). Rejection wird daher NICHT verhindert, sondern
+     RECOVERABLE gemacht: mirrort `writeConflictTempFile`s bestehende
+     Konvention (`update.go`) — der editierte Rohtext wird in eine
+     GEHALTENE Tempdatei geschrieben, ihr Pfad reitet im Toast/Status-Zeilen-
+     Text mit, nichts geht verloren. Ein echter ETag-Konflikt (paralleler
+     externer Write) läuft weiterhin durch den bestehenden
+     `conflictWithRecovery`-Pfad (unverändert).
+- **Bekannte Grenze (zu dokumentieren, kein Bug):** `created_at`/
+  `updated_at`/die `# <id>`-Kopfzeile sind im Editor-Text SICHTBAR (Teil von
+  `--raw`), aber NICHT editierbar wirksam — `beans update` kennt dafür keine
+  Flags, Änderungen daran werden beim Parse zwar erkannt, aber beim Bauen
+  der `WholeEditDiff` stillschweigend verworfen (kein Flag existiert). Muss
+  im PO-Report als ERRATUM/Deviation stehen, kein Implementierungsauftrag,
+  ein CLI-seitiges Feature-Gap.
+
+**D02 — Backlog-Footer verliert `Sort`, Taste bleibt (PO bestätigt, Option
+b + Präzisierung).** `backlogLocalBindings()` (`view_browse_backlog.go`)
+verliert das angehängte `keys.Sort` — reduziert auf exakt
+`browseRepoLocalBindings()` (keine eigene Backlog-Ergänzung mehr). `S`
+bleibt funktional (`keyBacklog`s `Sort`-Case unverändert), taucht aber NUR
+noch in `helpGroups()` (`keymap.go`, dort bereits gelistet, keine Änderung
+nötig) auf. Suchzeilen-Suffix `· sort <modus>` (E8/D02,
+`treeSearchLine`) bleibt unverändert die sichtbare Laufzeit-Anzeige. Q06s
+Kern-Footer-Liste (`browseRepoLocalBindings`) bleibt wortgesperrt,
+unangetastet von diesem Punkt.
+
+**B03 — Titel-Edit-Form wird multi-line.** `buildEditTitleForm`
+(`form_edit_title.go`) tauscht `huh.NewInput()` gegen `huh.NewText().
+Lines(3).ExternalEditor(false)` (huh v1.0.0, `field_text.go` verifiziert:
+`NewText` ist eine Textarea mit Wordwrap out-of-the-box).
+`.ExternalEditor(false)` ist PFLICHT: `huh.Text` bringt einen EIGENEN,
+huh-internen `ctrl+e`-Editor-Suspend-Mechanismus mit (Default `true`) — der
+würde mit D01s app-weitem `e`/`ctrl+e`-Ganz-Bean-Editor kollidieren
+(zwei verschiedene Editor-Sessions auf zwei verschiedene Inhalte, gleiche
+Taste, nur weil GENAU in diesem einen Formular fokussiert) — deaktiviert,
+damit `keyForm`s eigene Tastatur-Semantik die einzige bleibt. `.Lines(3)`
+ist eine Planner-Schätzung (PO nannte keine Zeilenzahl) — 3 Zeilen decken
+die längsten bislang beobachteten Bean-Titel ab, ohne das Formular-Modal
+unnötig zu strecken (`formInnerHeight`, `forms_shared.go`, deckelt ohnehin).
+`nonEmpty`-Validator bleibt unverändert.
+
+**B04 — RELATIONS-Sektion: Dopplung raus, Pfeil-selektierbar, hängender
+Einzug (drei Punkte, EINE zusammenhängende Änderung an
+`relationsSectionBody`).**
+
+1. Die separate `Fields:`-Zeile (`fieldStrip`, `accordion.go`) entfällt für
+   die RELATIONS-Sektion (deren einziger verbleibender Aufrufer — `Meta`
+   war laut `renderAccordion`s eigenem `i != 0`-Gate schon immer
+   ausgeschlossen). `fieldStrip` selbst wird entfernt (Compiler-gesteuert,
+   Muster PF-14/B13-Removal) — nach diesem Task gibt es keinen Aufrufer
+   mehr.
+2. Ersatz: `relationsSectionBody` bekommt die GLEICHE ▷/▶-Cursor-Konvention
+   wie `metaSectionBody` (PF-4) — Signatur wächst um `(active bool, fieldIdx
+   int)`, jede gerenderte Zeile (Parent/Children/Blocking/Blocked-By, in der
+   bestehenden `fields`-Akkumulationsreihenfolge — die `fields`-Slice
+   entsteht schon heute in exakt der Zeilen-Reihenfolge, `appendGroup`
+   hängt `lines`/`fields` im Lockschritt an) trägt einen eigenen `▷ `/`▶ `-
+   Marker VOR dem bisherigen `relationRow`-Text. Die Pfeiltasten-Navigation
+   selbst (`keyDetailFocus`s `up`/`down` bei `detailLevel==1`, `fieldCursor`
+   über `secs[m.secCursor].fields`) ändert KEINEN Code — sie zeigte immer
+   schon auf dieselbe `fields`-Slice, nur die vorherige Fehlvorstellung war,
+   dass nur die (jetzt entfernte) `Fields:`-Strip diese Slice visualisierte.
+   Mit dem Fix zeigt die EINZIGE verbleibende Visualisierung (die Zeilen
+   selbst) den Cursor — PO-Befund „nur Fields wählbar" löst sich auf, weil
+   es danach nur noch EINE Repräsentation gibt.
+3. Hängender Einzug (PO-Mockup, Zitat oben in `bt-tct9`): neuer Helfer
+   `hangingIndentWrap(prefix, text string, w int) string` (`view_detail_
+   bean.go` oder `render_shared.go`) — `prefix` ist die bereits
+   VOLL-gestylte Glyphen+ID-Zeile (`▷ `/`▶ ` + `theme.StatusIcon` +
+   `theme.TypeIcon` + `theme.Key.Render(id)` + Leerzeichen), ihre SICHTBARE
+   Breite (`lipgloss.Width(ansi.Strip(prefix))`) bestimmt den Einzug der
+   Folgezeilen — PRO ZEILE individuell (keine globale Tabellen-Spalte über
+   alle Zeilen hinweg, da IDs unterschiedlich lang sein können,
+   `<prefix>-<n-chars>`, design-spec.md §4-Nachbarschaft) — genau das PO-
+   Mockup („die Übersicht ist gewahrt", nicht „alle Titel beginnen an
+   exakt derselben Spalte"). Wortumbruch selbst via `ansi.Wordwrap`
+   (gleiche Primitive wie `wrapText`, `view.go`), NICHT die blanket-
+   `wrapText`-Anwendung auf den GESAMTEN verketteten Gruppen-Block
+   (`relationsSectionBody`s bisheriges `wrapText(strings.Join(groups,
+   "\n\n"), bodyW)` am Ende) — DAS war der eigentliche B04.3-Bug: der Titel
+   einer Zeile lief über die Zeilenbreite hinaus und wickelte OHNE Bezug
+   zum eigenen Präfix zurück auf Spalte 0. Jede Relation-Zeile wird jetzt
+   VOR dem Join bereits fertig eingezogen umgebrochen; `wrapText` bleibt für
+   die (unveränderten) Muted-Subheader-Zeilen (`Parent`/`Children`/…)
+   zuständig.
+
+`relationsSectionBody`s Aufrufer (`beanSections`, `view_detail_bean.go`)
+gibt die zusätzlichen zwei Parameter durch (`focused && activeIdx ==
+relationsSectionIdx`, `fieldIdx` — exakt das gleiche Muster wie
+`metaSectionBody`s eigener Aufruf in derselben Funktion).
+
+**B05 — Kopfblock-Meta-Strip zeigt zusätzlich Tags (bereits redefiniert,
+`bt-tct9` „B05 REDEFINIERT"-Abschnitt, HIER erstmals formal in die
+Design-Spec übernommen).** `detailHeaderBlock` (`view_detail_bean.go`)
+erweitert die `type: …    status: …    prio: …`-Zeile um eine vierte Spalte
+`    tags: <tagsInline(b.Tags)>` (PO-Mockup exakt: `type: epic  status:
+in-progress  prio: !  tags: to-review`) — `tagsInline` (`render_shared.go`,
+seit PF-15 kein toter Code mehr) wird HIER ein zweiter Aufrufer neben
+`metaFields`. Variable Breite der Tags-Spalte ist unkritisch (Zeilenende,
+kein nachfolgendes gepaddetes Feld) — B02s (E8) feste `type`/`status`-
+Padding-Konvention bleibt für die ERSTEN drei Spalten unverändert, nur die
+vierte kommt neu hinzu. Taglos: `theme.Dim.Render("(none)")`, mirrort
+`metaFields`s eigene Konvention.
+
+**B06 — Relations-Picker (Blocking `r`, Parent `a`) viel zu schmal
+(PO-Fund, Screenshot: IDs brechen mitten im Wort um).** PO verbatim: „Das
+overlay für 'r' ... So kann man die beans nicht sauber lesen und
+bearbeiten. Höhe passt. Aber die Breite muss viel weiter werden." Beide
+Picker rufen heute `clampModalWidth(48, m.width)` — eine reine
+NACH-UNTEN-Clamp-Funktion (`min(pref, termW-4)`, nie nach oben), 48 ist
+also faktisch die feste Breite auf jedem Terminal ≥52 Spalten. Neuer
+Helfer `wideModalWidth(termW int) int` (`box_filter_facets.go`, direkt
+neben `clampModalWidth`, gleiche Datei = Single Source für Modal-Breiten-
+Helfer): `≈85% von termW`, Boden 60 (nie schmaler als der alte fixe Wert),
+Deckel `termW-4` (dieselbe 2-Spalten-Rand-Konvention wie
+`clampModalWidth`). `blockingPickerBox`/`parentPickerBox`
+(`box_picker_blocking.go`/`box_picker_parent.go`) wechseln von
+`clampModalWidth(48, m.width)` auf `wideModalWidth(m.width)`. Zeilen-
+Rendering: dieselbe `hangingIndentWrap`-Logik wie B04.3 (Planner-
+Entscheidung, EIN Wrap-Helfer für beide Stellen — Parent-/Blocking-Picker-
+Zeilen sind strukturell identisch zu Relations-Zeilen: `▌`/` `-Cursor-
+Präfix statt `▷`/`▶`, sonst dieselbe Glyphen+ID+Titel-Form) statt der
+bisherigen Ein-Zeilen-`it.label`-Konkatenation — verhindert exakt den vom
+PO gezeigten Mitten-in-der-ID-Umbruch. Höhe (`parentPickerRowBudget = 14`)
+bleibt unverändert (PO: „Höhe passt").
+
+## F01 — Vollbild-Navigation (`v`), Zustandsmodell + Navigations-Pfad
+
+PO-Idee, verbatim in `bt-tct9` übernommen. Größtes Einzelstück dieser
+Runde — Zustandsmodell hier vollständig ausformuliert (Folgefragen
+antizipiert), Umsetzung in zwei Tasks (`epic-E9-plan.md`).
+
+### Zustandsmodell
+
+Neuer, zu `m.view` (Browse/Backlog/Lobby, unverändert) ORTHOGONALER
+Modus — Vollbild ändert NICHT, welcher `viewID` aktiv ist, nur WIE dessen
+Master-Detail-Paar gerendert wird:
+
+```go
+type fullscreenMode int
+const (
+    fullscreenNone fullscreenMode = iota
+    fullscreenList                // linkes Pane (Tree ODER Backlog-Liste, je nach m.view) — Vollbreite
+    fullscreenDetail               // Detail-Accordion eines EINEN Beans — Vollbreite
+)
+```
+
+Neue Modelfelder (`types.go`): `fullscreen fullscreenMode` ·
+`fullscreenBeanID string` (das in `fullscreenDetail` gezeigte Bean —
+UNABHÄNGIG vom Tree-/Backlog-Cursor, s. u.) · `navBack, navForward
+[]string` (Bean-ID-Stacks, s. History-Stack unten).
+
+### Einstieg (`v`)
+
+Neue Bindung `keys.Fullscreen` (`v`, frei — verifiziert gegen
+`keymap.go`, keine Kollision). Dispatch-Punkt: `handleKey` (`update.go`),
+NACH dem `FocusIn`/`FocusOut`-Block (gleiche Fokus-/Ansichts-Modus-
+Familie), VOR `keyNodeAction` — greift NUR wenn `m.view != viewLobby` UND
+kein Full-Capture-State aktiv ist (identische Guard-Kette wie jeder andere
+Top-Level-Key: Suche/Filter/Form/Overlay/Palette/Help bereits vorher
+abgefangen, Bestandsmuster unverändert). Verhalten:
+
+- `m.fullscreen == fullscreenNone && !m.detailFocus` → `m.fullscreen =
+  fullscreenList` (Browse/Backlog+links-fokussiert → Beans-Liste Vollbild —
+  PO-Wortlaut).
+- `m.fullscreen == fullscreenNone && m.detailFocus` → `b :=
+  m.focusedBean(); if b == nil { no-op }` sonst `m.fullscreen =
+  fullscreenDetail; m.fullscreenBeanID = b.ID` (Browse/Backlog+rechts-
+  fokussiert → Detail-View Vollbild). `m.detailFocus`/`m.secCursor`/
+  `m.fieldCursor`/`m.detailLevel` bleiben UNVERÄNDERT (dieselbe
+  Detail-Fokus-Maschine wird im Vollbild weiterverwendet, s. u.) — kein
+  Reset beim Eintritt.
+- `m.fullscreen != fullscreenNone` (bereits im Vollbild) → No-Op
+  (Planner-Entscheidung: `v` ist ein EINWEG-Einstieg, kein Toggle — PO
+  definiert `esc` explizit als den Ausstiegsweg, s. u.; ein zweites `v`
+  spekulativ als Ausstieg zu belegen würde eine vom PO nicht verlangte
+  zweite Bedeutung einführen, genau die Klasse Überraschungsverhalten,
+  die PF-13/B01 bereits einmal beheben musste).
+
+Gilt SYMMETRISCH für Browse (Tree) UND Backlog (Planner-Entscheidung,
+Begründung: `m.view` bleibt beim Eintritt unverändert, die Vollbild-
+Renderfunktion (unten) fragt nur „welche Listen-Rows/welches Bean", nicht
+„welche View" — eine Tree-only-Beschränkung wäre eine künstliche, vom
+PO-Wortlaut nicht geforderte Asymmetrie und würde `renderBeanAccordionPane`s
+bereits etablierte View-Agnostik konterkarieren).
+
+### Listen-Vollbild → Detail-Vollbild (`enter`)
+
+`enter` auf einem Bean IM Listen-Vollbild (`m.fullscreen ==
+fullscreenList`) verhält sich WIE der Sprung, den `activateDetailField`s
+Relations-Case heute für einen Jump macht, nur als neuer Einstiegspunkt:
+`b := <Bean unter dem aktuellen Tree-/Backlog-Cursor>; if b == nil ||
+(Tree-Node ist Blatt-loser Cursor) { no-op }` sonst `m.fullscreen =
+fullscreenDetail; m.fullscreenBeanID = b.ID` + Detail-Fokus-Maschine auf
+Meta/Section-Ebene reinitialisiert (`m.secCursor, m.accOpen,
+m.detailLevel, m.fieldCursor = 0, 1, 0, 0` — identisch zu `FocusIn`s
+bestehendem Reset-Muster, `handleKey`). Dispatch-Ort: `keyFullscreen`
+(neue Datei `view_fullscreen.go`) prüft `m.fullscreen` VOR den bestehenden
+`keyTree`/`keyBacklog`-Cursor-Bewegungen — Auf/Ab/Rechts/Links im
+Listen-Vollbild bleiben SONST identisch zum Split-Modus (dieselben
+`treeCursorMove`/`backlogCursorMove`-Helfer, wiederverwendet, keine
+Duplikat-Navigation).
+
+### Detail-Vollbild: Feld-Navigation + Relations-Sprung (`enter`, setzt B04.2 voraus)
+
+Innerhalb `fullscreenDetail` wird `keyDetailFocus` (`update.go`) VERBATIM
+wiederverwendet — `m.focusedBean()` bekommt dafür einen NEUEN, VOR dem
+bestehenden `m.view`-Switch geprüften Fall: `if m.fullscreen ==
+fullscreenDetail { return idx.ByID[m.fullscreenBeanID] }` (view-agnostischer
+Dispatcher, gleiches Prinzip wie der bestehende Tree/Backlog-Switch selbst).
+Damit funktioniert JEDE bestehende Feld-Kaskade (PF-5, status/type/
+priority/tags-Overlays, Titel-Form) im Vollbild UNVERÄNDERT. Der einzige
+NEUE Fall ist `activateDetailField`s Relations-Sprung-Zweig (`default:`-Case,
+`f.beanID != ""`): innerhalb `fullscreenDetail` darf ein Sprung NICHT
+`m.detailFocus = false` setzen (das bestehende Verhalten, das im Split-
+Modus zurück zum Tree/Backlog springt) — stattdessen: History-Push (unten)
++ `m.fullscreenBeanID = f.beanID` (bleibt in `fullscreenDetail`, zeigt das
+NEUE Ziel-Bean, Detail-Fokus-Maschine reinitialisiert wie beim Listen-
+Vollbild-Einstieg oben). Voraussetzung B04.2 (Relations-Einträge selbst
+per Pfeil erreichbar, s. oben) — ohne B04.2 gäbe es im Vollbild keinen
+Weg, überhaupt einen Relations-Eintrag zu selektieren, `blocked_by` in
+`epic-E9-plan.md` entsprechend gesetzt.
+
+### Ausstieg (`esc`)
+
+**Entscheidung (Planner, PO-Wortlaut wörtlich genommen):** `esc` verlässt
+das Vollbild IMMER direkt zurück zu Browse/Backlog (Split-Modus) — NICHT
+schrittweise zurück durch die Relations-Sprung-Kette (das ist exklusiv
+`ctrl+links`/`[`s Aufgabe, s. History-Stack unten). Begründung: PO-Zitat
+„esc kehrt zum Browse zurück (aus Detail-Vollbild via Relations-Sprung:
+zurück zum Browse mit dem AKTUELLEN Bean selektiert)" — der Klammerzusatz
+ist ein Beispiel-Fall (der am häufigsten auftretende: nach N
+Relations-Sprüngen), keine Sonderregel NUR für diesen Fall; die
+Hauptaussage „esc kehrt zum Browse zurück" gilt uniform, unabhängig vom
+Eintrittspfad (direktes `v`, `enter` aus Listen-Vollbild, N
+Relations-Sprünge) — ALLES landet auf demselben, einfachen Exit. Eine
+pfadabhängige Fallunterscheidung („esc geht zurück zum Listen-Vollbild,
+WENN von dort betreten, sonst zu Browse") wäre eine vom PO nicht verlangte
+dritte esc-Zielsemantik und exakt die Klasse impliziter Zustands-
+Abhängigkeit, die B01/PF-13 bereits einmal als „für Nutzer murks" verworfen
+hat.
+
+Konkret fügt sich das NAHTLOS in D03s bestehendes „esc = eine Ebene pro
+Druck"-Modell (PF-16) ein, OHNE dessen Kontrakt zu brechen — Vollbild trägt
+GENAU SO VIELE Ebenen bei, wie es Rasten hat:
+
+| Zustand | `esc` |
+|---|---|
+| `fullscreenDetail`, `detailLevel==1` (Feld-Ebene) | → `detailLevel=0` (Sektions-Ebene) — bestehende D03-Rast, unverändert |
+| `fullscreenDetail`, `detailLevel==0` (Sektions-Ebene) | → Vollbild verlassen: `m.cursorID = m.fullscreenBeanID` (Tree) BZW. `m.backlogList`-Cursor auf `m.fullscreenBeanID` gesetzt (Backlog, je nach `m.view`) + `m.fullscreen = fullscreenNone` + `m.detailFocus = true` (Split-Detail bleibt fokussiert, PO: „mit dem AKTUELLEN Bean selektiert" impliziert die Detailansicht bleibt sichtbar, nicht Rücksprung auf den Tree-Fokus) |
+| `fullscreenList` | → Vollbild verlassen: `m.fullscreen = fullscreenNone` (Cursor war nie entkoppelt, keine Sync nötig — Split-Ansicht zeigt exakt denselben Stand) |
+
+`navBack`/`navForward` werden beim Verlassen NICHT geleert (ein erneutes
+`v` auf demselben Bean kann die History sinnvoll fortsetzen) — nur beim
+nächsten NEUEN Sprung-Pfad-Start (frisches `v` auf ein ANDERES Bean bzw.
+`enter` aus Listen-Vollbild auf ein anderes Ziel) wird unten (History-Stack)
+präzisiert, wann sie zurückgesetzt werden.
+
+### History-Stack (`ctrl+links`/`ctrl+rechts`, Fallback `[`/`]`)
+
+**Scope-Entscheidung (Planner, explizit zu bestätigen):** der Stack trackt
+AUSSCHLIESSLICH Relations-Sprünge INNERHALB `fullscreenDetail` (der vom PO
+beschriebene „Navigations-Pfad" entsteht literal nur dort — B04.2 s.o.).
+Der bestehende Split-Detail-Sprung (`activateDetailField`s Relations-Case
+AUSSERHALB von Vollbild, E2-Ära, springt zum Tree UND verlässt
+`detailFocus`) bleibt UNVERÄNDERT und speist die History NICHT — ein
+dokumentierter, bewusster Schnitt (kein PO-Wortlaut verlangt History für
+den Split-Modus, und der Split-Modus-Sprung wechselt ohnehin die Cursor-
+Repräsentation selbst, nicht nur den angezeigten Bean).
+
+- **Push (bei jedem Relations-Sprung INNERHALB `fullscreenDetail`):**
+  `m.navBack = append(clone(m.navBack), <bisheriges m.fullscreenBeanID>)`,
+  `m.navForward = nil` (frischer Sprung kappt die Vorwärts-Historie — Standard-
+  Browser-Semantik, dasselbe Modell wie jeder Web-Browser-Back-Button).
+- **`ctrl+links` / `[` (neu `keys.HistoryBack`):** No-Op wenn `navBack`
+  leer ODER `m.fullscreen != fullscreenDetail`. Sonst: letztes Element aus
+  `navBack` poppen, `m.fullscreenBeanID` (VOR dem Pop) auf `navForward`
+  pushen, `m.fullscreenBeanID` = gepopptes Element, Detail-Fokus-Maschine
+  auf Sektions-Ebene reinitialisiert (wie jeder andere Ziel-Wechsel oben).
+- **`ctrl+rechts` / `]` (neu `keys.HistoryForward`):** symmetrisch
+  (`navForward` poppen, aktuelles Bean auf `navBack`, Ziel = gepopptes
+  Element).
+- Beide NUR wirksam wenn `m.fullscreen == fullscreenDetail` — in
+  `fullscreenList`/Split-Modus sind sie unbelegte No-Ops (keine Kollision,
+  `ctrl+links`/`ctrl+rechts` sind heute nirgends gebunden, verifiziert
+  gegen `keymap.go`).
+
+**Terminal-Verfügbarkeit (PO-Implementierungshinweis, geprüft):**
+`bubbletea` v1.3.10 dekodiert `ctrl+left`/`ctrl+right` bereits nativ
+(`key.go`: `KeyCtrlLeft`/`KeyCtrlRight`, aus den Standard-xterm-CSI-
+Sequenzen `\x1b[1;5D`/`\x1b[1;5C` sowie deren `urxvt`/Alt-Varianten) — die
+Bindung FUNKTIONIERT in den meisten modernen Terminal-Emulatoren
+(iTerm2, Alacritty, Kitty, WezTerm, xterm mit `modifyOtherKeys`) direkt.
+Bekanntes Risiko (PO-Hinweis bestätigt): ältere Terminals, manche
+tmux-Konfigurationen ohne `xterm-keys on` sowie SSH-Ketten mit
+abweichendem `TERM` können die Sequenz verschlucken oder unverändert als
+bloßes `left`/`right` durchreichen. **Fallback (Planner-Entscheidung):**
+`keys.HistoryBack`/`keys.HistoryForward` binden JEWEILS ZWEI Tasten
+(`keybind.WithKeys("ctrl+left", "[")` / `keybind.WithKeys("ctrl+right",
+"]")`) — `[`/`]` sind im gesamten Keymap unbelegt (verifiziert), terminal-
+unabhängig garantiert zustellbar (einfache Druckzeichen, keine
+Modifier-Sequenz) und ein in TUI-Tools verbreitetes Back/Forward-
+Idiom (u. a. `k9s`, `lazygit`-artige Tools) — kein exotisches Neu-
+Idiom. Sichtbar gemacht (PO: „im Footer/Help ausweisen"): NEUE
+`fullscreenDetailLocalBindings()` (`footer_context.go`-Konvention,
+kontextsensitiver Footer) zeigt `[`/`]` (gerendert über
+`renderBindings`, das ohnehin BEIDE Tasten einer Bindung im Kurz-Label
+zusammenfasst) NUR während `m.fullscreen == fullscreenDetail` — im
+Split-Modus (wo die Tasten wirkungslos sind) tauchen sie nicht auf,
+zusätzlich vollständig in `helpGroups()` (Navigation-Gruppe) dokumentiert.
+
+### Maus im Vollbild — explizites Nicht-Ziel (v1, dokumentierter Scope-Cut)
+
+Der PO-Wortlaut beschreibt F01 ausschließlich über Tastatur-Flows (`v`/
+`enter`/`esc`/`ctrl+arrow`) — volle Klick-Unterstützung im Vollbild (neue
+Geometrie-Berechnung analog `clickPaneGeometry`, aber für eine EINZELNE
+Vollbreite-Pane statt des Splits) ist ein separates, nicht angefragtes
+Stück Arbeit und wird NICHT in dieser Runde gebaut (YAGNI, kein PO-Bedarf
+geäußert). Sicherheitsnetz statt Vollimplementierung: `handleMouse`
+(`mouse.go`) bekommt EINEN neuen Guard direkt NACH dem bestehenden
+Toast-Klick-Vorrang (der bleibt unbedingt, unverändert) und VOR dem
+bisherigen Overlay-Guard — `if m.fullscreen != fullscreenNone { return m,
+nil }` — verhindert, dass ein Klick im Vollbild gegen die (dann falsche)
+Split-Geometrie fehl-interpretiert wird und eine falsche Zeile/Sektion
+trifft. Wheel/Klick sind im Vollbild damit funktionslos, aber NIE
+falsch — ein bewusster, dokumentierter Nicht-Ziel-Punkt, kein stiller
+Bug. Vollständige Maus-Unterstützung ist ein Fast-Follow-Kandidat
+außerhalb dieser Runde (kein bean angelegt, YAGNI bis PO-Bedarf).
+
+### Rendering
+
+Neue Datei `view_fullscreen.go`: `keyFullscreen(msg) (bool, tea.Model,
+tea.Cmd)` (Dispatch, `v`/`enter`-im-Listen-Vollbild/`esc`/History-Keys,
+handled-Flag analog `keyNodeAction`s Signatur) + `renderFullscreenBody(w,
+h int, head, localKeys string, listRows []string, detailBean *data.Bean)
+string` — EIN gemeinsamer Renderer für beide Vollbild-Spielarten:
+`viewBrowseRepo()`/`viewBacklog()` prüfen `m.fullscreen != fullscreenNone`
+an ihrem jeweiligen Kopf (VOR dem bestehenden `JoinHorizontal(listBox,
+detailBox)`-Aufbau) und reichen entweder ihre eigenen (unverändert
+berechneten) `listRows` ODER `nil` (im `fullscreenDetail`-Fall, dann zieht
+der Renderer `detailBean` über `renderBeanAccordionPane` mit VOLLER
+`innerW` statt der Split-`rw`) durch — Chrome (Breadcrumb/Footer/
+Statuszeile) bleibt IDENTISCH zum jeweiligen View (`browseRepoChrome`/
+`backlogChrome`, unverändert), nur der Body-Teil wird eine einzelne
+Vollbreite-Pane statt zwei nebeneinander. Kein neuer `viewID`-Enum-Wert
+(bestätigt gegen `types.go`: `m.view` bleibt `viewBrowseRepo`/`viewBacklog`
+— Vollbild ist orthogonal, s. Zustandsmodell oben).
