@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T08:03:55Z
+updated_at: 2026-07-16T12:28:39Z
 parent: bt-apmy
 ---
 
@@ -122,3 +122,13 @@ nur teilweise erfüllt (Label ja, Wert meist nicht).
 **Q02 (PO):** Akzeptierte Grenze — oder Nacharbeit gewünscht (Optionen: Tags-Vorrang vor
 Ellipse auf der Zeile, zweizeiliger Umbruch statt Hart-Truncate)? Bis zur Antwort keine
 Nacharbeit; Task bt-mtig bleibt completed/APPROVED.
+
+
+## T5-Review-Nachtrag (2026-07-16): F01 dokumentierter Nicht-Fix
+
+T5-Reviewer-Finding F01 (low): wideModalWidths absoluter Boden 24 kann bei termW∈[5,27]
+Terminal- und Deckelbreite überschreiten (kosmetischer Renderbruch in placeOverlay).
+BEWUSST NICHT gefixt: mirrort exakt das bereits produktive clampModalWidth-Verhalten
+(8 Aufrufstellen), praktisch unerreichbar (keine realen <28-Spalten-Terminals; kein Picker
+vor erstem WindowSizeMsg öffenbar). Falls Minimal-Terminalbreiten je relevant werden:
+gemeinsames Ticket für clampModalWidth+wideModalWidth. F02/F03 (Test-Härtungen) → Prelude T6.

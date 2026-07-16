@@ -1,10 +1,11 @@
 ---
 # bt-1e0t
 title: Backlog-Footer verliert Sort-Eintrag, S bleibt funktional (D02)
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:48Z
-updated_at: 2026-07-16T06:45:48Z
+updated_at: 2026-07-16T12:28:39Z
 parent: bt-tct9
 ---
 
@@ -84,3 +85,16 @@ die sichtbare Laufzeit-Anzeige des aktiven Sort-Modus.
 - [ ] Tree-Footer unverändert (Gegenbeleg dokumentiert)
 - [ ] Goldens regeneriert (Backlog/Chrome) + Vorher/Nachher-Beschreibung im Commit-Body
 - [ ] Voller Testlauf grün, gofmt/vet leer
+
+
+## PRELUDE (2026-07-16, aus T5-Review F02/F03 — ZUERST erledigen, eigener Commit)
+
+Zwei Test-Härtungen aus dem T5-Review (bt-4mo9), beide low, kein eigener Review-Zyklus:
+1. **F03 (wertvollste):** Jitter-Parity-Regressionstest für Blocking- UND Parent-Picker —
+   dieselbe gewrappte lange Titel-Zeile einmal als Cursor-Row, einmal als Non-Cursor-Row
+   rendern, Einzug der Folgezeile MUSS identisch sein (Mutations-Beweis D des Reviewers:
+   Pad-Revert 1→2 Spaces ließ die volle Suite grün — diese Lücke schließen).
+2. **F02:** TestBlockingPickerBoxUsesWideModalWidth/TestParentPickerBoxUsesWideModalWidth
+   sind selbstreferenziell (wantW := wideModalWidth(m.width)+2). Je einen unabhängigen
+   Literal-Erwartungswert ergänzen (z.B. bei termW=120 → wantW 104).
+Commit: `test(tui): Picker-Jitter-Parity + Literal-Breiten-Pins (T5-F02/F03)`, `Refs: bt-1e0t`.
