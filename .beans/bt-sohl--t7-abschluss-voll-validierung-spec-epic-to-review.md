@@ -1,11 +1,11 @@
 ---
 # bt-sohl
 title: T7 — Abschluss (Voll-Validierung, Spec, Epic to-review)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:39Z
-updated_at: 2026-07-16T19:14:15Z
+updated_at: 2026-07-16T19:36:46Z
 parent: bt-362n
 blocked_by:
     - bt-r92i
@@ -84,3 +84,94 @@ T1 transitiv ab, da T2 UND T6 beide an T1 hängen — mirrort E9s T9-Muster
 Als erster eigener Commit (string+test-only):
 - **T5-F01:** Dedupe-Fehlermeldung in keyTagMgmtInput (view_tag_management.go:452-453) sagt 'tag already defined: X' auch wenn X nur eine FREIE Zeile ist — faktisch falsch. Auf neutrales 'name already in use: X' präzisieren (beide Fälle korrekt); betroffene Tests nachziehen. Das implizite Verbot 'Rename auf existierenden freien Namen' selbst NICHT ändern (= Merge-Semantik, PO-Frage Q04 im Epic).
 - **T5-F02:** bt-y9my Deviations-Abschnitt um eine Zeile ergänzen: Commit-Titel wurde gegenüber Checklisten-Wortlaut auf ≤50 gekürzt ('feat(tui): E10 Tag-Definition umbenennen (Rename)', 49).
+
+## Summary (T7-Abschluss, 2026-07-16)
+
+Preludes als Commit `85f158f` (`fix(tui): T5-F01 Dedupe-Fehlertext
+präzisiert` — Fehlertext neutral `name already in use: X`, drei Tests
+pinnen den exakten Wortlaut; T5-F02 bt-y9my-Deviations-Nachtrag).
+design-spec.md §16 „Tag-Management (E10)" + §4/§9-Superseded-Markierungen
+(PF-14-Muster, nichts gelöscht) als Commit `5ab40e1` — alle
+§16-Behauptungen gegen den tatsächlichen Code-Stand gegengeprüft
+(`collectTagCounts(idx, defined)`, `saveTagDefsCmd(c, defs, refindName)`
+in messages.go, `tagRenameDoneMsg`, `keys.RenameTag` auf `e`,
+`tagManagementLocalBindings` = Up/Down/NewTag/Delete/RenameTag/Back,
+Marker-Glyph `✓`). Voll-Gate grün (s. u.), T1-T6 alle `completed`
+verifiziert, Epic `bt-362n` per Tag `to-review` an den PO übergeben
+(Status NICHT verändert), `bt-6oyy` unangetastet (`in-progress`,
+Epic-Verweis konsistent), SSTD-Pointer gültig (keine Änderung nötig).
+
+## Voll-Gate-Beleg / Test-Output
+
+- `command go build -o bin/bt .` → OK
+- `command gofmt -l .` → leer
+- `command go vet ./...` → leer
+- `command go test ./... -short -count=2` → alle Pakete ok (tui 18.7s)
+- `command go test ./... -count=2` (voll ×2) → alle Pakete ok (tui 278.0s)
+- `command go test ./... -race -count=1` → alle Pakete ok (tui 143.3s), Exit 0
+- Goldens `-count=2` OHNE `-update`: `TestChromeGolden`/`TestTreeGolden`/
+  `TestTreeGoldenDeterministic`/`TestBacklogGolden`/
+  `TestBacklogGoldenDeterministic` je 2× PASS ·
+  `git diff --stat -- internal/tui/testdata/` leer
+- `beans check` → All checks passed
+- `git status --porcelain` → leer (bin/bt git-ignored, kein
+  `.beans-tags.yml`-Rest aus T1-T6)
+
+RED/GREEN-Beleg T5-F01 (Test-Schärfung zuerst, gegen unveränderten Code):
+
+```
+--- FAIL: TestKeyTagMgmtInputRejectsDuplicateAgainstExistingRows
+    ... got active=true err="tag already defined: already-there"
+--- FAIL: TestKeyTagMgmtInputRejectsDuplicateAgainstFreeRowToo
+    ... got active=true err="tag already defined: free-tag"
+--- FAIL: TestKeyTagMgmtInputRenameRejectsDuplicateAgainstOtherExistingName
+    ... got active=true err="tag already defined: bravo"
+```
+
+Nach dem Fix: alle drei PASS (plus voller Lauf, s. o.).
+
+## Smoke
+
+n/a — T7 trägt keinen Feature-Code: die Preludes sind string+test+doku-only
+(der geänderte Fehlertext ist durch drei Unit-Tests exakt gepinnt; der
+Render-Pfad des Inline-Fehlers war bereits durch T3s
+80-Spalten-Truncation-Test abgedeckt); jede E10-Funktion hatte ihren
+eigenen tmux-Smoke (120+80) in T1-T6. Der Voll-Gate-Lauf (voll ×2, -race,
+Goldens ×2) ist der End-to-End-Nachweis dieser Runde.
+
+## Akzeptanz-Checkliste (abgehakt)
+
+- [x] voller Lauf grün (Build/vet/gofmt/`-race`/`-short`×2/voll×2/Goldens `-count=2`)
+- [x] `bt-362n` trägt `to-review`, nicht `completed`
+- [x] T1-T6 alle `completed` (keine Lücken)
+- [x] design-spec.md §16 neu + §4/§9 als superseded markiert (nicht gelöscht)
+- [x] Q01-Q03 an den PO weitergereicht (+ Q04, s. Notes)
+- [x] `bt-6oyy`-Body-Verweis aufs Epic verifiziert konsistent (bleibt `in-progress`)
+- [x] `docs/SSTD.md`-Konsistenz geprüft (Pointer gültig, keine Änderung nötig)
+- [x] kein unentdeckter Golden-Drift
+- [x] `git status --porcelain` am Ende leer
+
+## Deviations/ERRATA
+
+- Die drei Dedupe-Tests asserten jetzt den EXAKTEN Fehlertext statt nur
+  `err != ""` — bewusste Test-Schärfung als RED-Träger für T5-F01, keine
+  Verhaltensänderung (die Ablehnung selbst bleibt, Q04 = PO-Frage).
+- `-short`×2/voll×2 als `-count=2` in je EINEM Lauf ausgeführt (umgeht
+  zusätzlich den Test-Cache, strenger als zwei getrennte Läufe).
+- Sonst keine Abweichungen vom Bean-Body.
+
+## Notes (an den PO — Epic-Review-Ritual, offen + nicht blockierend)
+
+- **Q01:** Destruktiver Delete-Modus (Tag zusätzlich von jedem Bean
+  strippen, GitHub-Label-Semantik)? v1.1-Stand: Registry-only (D12).
+- **Q02:** Definierte Tags mit Count 0 als „Aufräum-Kandidat" markieren?
+  v1.1-Stand: schlichte Count-0-Anzeige (D09).
+- **Q03:** Picker-`n` (B14/E8) künftig auch die Registry befüllen?
+  v1.1-Stand: B14 unverändert (T6).
+- **Q04** (aus T5-Review): Rename auf existierenden freien Namen = Merge
+  erlauben? v1.1-Stand: per Dedupe abgelehnt; Empfehlung nächste Iteration
+  (eigene Confirm-UX, Populations-Vereinigung irreversibel).
+- **Fast-Follow-Kandidat** (T5-Deviations, kein Bug): eine bereits offene
+  Tag-Page zeigt nach Rename/externem Reload alte Counts bis zum
+  nächsten Page-Open (D03 deckt nur „frisch bei jedem Open").
+- `bt-6oyy` bleibt `in-progress` — Abnahme-Entscheid liegt beim PO.
