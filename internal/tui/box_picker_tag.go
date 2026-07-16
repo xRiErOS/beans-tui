@@ -38,48 +38,90 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// tagCount is one usage-counted row of the tag picker's menu.
+// tagCount is one usage-counted row of the tag picker's menu. defined marks
+// a row whose tag is registered in the repo-local Tag-Registry (T6, bean
+// bt-pqq3, epic bt-362n D10 Suggest-Mode) -- as opposed to a "free" tag that
+// merely sits on some bean but was never defined there. Suggest-Mode is
+// display/sort-only: a free row stays exactly as togglable/savable as
+// before (kein strict mode, PO-Vorgabe wörtlich).
 type tagCount struct {
-	tag   string
-	count int
+	tag     string
+	count   int
+	defined bool
 }
 
-// collectTagCounts counts each tag's usage across every bean in idx.
+// collectTagCounts counts each tag's usage across every bean in idx and
+// marks every tag present in defined as a registry-defined row (T6, D10).
+// The returned set is the UNION of every tag currently in use AND every
+// registry-defined tag -- a defined tag with ZERO current usage still
+// appears (count 0, defined=true), mirroring D09's "auch mit Count 0"
+// wording one layer up (view_tag_management.go's tagRegistryRows): the
+// Suggest-Mode picker offers every defined tag as a candidate even before it
+// has ever been applied to a bean (this task's own tmux-Smoke acceptance
+// wording "unbenutzt-definierte sichtbar"). defined may be nil (e.g. no
+// client yet, or a missing/corrupt registry file, D02 tolerant-missing) --
+// a nil map read always returns false, so every row is simply "free" in
+// that case, identical to this function's pre-D10 behavior.
+//
+// Sort (sortTagCountsDefinedFirst): "defined" is the NEW PRIMARY key (D10 --
+// defined tags always sort before free tags, regardless of count); the
+// pre-existing count-desc/alpha tie-break stays SECONDARY/TERTIARY,
+// unchanged WITHIN each of the two groups.
 //
 // Determinism note (the same ERRATUM lesson box_filter_facets.go's
 // tagFilterOptions documents, but resolved more simply here): idx.ByID is a
 // Go map with no defined iteration order, so the intermediate counts map
 // built by ranging over it is itself order-dependent -- but the FINAL sort
-// key (count desc, then tag name alpha) fully determines row order on its
-// own, because tag names are unique within the counts map (no two rows can
-// tie on BOTH count and name). Unlike tagFilterOptions (which sorts whole
+// key (defined, then count desc, then tag name alpha) fully determines row
+// order on its own, because tag names are unique within the counts map (no
+// two rows can tie on all three). Unlike tagFilterOptions (which sorts whole
 // *Bean values that CAN tie completely on every sort field), no baseline
 // pre-sort is needed here -- the map-walk order that built the counts never
 // leaks into the returned slice's order.
-func collectTagCounts(idx *data.Index) []tagCount {
-	if idx == nil {
-		return nil
-	}
+func collectTagCounts(idx *data.Index, defined map[string]bool) []tagCount {
 	counts := map[string]int{}
-	for _, b := range idx.ByID {
-		for _, t := range b.Tags {
-			if t == "" {
-				continue
+	if idx != nil {
+		for _, b := range idx.ByID {
+			for _, t := range b.Tags {
+				if t == "" {
+					continue
+				}
+				counts[t]++
 			}
-			counts[t]++
 		}
 	}
-	out := make([]tagCount, 0, len(counts))
+
+	out := make([]tagCount, 0, len(counts)+len(defined))
+	seen := make(map[string]bool, len(counts))
 	for tag, n := range counts {
-		out = append(out, tagCount{tag: tag, count: n})
+		out = append(out, tagCount{tag: tag, count: n, defined: defined[tag]})
+		seen[tag] = true
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].count != out[j].count {
-			return out[i].count > out[j].count
+	for tag := range defined {
+		if seen[tag] {
+			continue
 		}
-		return out[i].tag < out[j].tag
-	})
+		out = append(out, tagCount{tag: tag, count: 0, defined: true})
+	}
+	sortTagCountsDefinedFirst(out)
 	return out
+}
+
+// sortTagCountsDefinedFirst sorts items in place: defined rows first (D10
+// NEW primary key), then count descending, then tag name alpha -- the SAME
+// comparator collectTagCounts and keyTagInput's new-tag insert path (both
+// build/maintain a []tagCount slice that must stay consistently ordered)
+// share, so the two call sites can never drift apart on what "sorted" means.
+func sortTagCountsDefinedFirst(items []tagCount) {
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].defined != items[j].defined {
+			return items[i].defined
+		}
+		if items[i].count != items[j].count {
+			return items[i].count > items[j].count
+		}
+		return items[i].tag < items[j].tag
+	})
 }
 
 // tagItemIndex returns items' index for tag, or -1 if not present -- shared
@@ -102,13 +144,31 @@ func tagItemIndex(items []tagCount, tag string) int {
 // captures the bean ID only, never the etag (design decision d) -- a
 // watch-reload between open and the eventual enter is honored automatically
 // via beanETag.
+//
+// D03/D10 (T6, bean bt-pqq3, epic bt-362n): the Tag-Registry is loaded
+// FRESH from disk on EVERY open (mirrors openTagManagementPage's own
+// "reload from disk on every open" convention, view_tag_management.go) -- a
+// nil m.client (pre-load/test fixture) degrades to an empty registry rather
+// than panicking, same D02 tolerant-missing philosophy one layer up.
+// tagItems is then built via collectTagCounts' Suggest-Mode union: defined
+// tags sort first, but every free tag stays fully togglable regardless
+// (kein strict mode, PO-Vorgabe wörtlich).
 func (m model) openTagPicker() model {
 	b := m.focusedBean()
 	if b == nil {
 		return m
 	}
 	m.mutTarget = b.ID
-	m.tagItems = collectTagCounts(m.idx)
+
+	var defs []string
+	if m.client != nil {
+		defs, _ = m.client.LoadTagDefs() // D02: LoadTagDefs never returns a non-nil error
+	}
+	defined := make(map[string]bool, len(defs))
+	for _, name := range defs {
+		defined[name] = true
+	}
+	m.tagItems = collectTagCounts(m.idx, defined)
 
 	orig := make(map[string]bool, len(b.Tags))
 	for _, t := range b.Tags {
@@ -227,13 +287,11 @@ func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		if tagItemIndex(m.tagItems, name) < 0 {
 			items := append([]tagCount(nil), m.tagItems...)
+			// defined: false (zero value) -- B14's free-text new-tag path stays
+			// UNCHANGED (Q03 in the epic body, bt-362n: NOT part of this task,
+			// no Registry-write from here).
 			items = append(items, tagCount{tag: name, count: 0})
-			sort.Slice(items, func(i, j int) bool {
-				if items[i].count != items[j].count {
-					return items[i].count > items[j].count
-				}
-				return items[i].tag < items[j].tag
-			})
+			sortTagCountsDefinedFirst(items)
 			m.tagItems = items
 			m.menu.setLen(len(m.tagItems))
 		}
@@ -295,7 +353,15 @@ func (m model) applyTagPickerDiff() (tea.Model, tea.Cmd) {
 // tagPickerBox renders the floating Tag-Picker overlay -- the checkbox +
 // usage-count row list (same modalPanel + [x]/[ ] convention as
 // treeFilterBox, box_filter_facets.go) when the new-tag input is closed, or
-// the free-text capture prompt when it is open.
+// the free-text capture prompt when it is open. Each row's marker column
+// (T6, bean bt-pqq3, D10 Suggest-Mode, PF-12 design-spec.md §15) is ALWAYS
+// reserved -- a defined tag renders tagManagementMarkerGlyph (reused
+// verbatim from view_tag_management.go/T2, bean bt-r92i's own explicit
+// "T6 kann diesen Glyph ... wiederverwenden" hand-off -- PF-12-Konsistenz,
+// one "defined" glyph across the whole app, instead of a second bespoke
+// glyph), a free tag renders the SAME-WIDTH blank -- NEVER a conditional
+// omission of the column itself, so neither group's checkbox/name column
+// ever shifts relative to the other.
 func (m model) tagPickerBox() string {
 	if m.tagInputActive {
 		return m.tagInputBox()
@@ -304,6 +370,10 @@ func (m model) tagPickerBox() string {
 	var b strings.Builder
 	b.WriteString(theme.Muted.Render("space/x:toggle  n:new tag  enter:save  esc:discard") + "\n")
 	for i, it := range m.tagItems {
+		marker := " "
+		if it.defined {
+			marker = tagManagementMarkerStyle.Render(tagManagementMarkerGlyph)
+		}
 		box := theme.Dim.Render("[ ]")
 		if m.tagPending[it.tag] {
 			box = theme.Accent.Render("[x]")
@@ -315,7 +385,7 @@ func (m model) tagPickerBox() string {
 			label = theme.Header.Render(label)
 		}
 		count := theme.Muted.Render(fmt.Sprintf(" (%d)", it.count))
-		b.WriteString(cursor + box + " " + label + count + "\n")
+		b.WriteString(cursor + marker + " " + box + " " + label + count + "\n")
 	}
 	if len(m.tagItems) == 0 {
 		b.WriteString(theme.Muted.Render("(no tags in repo)") + "\n")

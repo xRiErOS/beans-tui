@@ -9,11 +9,15 @@ package tui
 // box_menu_value_test.go (same package).
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // fixtureBeansTagged layers tags onto fixtureBeans' fixed hierarchy so the
@@ -55,7 +59,7 @@ func tagPickerCursorTo(t *testing.T, m model, tag string) model {
 
 func TestCollectTagCountsSortedByCountDescThenAlpha(t *testing.T) {
 	idx := data.NewIndex(fixtureBeansTagged())
-	got := collectTagCounts(idx)
+	got := collectTagCounts(idx, nil)
 
 	want := []tagCount{
 		{tag: "urgent", count: 2},
@@ -69,6 +73,55 @@ func TestCollectTagCountsSortedByCountDescThenAlpha(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("collectTagCounts()[%d] = %+v, want %+v (full: %+v)", i, got[i], want[i], got)
 		}
+	}
+}
+
+// --- collectTagCounts: D10 Suggest-Mode (T6, bean bt-pqq3, epic bt-362n) ---
+
+// TestCollectTagCountsDefinedFirstThenCountDescThenAlpha is the bean
+// bt-pqq3 body's own RED-Zitat verbatim: "defined" becomes the NEW PRIMARY
+// sort key -- a registry-defined tag sorts before a free tag even when its
+// usage count is far lower (rare-defined, count 1, beats popular-free,
+// count 3).
+func TestCollectTagCountsDefinedFirstThenCountDescThenAlpha(t *testing.T) {
+	idx := data.NewIndex([]data.Bean{
+		{ID: "b1", Tags: []string{"popular-free"}},
+		{ID: "b2", Tags: []string{"popular-free"}},
+		{ID: "b3", Tags: []string{"popular-free"}},
+		{ID: "b4", Tags: []string{"rare-defined"}},
+	})
+	defined := map[string]bool{"rare-defined": true}
+	got := collectTagCounts(idx, defined)
+	if len(got) != 2 || got[0].tag != "rare-defined" || !got[0].defined {
+		t.Fatalf("want defined tag first despite lower count, got %+v", got)
+	}
+	if got[1].tag != "popular-free" || got[1].defined {
+		t.Fatalf("want free tag second, got %+v", got)
+	}
+}
+
+// TestCollectTagCountsIncludesUnusedDefinedTagAtCountZero guards the
+// Suggest-Mode Union: a registry-defined tag with ZERO current usage must
+// still appear (count 0, defined=true) -- mirrors D09's "auch mit Count 0"
+// wording one layer up (view_tag_management.go's tagRegistryRows) and is
+// the concrete behavior behind this task's own tmux-Smoke acceptance
+// wording "unbenutzt-definierte sichtbar". "defined" stays the PRIMARY sort
+// key even at count 0: ghost-defined (defined, count 0) still sorts before
+// in-use-free (free, count 1).
+func TestCollectTagCountsIncludesUnusedDefinedTagAtCountZero(t *testing.T) {
+	idx := data.NewIndex([]data.Bean{
+		{ID: "b1", Tags: []string{"in-use-free"}},
+	})
+	defined := map[string]bool{"ghost-defined": true}
+	got := collectTagCounts(idx, defined)
+	if len(got) != 2 {
+		t.Fatalf("want 2 rows (in-use-free + unused ghost-defined), got %+v", got)
+	}
+	if got[0].tag != "ghost-defined" || !got[0].defined || got[0].count != 0 {
+		t.Fatalf("want ghost-defined first (defined, count 0), got %+v", got[0])
+	}
+	if got[1].tag != "in-use-free" || got[1].defined || got[1].count != 1 {
+		t.Fatalf("want in-use-free second (free, count 1), got %+v", got[1])
 	}
 }
 
@@ -101,6 +154,97 @@ func TestOpenTagPickerSeedsPendingFromFocusedBean(t *testing.T) {
 	m.tagPending["scratch-independence-probe"] = true
 	if m.tagOriginal["scratch-independence-probe"] {
 		t.Fatal("tagOriginal aliases tagPending's backing map -- must be independent")
+	}
+}
+
+// --- openTagPicker: D03 fresh Tag-Registry load + D10 Suggest-Mode marking
+// (T6, bean bt-pqq3, epic bt-362n) ---
+
+// TestOpenTagPickerLoadsRegistryFreshMarksDefinedIncludingUnused writes a
+// real .beans-tags.yml (T1, internal/data/tagdefs.go) to a temp repo dir,
+// points m.client at it, and verifies openTagPicker (D03: loads the
+// registry FRESH on every open) marks tagItems[].defined correctly AND
+// surfaces a registry-defined tag that is not currently used on ANY bean
+// (ghost-defined, count 0) -- the concrete behavior behind this task's own
+// tmux-Smoke wording "unbenutzt-definierte sichtbar".
+func TestOpenTagPickerLoadsRegistryFreshMarksDefinedIncludingUnused(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".beans-tags.yml"), []byte("tags:\n  - urgent\n  - ghost-defined\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := fixtureModel(t, fixtureBeansTagged())
+	m.client = &data.Client{RepoDir: dir}
+	m = focusBean(m, "tk-2") // tags: urgent
+
+	m = step(t, m, runeMsg('t'))
+
+	want := []tagCount{
+		{tag: "urgent", count: 2, defined: true},
+		{tag: "ghost-defined", count: 0, defined: true},
+		{tag: "backend", count: 1, defined: false},
+		{tag: "zeta", count: 1, defined: false},
+	}
+	if len(m.tagItems) != len(want) {
+		t.Fatalf("tagItems = %+v, want len %d", m.tagItems, len(want))
+	}
+	for i := range want {
+		if m.tagItems[i] != want[i] {
+			t.Fatalf("tagItems[%d] = %+v, want %+v (full: %+v)", i, m.tagItems[i], want[i], m.tagItems)
+		}
+	}
+}
+
+// TestOpenTagPickerNilClientDegradesToNoDefinedTags mirrors D02's
+// tolerant-missing philosophy one layer up (same precedent as
+// TestOpenTagManagementPageNilClientBuildsFromIdxOnly, view_tag_management_test.go,
+// T2): a nil m.client (pre-load/test fixture -- fixtureModel's own default)
+// must never panic on m.client.LoadTagDefs() and must degrade to an empty
+// registry, i.e. every row free (defined=false).
+func TestOpenTagPickerNilClientDegradesToNoDefinedTags(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+
+	m = step(t, m, runeMsg('t')) // must not panic on a nil m.client
+
+	for _, it := range m.tagItems {
+		if it.defined {
+			t.Fatalf("nil client must degrade to an empty registry -- no tag should be marked defined, got %+v", it)
+		}
+	}
+}
+
+// TestOpenTagPickerFreeTagRemainsTogglableAndSavable is the Akzeptanz-
+// Checkliste's explicit "kein strict mode" regression: with a REAL registry
+// loaded (urgent is defined), a NOT-defined tag (backend) must still be
+// togglable AND fire a real save mutation on enter -- Suggest-Mode only
+// affects sort/display, never selectability.
+func TestOpenTagPickerFreeTagRemainsTogglableAndSavable(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".beans-tags.yml"), []byte("tags:\n  - urgent\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := fixtureModel(t, fixtureBeansTagged())
+	m.client = &data.Client{RepoDir: dir}
+	m = focusBean(m, "tk-2") // tags: urgent
+	m = step(t, m, runeMsg('t'))
+
+	m = tagPickerCursorTo(t, m, "backend") // NOT in the registry -- free tag
+	m = step(t, m, runeMsg(' '))           // toggle on
+	if !m.tagPending["backend"] {
+		t.Fatal("a free (non-defined) tag must still be togglable in Suggest-Mode")
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm := tm.(model)
+	if nm.overlay != overlayNone {
+		t.Fatal("enter must close the picker")
+	}
+	if cmd == nil {
+		t.Fatal("a free tag toggle must still fire a save mutation (no strict mode)")
+	}
+	msg := cmd()
+	if _, ok := msg.(mutationDoneMsg); !ok {
+		t.Fatalf("cmd() = %T, want mutationDoneMsg -- free tag save must dispatch a real SetTags call", msg)
 	}
 }
 
@@ -397,5 +541,110 @@ func TestOverlayCaptureSwallowsQuitKeysWhileTagPickerOpen(t *testing.T) {
 	}
 	if nm.overlay != overlayTagPicker {
 		t.Fatal("q must not close the open overlay either")
+	}
+}
+
+// --- tagPickerBox: PF-12 reserved marker column (T6, bean bt-pqq3, D10) ---
+
+// checkboxColStart returns the DISPLAY-COLUMN (lipgloss.Width, cell-based)
+// at which line's "[" checkbox starts, or -1 if absent. Width-based, NOT a
+// raw strings.Index byte offset (B-ERRATUM below): tagManagementMarkerGlyph
+// ("✓", U+2713) and the modal's own "▸" cursor glyph are both 3-byte UTF-8
+// sequences that occupy a SINGLE terminal cell, same as the ASCII blank
+// they replace -- byte-length and cell-width diverge for any non-ASCII
+// glyph, and PF-12's own literal wording (design-spec.md §15, quoted in the
+// epic body bt-362n's D10) is a lipgloss.Width invariant, not a byte-offset
+// one.
+func checkboxColStart(line string) int {
+	i := strings.Index(line, "[")
+	if i < 0 {
+		return -1
+	}
+	return lipgloss.Width(line[:i])
+}
+
+// TestTagPickerBoxReservesMarkerColumnRegardlessOfDefined is the bean
+// bt-pqq3 body's own RED-Zitat, with two implementer-found test-bugs fixed
+// (B-ERRATUM, documented in this task's Deviations section, mirrors bean
+// bt-r92i's own B01 precedent -- found+fixed+regression-tested, no
+// PO-visible behavior affected):
+//
+//  1. The original `strings.Contains(l, "a") || strings.Contains(l, "b ")`
+//     filter also matched the modal's OWN title line ("Tags", contains "a")
+//     and the hint line ("space/x:toggle ... enter:save", contains "a" —
+//     and, at modalBox's width=40, wraps across TWO physical lines, neither
+//     of which contains "["). Both non-tag lines sorted BEFORE the two real
+//     tag rows in `lines`, so rowLines[0]/rowLines[1] were actually two
+//     non-tag lines whose "[" search both return -1 -- a VACUOUS pass (-1
+//     == -1) that verified nothing. Fixed: filter directly on `strings.Contains(l, "[")`,
+//     the actual property under test (a checkbox row).
+//  2. `strings.Index` is a BYTE offset; tagManagementMarkerGlyph ("✓") and
+//     the pre-existing "▸" cursor glyph are 3-byte UTF-8 sequences that
+//     occupy ONE terminal cell each, same as the ASCII space they replace --
+//     so a defined+cursored row and a free+non-cursored row can have
+//     IDENTICAL display columns but DIFFERENT byte offsets. Fixed: compare
+//     via checkboxColStart (lipgloss.Width-based), matching PF-12's own
+//     literal wording (design-spec.md §15, epic body bt-362n's D10 citation:
+//     "lipgloss.Width ... identisch").
+func TestTagPickerBoxReservesMarkerColumnRegardlessOfDefined(t *testing.T) {
+	m := newModel(nil, "")
+	m.tagItems = []tagCount{{tag: "a", defined: true}, {tag: "b", defined: false}}
+	m.menu.setLen(2)
+	out := m.tagPickerBox()
+	lines := strings.Split(ansi.Strip(out), "\n")
+	// Beide Tag-Zeilen müssen an identischer Spalte beginnen -- PF-12: kein
+	// bedingtes Weglassen der Marker-Spalte.
+	var rowLines []string
+	for _, l := range lines {
+		if strings.Contains(l, "[") {
+			rowLines = append(rowLines, l)
+		}
+	}
+	if len(rowLines) < 2 {
+		t.Fatalf("want at least 2 tag rows rendered, got %v", rowLines)
+	}
+	// Spalte (lipgloss.Width) des '[' (Checkbox-Start) muss in beiden Zeilen
+	// identisch sein, obwohl rowLines[0] (tag "a") den Cursor trägt und
+	// rowLines[1] (tag "b") nicht -- PF-12 deckt BEIDE Achsen (Cursor- UND
+	// Marker-Spalte) durch denselben "immer reserviert"-Vertrag ab.
+	if c0, c1 := checkboxColStart(rowLines[0]), checkboxColStart(rowLines[1]); c0 != c1 {
+		t.Fatalf("marker column shifted layout: col %d (%q) vs col %d (%q)", c0, rowLines[0], c1, rowLines[1])
+	}
+}
+
+// TestTagPickerBoxMarkerColumnWidthStableAcrossNonCursorRows is PF-12's OWN
+// literal test-obligation (design-spec.md §15, quoted verbatim in the epic
+// body bt-362n's D10: "lipgloss.Width einer NICHT-aktiven Zeile identisch,
+// unabhängig von einer anderen aktiven Zeile") applied to the marker column
+// -- TWO non-cursor rows (one defined, one free) must render to the IDENTICAL
+// lipgloss.Width, cursor-styling-independent, isolating the marker column's
+// own contribution from the pre-existing "▸ "-cursor-prefix's own (unrelated,
+// pre-T6) styling.
+func TestTagPickerBoxMarkerColumnWidthStableAcrossNonCursorRows(t *testing.T) {
+	m := newModel(nil, "")
+	m.tagItems = []tagCount{
+		{tag: "alpha-defined", defined: true},
+		{tag: "middle-cursored", defined: false},
+		{tag: "zzz-free", defined: false},
+	}
+	m.menu.setLen(3)
+	m.menu.cursor = 1 // neither row 0 nor row 2 carries the cursor
+
+	lines := strings.Split(ansi.Strip(m.tagPickerBox()), "\n")
+	var rowLines []string
+	for _, l := range lines {
+		if strings.Contains(l, "[") {
+			rowLines = append(rowLines, l)
+		}
+	}
+	if len(rowLines) != 3 {
+		t.Fatalf("want 3 rendered tag rows, got %d (%v)", len(rowLines), rowLines)
+	}
+	definedRow, freeRow := rowLines[0], rowLines[2]
+	if w1, w2 := lipgloss.Width(definedRow), lipgloss.Width(freeRow); w1 != w2 {
+		t.Fatalf("marker column shifted layout between non-cursor rows: defined width=%d (%q), free width=%d (%q)", w1, definedRow, w2, freeRow)
+	}
+	if c0, c1 := checkboxColStart(definedRow), checkboxColStart(freeRow); c0 != c1 {
+		t.Fatalf("marker column shifted the checkbox column between non-cursor rows: col %d (%q) vs col %d (%q)", c0, definedRow, c1, freeRow)
 	}
 }
