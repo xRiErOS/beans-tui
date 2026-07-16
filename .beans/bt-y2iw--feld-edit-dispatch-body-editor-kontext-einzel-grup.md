@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-15T21:08:25Z
-updated_at: 2026-07-15T22:43:24Z
+updated_at: 2026-07-16T03:40:20Z
 parent: bt-ntoz
 blocked_by:
     - bt-qbyq
@@ -249,3 +249,17 @@ dieselbe generische Invariante weiter zu pinnen; NICHT geloescht).
   bestehende Dispatch (`s`-Taste + PF-5-Kaskade + jetzt Palette
   "set type"/"set priority") deckt das bereits ab, Maus-Klick muss nur
   denselben Handler treffen.
+
+
+
+## Nachtrag Doku-Finalisierung (2026-07-16, aus E8-T6-Review I02, via bt-6ppq)
+
+Die im TDD-Schritt 1 geforderte dokumentierte Pruefung "'stat'-Fuzzy vs.
+'set type'/'set priority'" fehlte im bean-Body — hier nachgetragen
+(Reviewer-Analyse, 2026-07-16 gegen fuzzy.go/overlay_palette.go
+verifiziert): Der Command-Center-Filter ist ein Subsequence-Matcher
+(fuzzy.go). Die Query "stat" enthaelt ein 'a' — weder "set type" noch
+"set priority" enthalten ein 'a', die Subsequence matcht also NIE.
+"stat" filtert weiterhin exakt auf "set status" + "set parent" (beide
+mit 'a'), keine Kollision durch die zwei neuen Palette-Eintraege.
+Ergebnis der Implementierung war korrekt, nur der Pruef-Beleg fehlte.

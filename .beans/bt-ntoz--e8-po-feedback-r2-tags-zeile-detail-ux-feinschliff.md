@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-15T22:58:49Z
+updated_at: 2026-07-16T03:39:18Z
 parent: bt-apmy
 ---
 
@@ -85,3 +85,26 @@ UNVERÄNDERTE Datei liefern verschiedene ETags (947a8f6d… vs b554f0f6…) →
 `update --if-match` schlägt fehl. beans-tui verhält sich korrekt (Conflict-Toast +
 Recovery-File via writeConflictTempFile). Beleg für den T03-Issue-Entwurf
 (NACH v1-Abnahme, Post nur mit PO-Freigabe).
+
+
+
+## esc-Audit-Vervollständigung (2026-07-16, Nachtrag aus E8-T3-Review I01)
+
+Die esc-Audit-Tabelle aus T3/bt-qbyq (Commit 6d0a9fe) deckte die 6
+PO-benannten Bereiche (Suche/Filter/Picker/Lobby/Quit/Kaskade). Der
+T3-Reviewer fand 5 weitere esc-Sites — ALLE bereits 'eine Ebene
+zurück'-konform, kein Bug, reine Nachvollziehbarkeit:
+
+| Site | Datei:Zeile | Verhalten | Befund |
+|---|---|---|---|
+| Backlog-View | view_browse_backlog.go:333 (keyBacklog) | esc → zurück zu Browse/Repo — eine Ebene | konform |
+| Create-Confirm | box_confirm_create.go:147 (keyCreateConfirm) | esc/n → zurück zum Formular — eine Ebene | konform |
+| Delete-Confirm | box_confirm_delete.go:123 (keyDeleteConfirm) | esc/n → Abbruch, Overlay zu — eine Ebene | konform |
+| Formulare | forms_shared.go:164 (keyForm) | esc → Form verwerfen ohne Speichern — dokumentierte Design-Entscheidung | konform |
+| Help-Overlay | overlay_shortcuts.go:63 (keyHelp) | esc/?/q → Help schließen — eine Ebene | konform |
+
+ERRATUM (Zeilendrift): das Review-Prelude zitierte die Backlog-Site als
+view_browse_backlog.go:307 — nach den T8-Edits liegt der esc-Case heute
+auf Zeile 333 (`keys.Backlog`/`keys.Back`-Case). Alle übrigen vier
+Zeilennummern stimmen exakt mit dem Ist-Code überein (verifiziert
+2026-07-16, bt-6ppq).

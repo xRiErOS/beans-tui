@@ -33,7 +33,7 @@ Evidence-Review-Nachträge) · `bt-wm4w`/`bt-9yvh` (Rohbeleg-Träger) ·
 
 ---
 
-## 1. User-Story-Matrix (14/14 validiert — 13× PASS, 1× PARTIAL)
+## 1. User-Story-Matrix (14/14 validiert — 14× PASS, US-08 pending PO-Sichtprüfung)
 
 | US | Titel | Ergebnis | Evidenz-Anker | Anmerkung |
 |---|---|---|---|---|
@@ -44,7 +44,7 @@ Evidence-Review-Nachträge) · `bt-wm4w`/`bt-9yvh` (Rohbeleg-Träger) ·
 | US-05 | Suche/Filter | PASS | Live-Bleve-Stichprobe im US-02-Durchlauf: lokaler Substring "Foundation" (Treffer `bt-blsy`), Feldsyntax `title:Foundation` (1 Treffer) | `status:in-progress` liefert 0 Treffer — beans-CLI selbst unterstützt nur `slug:`/`title:`/`body:` im Volltextindex (kein TUI-Bug, Client reicht korrekt durch); Status-Filterung läuft bewusst über den separaten Facetten-Filter. PO hat die Filter-Logik zusätzlich als "exzellent" abgenommen (bt-heg9, PO-Nachtrag 3) |
 | US-06 | Bean anlegen | PASS | Confirm-Gate + Cursor-Verifikation im Scratch-Repo `/tmp/bt-scratch-100` (`bt-scratch-100-wer2`, CLI-Frontmatter-Verifikation) | Parent korrekt vom Cursor-Bean vorbelegt (`TestBuildCreateBeanFormPrefillsParentFromCursor`-Verhalten live bestätigt), Formular zeigte ausschließlich gültige Enum-Werte |
 | US-07 | Feld-Edit constrained | PASS | Feld-Edit-Kaskade (PF-5) live an `bt-scratch-100-wer2` (status/priority/title/tags) + echter Zwei-Prozess-ETag-Konflikt (`/tmp/bt-scratch-etag`, ETag `d03f384b36f3bb30`→`bb36f22d412c30a3`, volle Tabelle: Anhang §4.2) | Erster ECHTER (nicht simulierter) Zwei-Prozess-Konflikt-Beleg des Projekts; Toast, Sticky-Verhalten (`TestConflictToastIsStickyAndSurvivesReload` live reproduziert) und Recovery-Tempfile-Inhalt exakt geprüft |
-| US-08 | Review-Stand sehen (redefiniert PF-14) | **PARTIAL** | `TestPassReviewSetsCompletedAndRemovesTag`, `TestRejectReviewSwapsTagAndAppendsSection` (PASS) + Live-Check aller 4 Spec-Flächen (`/tmp/bt-scratch-a`) | Filter (`f`) + Live-Reload funktionieren vollständig; Tree UND Detail-META zeigen Tags aktuell GAR NICHT → **B01/bt-gdkx** (medium, s. Bugs-Tabelle), PO-Entscheid **D01**. Suche (`tag:`-Feldsyntax) 0 Treffer — gleiche Scope-Ursache wie US-05, kein neuer Bug. **Fix in E8 (D01), bt-gdkx** — Umsetzung bean `bt-e6q9` (E8 Task 1), Re-Validierung dieser Zeile nach E8-Abnahme fällig |
+| US-08 | Review-Stand sehen (redefiniert PF-14) | **PASS (pending PO-Sichtprüfung, `bt-gdkx`)** | `TestPassReviewSetsCompletedAndRemovesTag`, `TestRejectReviewSwapsTagAndAppendsSection` (PASS) + Live-Check aller 4 Spec-Flächen (`/tmp/bt-scratch-a`) | Ursprünglicher E6-Befund PARTIAL: Filter (`f`) + Live-Reload funktionierten, aber Tree UND Detail-META zeigten Tags GAR NICHT → **B01/bt-gdkx** (medium, s. Bugs-Tabelle), PO-Entscheid **D01**. Suche (`tag:`-Feldsyntax) 0 Treffer — gleiche Scope-Ursache wie US-05, kein neuer Bug. **E8-Umsetzung erfolgt** (D01, bean `bt-e6q9`, Commit `397a70f`): Tags als 7. Meta-Feld sichtbar, `enter` auf `tags:` öffnet den Tag-Picker (s. §7). `bt-gdkx` trägt Tag `to-review` — PO-Sichtprüfung steht aus |
 | US-09 | Backlog priorisiert | PASS | `TestBacklogShowsParentlessReadyBeansFromIndex`, `TestBacklogSortCyclesThroughFourModesAndBackToStart`, `TestBacklogGolden`, `TestBacklogGoldenDeterministic` — alle PASS | Kein Sort-Modus-Indikator sichtbar (unverändert offen seit E2, **D02**) — kein funktionaler Mangel, reine Diskoverability-Frage |
 | US-10 | Live-Reload | PASS | `TestWatcherFiresOnceForBurst`, `TestReloadKeepsCursorOnID`, `TestSwitchRepoCmdStopsOldWatcherStartsNew` (alle PASS) + Live-Beleg beide Richtungen im Zwei-Repo-Smoke (Anhang §4.3) | Eigenständiger Beleg dieses Tasks, kein Fremdverweis auf `bt-7dfj` mehr |
 | US-11 | Yank/Clipboard | PASS | `TestYankShowsConfirmationToast`, `TestYankOnOrphanRootNoop` (PASS) + Live-OSC52/`pbpaste`-Beleg im Zwei-Repo-Smoke: Toast `● Copied: bt-scratch-b-q9do`, `pbpaste` liefert den exakten Markdown-Kontext | `TestReviewCockpitYankUsesReviewStandNotSingleBean` aus dem Plan-Vorbild existiert nicht mehr (Review-Cockpit-Yank-Override mit PF-14 entfernt) — kein FAIL, ersatzlos weg |
@@ -175,3 +175,62 @@ D-Punkte (D01–D08, §5) sind inzwischen entschieden (PO-Grilling-Runde 2,
 bean `bt-ntoz`) und Umsetzung läuft über `epic-E8-plan.md`; D01
 (Tags-Sichtbarkeit) ist die einzige mit direktem User-Story-Bezug (US-08 →
 PARTIAL) — nach E8-Abnahme ist eine Re-Validierung dieser Zeile fällig.
+
+---
+
+## 7. E8-Umsetzung (2026-07-16)
+
+Umsetzungsstand des Eposs E8 (`bt-ntoz`, `epic-E8-plan.md`) gegen die in §5
+entschiedenen D-Punkte plus die 14 Nebenfunde B01–B14 aus der
+PO-Feedback-Runde 2. Voll-Validierung (Build/vet/gofmt, volle Suite 2×
+frisch, `-race`, Goldens `-count=2` byte-stabil) grün — Beleg: bean
+`bt-6ppq`, Abschnitt „Validierungs-Output".
+
+| Code | Punkt | Status | Task/bean | Commit |
+|---|---|---|---|---|
+| D01 | Tags als 7. Meta-Feld (`tags:` nach `priority`) + enter→Tag-Picker | 🟢 umgesetzt | T1 `bt-e6q9` | `397a70f` |
+| D02 | Backlog-Sort-Suffix in der Suchzeile (`· sort prio`) | 🟢 umgesetzt | T8 `bt-d8kc` | `6b2daa3` |
+| D03 | esc-Rückwärts-Kaskade (Feld→Sektion→Fokus-Exit) + esc-Site-Audit | 🟢 umgesetzt | T3 `bt-qbyq` | `6d0a9fe` |
+| D04 | Header auf exakt 4 Globals (`ctrl+k`/`p`/`?`/`q`) | 🟢 umgesetzt | T8 `bt-d8kc` | `6b2daa3` |
+| D05 | Overlay-Footer zeigen enter/esc — Sign-off | 🟢 verifiziert, kein Code-Fix (D04-Nebeneffekt: keine Header-Dopplung mehr; `TestGlobalBindingsOmitsRefreshBackEnter` pinnt die Kürzung) | — | — |
+| D06 | Footer-Neuspezifikation (Q06-Liste, Taste teal/Wort subtext, kein `:`) | 🟢 umgesetzt | T8 `bt-d8kc` | `6b2daa3` |
+| D07 | Upstream-ETag-Issue bei `hmans/beans` | 🟣 offen by design — NACH v1-Abnahme (T03), POST nur mit PO-Freigabe; Minimal-Repro-Beleg liegt im Epic-bean `bt-ntoz` („D07-Repro-Beleg") | — | — |
+| D08 | Tag-Management-Page → v1.1 | 🟢 bestätigt; B14 ist die gelieferte v1-Minimal-Lösung | T7 `bt-yqdy` | `422b9f3` |
+| B01 | Pfeil-links-Fokus-Exit entfernt (Pfeile = reine Navigation) | 🟢 umgesetzt | T3 `bt-qbyq` | `743d767` |
+| B02 | Kopfblock feste Spaltenbreiten (type 9 / status 11) | 🟢 umgesetzt | T1 `bt-e6q9` | `397a70f` |
+| B03 | Tree-Leaf-Marker | 🟢 ERRATUM: bereits korrekt — verifiziert + regressionsgesichert (`TestTreeNodeMarkerBlankForLeaf`) | T1 `bt-e6q9` | `75f1f4d` |
+| B04 | ▶-Marker erst nach explizitem Feld-Einstieg (`detailLevel==1`) | 🟢 umgesetzt | T1 `bt-e6q9` | `397a70f` |
+| B05 | Redundantes Accordion-Chevron entfernt | 🟢 umgesetzt | T2 `bt-czpf` | `e3abb6a` |
+| B06 | EXPERIMENT: inaktive Accordion-Header Teal | 🟡 umgesetzt, **PO-Sign-off AUSSTEHEND** (s. Offene Punkte) | T2 `bt-czpf` | `f910b78` |
+| B07 | Maus im Detail-Pane (Sektionen + Meta-Felder klickbar) | 🟢 umgesetzt + Fix-Runde R1 (clickKey-Aliasing, zeitfensterloser Zweitklick) | T4 `bt-duz7` | `e079d58` + `6e1152e` |
+| B08 | Quit-Flow zweistufig über Lobby + Text-Fix | 🟢 umgesetzt + Fix-Runde R1 (Lobby-Exit-Keys entkoppelt) | T5 `bt-1u0t` | `ce3200a` + `d173927` |
+| B09 | Inaktive ▷-Marker theme.Muted statt unstilisiert | 🟢 umgesetzt | T1 `bt-e6q9` | `397a70f` |
+| B10 | BODY-Sektion: e/enter → `$EDITOR` | 🟢 umgesetzt | T6 `bt-y2iw` | `2e04376` |
+| B11 | Feld-enter öffnet Overlay nur fürs gewählte Feld | 🟢 umgesetzt | T6 `bt-y2iw` | `2e04376` |
+| B12 | Value-Menü je Gruppe gesplittet (5 statt 15 Zeilen) + Palette `set type`/`set priority` | 🟢 umgesetzt | T6 `bt-y2iw` | `2e04376` |
+| B13 | Command-Center commands-only (Bean-Suche raus, US-04-Revision) | 🟢 umgesetzt | T7 `bt-yqdy` | `422b9f3` |
+| B14 | Tag-Neuanlage entdeckbar (Footer-Hint `n New tag` + Palette `create tag`) | 🟢 umgesetzt | T7 `bt-yqdy` | `422b9f3` |
+
+### Offene Punkte (PO)
+
+1. **B06-Experiment — Sign-off ausstehend.** Vorher/Nachher-Beleg:
+   `docs/plans/v1-port/b06-experiment/` (`README.md`/`before.txt`/
+   `after.txt`, ANSI-erhaltende tmux-Captures) + Commit-Body `f910b78`.
+   Rollback wäre eine Ein-Zeilen-Änderung (`theme.HeaderInactive` →
+   `theme.Muted`); die D06-Footer-Farben hängen NICHT daran
+   (`theme.BindingKey`/`BindingDesc` sind bewusst eigene Tokens —
+   Entkopplung 2026-07-16 gegen den Ist-Code gegengeprüft, hielt).
+2. **Q-PO: Backlog-Footer braucht bei <82 Spalten 3 Zeilen** (D06 erlaubt
+   „Footer darf 2 Zeilen"). Messung (T8-Review): Footer-Klartext 161
+   Zeichen > 2×78; Umschlagpunkt exakt 82 Spalten. Spec-konformer Fix ohne
+   PO nicht möglich (Q06-Liste wortgesperrt, Sort-Entzug widerspräche dem
+   dokumentierten Planner-ERRATUM). Optionen: **(a)** 3 Zeilen bei <82
+   Spalten akzeptieren · **(b)** Sort-Footer-Eintrag streichen (das
+   Suchzeilen-Suffix `· sort <label>` trägt die Info bereits) · **(c)**
+   Wortkürzungen freigeben. Bewusst NICHT entschieden — PO-Frage.
+3. **US-08 / `bt-gdkx`:** PASS pending PO-Sichtprüfung (Tag `to-review`
+   gesetzt, Status bleibt beim PO-Gate).
+4. **D07/T03:** Upstream-Issue-Entwurf erst NACH v1-Abnahme, POST nur mit
+   PO-Freigabe (Repro-Beleg im Epic-bean `bt-ntoz`).
+5. **Epic-Abnahme:** `bt-ntoz` steht auf `to-review` (Agent schließt Epics
+   nie) — PO-Review inkl. Punkt 1–4.

@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-15T21:10:08Z
-updated_at: 2026-07-16T00:14:57Z
+updated_at: 2026-07-16T03:40:26Z
 parent: bt-ntoz
 blocked_by:
     - bt-y2iw
@@ -295,3 +295,21 @@ Implementer-Entscheidungen (wie im Auftrag vorgesehen):
 - `create_tag` (Palette) ist ein neuer `dispatchPalette`-Case, der
   `openTagPicker().openTagInput()` direkt aufruft -- KEIN neuer Key/keine
   neue globale Keybinding, beruehrt bt-d8kc's Footer-/Header-Arbeit nicht.
+
+
+
+## Korrektur Summary (2026-07-16, aus E8-T7-Review I01, via bt-6ppq)
+
+Die Summary oben referenziert eine Datei `search.go` — diese existiert
+NICHT (nur `search_test.go` existiert). Korrektur (verifiziert gegen den
+Ist-Code, 2026-07-16): die `/`-Suche-Logik (searchBleveIDs/searchBleveFor
+etc.) liegt verteilt in view_browse_repo.go, update.go, messages.go und
+types.go; ihre Tests liegen in search_test.go. Die inhaltliche Aussage
+der Summary (B13 liess die `/`-Suche unangetastet) bleibt korrekt —
+nur die Datei-Referenz war falsch. Summary bewusst NICHT umgeschrieben
+(append-only-Konvention), diese Sektion ist die massgebliche Korrektur.
+
+ERRATUM (Zuordnung): der bt-6ppq-Auftrag gruppierte diese Korrektur als
+"bt-y2iw-Korrektur" — der search.go-Fehler steht aber in DIESER Summary
+(bt-yqdy), das T7-Review-Prelude benennt das auch so. Hier korrekt
+geroutet statt blind an bt-y2iw angehaengt.
