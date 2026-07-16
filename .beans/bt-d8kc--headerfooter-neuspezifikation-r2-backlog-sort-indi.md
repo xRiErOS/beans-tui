@@ -1,11 +1,11 @@
 ---
 # bt-d8kc
 title: Header/Footer-Neuspezifikation R2 + Backlog-Sort-Indikator
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T21:06:57Z
-updated_at: 2026-07-15T21:06:57Z
+updated_at: 2026-07-16T02:00:51Z
 parent: bt-ntoz
 ---
 
