@@ -55,49 +55,43 @@ type tagRegistryRow struct {
 // defined AND in use appears exactly ONCE, in the Defined group, with its
 // real count -- never a duplicate row in the Free group.
 //
-// D10-ERRATUM-Notiz (bean bt-r92i's own PRELUDE-adjacent forward note): once
-// T6 (bean bt-pqq3) extends collectTagCounts (box_picker_tag.go) with its
-// own `defined map[string]bool` parameter, THIS function could call that
-// extended version directly instead of maintaining its own counting pass --
-// not done here since T2 and T6 are parallel, disjoint-file-scope tasks (T6
-// blocked_by T1 only, not T2) and T6 has not landed yet.
+// PRELUDE (T3, bean bt-604w, T6-Review F01): the COUNTING/UNION pass is now
+// SHARED with collectTagCounts (box_picker_tag.go, T6, D10) instead of a
+// second, separately-maintained loop over idx.ByID -- resolves the
+// D10-ERRATUM-Notiz T2 (bean bt-r92i) itself forward-flagged ("once T6
+// extends collectTagCounts with its own defined map[string]bool parameter,
+// THIS function could call that extended version directly"). collectTagCounts
+// already returns the identical defined+free Union, globally sorted (defined
+// primary, count-desc/alpha secondary/tertiary, sortTagCountsDefinedFirst) --
+// but D09's own grouping contract diverges from that global sort in exactly
+// ONE place: the Defined group here sorts ALPHA ONLY (a predictable,
+// index-like read), not count-desc like collectTagCounts' Picker-facing
+// sort. So this function still owns its OWN re-split + re-sort of the
+// Defined half (a stable partition of collectTagCounts' already-sorted
+// output, re-sorted by name) -- the Free half's relative order coming out of
+// that same partition is ALREADY exactly D09's own count-desc/alpha
+// contract (collectTagCounts' secondary/tertiary keys), so it is reused
+// AS-IS, no second sort. Page GROUPING (D09) stays Page logic; only the
+// underlying COUNT/UNION pass is now shared (this task's own PRELUDE
+// mandate: "Zählung geteilt, Page-Gruppierung bleibt Page-Logik").
 func tagRegistryRows(idx *data.Index, defs []string) []tagRegistryRow {
-	counts := map[string]int{}
-	if idx != nil {
-		for _, b := range idx.ByID {
-			for _, t := range b.Tags {
-				if t == "" {
-					continue
-				}
-				counts[t]++
-			}
-		}
-	}
-
 	defSet := make(map[string]bool, len(defs))
-	definedRows := make([]tagRegistryRow, 0, len(defs))
 	for _, name := range defs {
-		if defSet[name] {
-			continue
-		}
 		defSet[name] = true
-		definedRows = append(definedRows, tagRegistryRow{name: name, count: counts[name], defined: true})
+	}
+	counts := collectTagCounts(idx, defSet)
+
+	definedRows := make([]tagRegistryRow, 0, len(defSet))
+	freeRows := make([]tagRegistryRow, 0, len(counts))
+	for _, c := range counts {
+		row := tagRegistryRow{name: c.tag, count: c.count, defined: c.defined}
+		if c.defined {
+			definedRows = append(definedRows, row)
+		} else {
+			freeRows = append(freeRows, row)
+		}
 	}
 	sort.Slice(definedRows, func(i, j int) bool { return definedRows[i].name < definedRows[j].name })
-
-	var freeRows []tagRegistryRow
-	for name, n := range counts {
-		if defSet[name] {
-			continue
-		}
-		freeRows = append(freeRows, tagRegistryRow{name: name, count: n, defined: false})
-	}
-	sort.Slice(freeRows, func(i, j int) bool {
-		if freeRows[i].count != freeRows[j].count {
-			return freeRows[i].count > freeRows[j].count
-		}
-		return freeRows[i].name < freeRows[j].name
-	})
 
 	out := make([]tagRegistryRow, 0, len(definedRows)+len(freeRows))
 	out = append(out, definedRows...)
