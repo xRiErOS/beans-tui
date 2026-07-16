@@ -320,3 +320,35 @@ neue Sektion). Jeder Eintrag hat exakt drei Felder:
   dann Resume mit präzisem Reststand-Auftrag; Dispatch-Prompts weisen
   Agents an, nach einem Resume selbst `git log` zu prüfen statt Arbeit
   zu doppeln.
+
+## 2026-07-17 — E11-Nacharbeitsrunde (Quellen: 6 Reviews, 3 Fix-Runden, 1 CHANGES_REQUIRED)
+
+### 1. tmux-Session-Namenskollision zwischen parallelen Agents
+
+- **Was lief nicht rund:** Zwei parallel smokende Agents nutzten generische tmux-Session-Namen — Keystrokes des einen landeten in der Session des anderen (bt-9ipw-Smoke lief kurz gegen das falsche Repo).
+- **Wie gefixt:** Re-Run mit eindeutigem Namen (`bt9ipw$$`); Vorgabe ab da in jedem Dispatch-Prompt.
+- **Forward-Guard:** Prompt-Vorlagen-Pflichtzeile: tmux-Smoke IMMER mit task-eindeutigem Session-Namen (`<task>$$`).
+
+### 2. Fixtures erbten Zustand statt ihn zu setzen (PF-1-Abhängigkeit)
+
+- **Was lief nicht rund:** 4-5 Maus-Klick-Tests liefen nur grün, weil PF-1 META offen erzwang — `detailFocusModel`-Fixture setzte `accOpen`/`detailFocus` nie explizit. Die PF-18-Umsetzung deckte die stille Kopplung auf.
+- **Wie gefixt:** Fixtures setzen jetzt den echten FocusIn-Zustand explizit (bt-98cb, Commit 66b91f4).
+- **Forward-Guard:** Test-Konvention: Fixtures setzen JEDEN gelesenen Model-Zustand explizit, nie auf Render-Seiteneffekte anderer Invarianten verlassen. Mutations-Stichprobe im Review prüft das.
+
+### 3. Neue Node-Art im Tree: Konsumenten-Sweep war unvollständig
+
+- **Was lief nicht rund:** Platzhalter-Node (bt-39cl) war in Navigation/Maus/focusedBean abgesichert, aber `applyLoaded`s Cursor-Restore (Watcher-Reload-Pfad) konnte den Cursor auf die id-lose Platzhalter-Zeile setzen — einziges CHANGES_REQUIRED der Runde, vom Reviewer per eigenem Repro-Test gefunden, vom Implementer-Smoke strukturell unsichtbar.
+- **Wie gefixt:** Guard `n.id != ""` im id-Match + skipPlaceholder im oldPos-Fallback + Regressionstests (Commit 3a79433).
+- **Forward-Guard:** Checklisten-Punkt für neue Node-/Zeilen-Arten: ALLE `visibleNodes()`-/`nodes[pos]`-Konsumenten sweepen, inkl. asynchroner Pfade (applyLoaded/Watcher/Resize), nicht nur Input-Handler. Reviewer-Prompt fragt das explizit ab.
+
+### 4. Glyph-Rescan statt struktureller Index (latent)
+
+- **Was lief nicht rund:** `activeRelationLine` findet die Cursor-Zeile per `strings.Contains("▶")`-Rescan des gerenderten Strings — Titel mit ▶/▷ würden das Fenster falsch zentrieren (latent, kein Titel betroffen; Reviewer-Testfall belegt).
+- **Wie gefixt:** Noch nicht — als bt-se4q verankert (numerischer Index aus Body-Konstruktion).
+- **Forward-Guard:** Konvention: Positions-Informationen strukturell durchreichen (Rückgabewert/Feld), nie aus gerendertem Text zurückparsen. bt-se4q setzt das um.
+
+### 5. beans-CLI-Flag-Falle: --body-append + -d kombiniert
+
+- **Was lief nicht rund:** `beans update <id> --body-append -d -` → "accepts 1 arg(s), received 2" (zwei Body-Flags, "-" wird Positional).
+- **Wie gefixt:** `--body-append -` liest selbst stdin.
+- **Forward-Guard:** Dispatch-Prompt-Standardzeile (bereits in allen Vorlagen dieser Runde): "`--body-append -` liest stdin. NICHT `--body-file -`, NICHT mit `-d -` kombinieren."
