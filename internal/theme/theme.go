@@ -73,6 +73,28 @@ var (
 	Key            = lipgloss.NewStyle().Foreground(Sapphire) // IDs/Keys = Sapphire
 	Accent         = lipgloss.NewStyle().Foreground(Mauve)
 
+	// BindingKey/BindingDesc render a keybinding hint's key/description
+	// halves (D06, design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc, Grilling
+	// Nachtrag "Optik: Taste in TEAL, Aktions-Wort grau (subtext), KEIN ':'
+	// mehr"): renderBindings (view.go) is the ONE shared render path for
+	// BOTH Header Zone 1 (globalBindings()) and Footer Zone 3 (every
+	// *LocalBindings() set, including footer_context.go's overlay-local
+	// sets) -- one token pair, applied uniformly everywhere that function is
+	// called ("gilt einheitlich", PO-Wortlaut).
+	//
+	// Deliberately its OWN pair rather than reusing HeaderInactive (also
+	// Teal, B06 EXPERIMENT on the Accordion's closed-section header,
+	// bt-czpf): HeaderInactive's PO sign-off is still PENDING and a
+	// rejection rolls it back to Muted (this file's own doc-stamp above) --
+	// D06 is an ALREADY-decided, unrelated Grilling decision. Sharing one
+	// token would silently flip the header/footer keybinding color too the
+	// moment B06 is rejected, coupling two independent decisions that only
+	// coincidentally agree on the same hex today. BindingKey still reuses
+	// the existing Teal color VAR (no new hex literal); BindingDesc reuses
+	// Subtext (PO's own word: "subtext").
+	BindingKey  = lipgloss.NewStyle().Foreground(Teal)
+	BindingDesc = lipgloss.NewStyle().Foreground(Subtext)
+
 	Dim = lipgloss.NewStyle().Foreground(Overlay)
 	// Muted = Hinweis/Erklärung: Shortcuts, Sub-Label, Placeholder. Bewusst Hint
 	// #7c7c7c, nicht Overlay (= Feld-Border) — Zwei-Klassen-Text-Prinzip.

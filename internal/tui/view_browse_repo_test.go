@@ -1,29 +1,42 @@
 package tui
 
 // view_browse_repo_test.go — TDD coverage for viewBrowseRepo's own Chrome
-// (browseRepoChrome, PF-11 Header/Footer-Keybinding-Split, design-spec.md
-// §15, epic-E7-plan.md Task 7, bean bt-m6at): the Header now carries ALL 7
-// global bindings (Nachtrag 9), the Footer drops Refresh/Enter (now
-// header-only) and gains FocusIn/FocusOut as real bindings (replacing the
-// former hand-typed "  tab:focus" suffix, PF-13), and swaps to a context's
-// own bindings while a Filter-Menu/Overlay/Search/Palette/Help is open
-// (Q04-Antwort).
+// (browseRepoChrome). Originally PF-11's Header/Footer-Keybinding-Split
+// (design-spec.md §15, epic-E7-plan.md Task 7, bean bt-m6at); D04/D06/Q06
+// (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc) SUPERSEDE that: the
+// Header now carries EXACTLY 4 globals (Palette/Picker/Help/Quit), the
+// Footer drops Navigation entirely and renders Q06's PO-verbatim list
+// (FocusIn/FocusOut first, then actions), and every hint is Teal-key/
+// Subtext-desc with no ':' (D06 optic, renderBindings). Still swaps to a
+// context's own bindings while a Filter-Menu/Overlay/Search/Palette/Help is
+// open (Q04-Antwort, unchanged).
 
 import (
 	"strings"
 	"testing"
 
+	"beans-tui/internal/theme"
+	keybind "github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestBrowseRepoChromeHeaderShowsAllSevenGlobals(t *testing.T) {
+// TestBrowseRepoChromeHeaderShowsExactlyFourGlobals guards D04 (design-
+// spec.md §15 PF-16, bean bt-ntoz/bt-d8kc, SUPERSEDES the previous 7-Globals
+// header): the Header now carries EXACTLY Palette/Picker/Help/Quit, no
+// colon (D06 optic) -- ctrl+r/esc/enter are gone.
+func TestBrowseRepoChromeHeaderShowsExactlyFourGlobals(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	head, _ := m.browseRepoChrome(200) // wide enough to never trigger breadcrumb's narrow-stack fallback
-	plain := ansi.Strip(head)
-	for _, want := range []string{"ctrl+r:reload", "ctrl+k:commands", "p:repos", "?:help", "esc:back", "enter:open/confirm", "q:quit"} {
+	plain := stripHint(head)
+	for _, want := range []string{"ctrl+k commands", "p repos", "? help", "q quit"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("browseRepoChrome header = %q, want it to contain %q", plain, want)
+		}
+	}
+	for _, absent := range []string{"ctrl+r", "esc back", "enter open"} {
+		if strings.Contains(plain, absent) {
+			t.Errorf("browseRepoChrome header = %q, must NOT contain %q (D04 degrades it out of the header)", plain, absent)
 		}
 	}
 }
@@ -31,24 +44,52 @@ func TestBrowseRepoChromeHeaderShowsAllSevenGlobals(t *testing.T) {
 func TestBrowseRepoChromeFooterOmitsRefreshAndEnter(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	_, localKeys := m.browseRepoChrome(200)
-	plain := ansi.Strip(localKeys)
-	if strings.Contains(plain, "ctrl+r:") {
-		t.Errorf("browseRepoChrome footer = %q, must NOT contain ctrl+r (now header-only, PF-11)", plain)
+	plain := stripHint(localKeys)
+	if strings.Contains(plain, "ctrl+r") {
+		t.Errorf("browseRepoChrome footer = %q, must NOT contain ctrl+r (now header-only, D04)", plain)
 	}
-	if strings.Contains(plain, "enter:") {
-		t.Errorf("browseRepoChrome footer = %q, must NOT contain enter: (now header-only, PF-11)", plain)
+	if strings.Contains(plain, "enter open") {
+		t.Errorf("browseRepoChrome footer = %q, must NOT contain enter open (now header-only, D04)", plain)
 	}
 }
 
 func TestBrowseRepoChromeFooterShowsFocusInFocusOut(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	_, localKeys := m.browseRepoChrome(200)
-	plain := ansi.Strip(localKeys)
-	if !strings.Contains(plain, "tab:focus in/toggle") {
+	plain := stripHint(localKeys)
+	if !strings.Contains(plain, "tab focus in") {
 		t.Errorf("browseRepoChrome footer = %q, want FocusIn's real hint (not a hand-typed suffix)", plain)
 	}
-	if !strings.Contains(plain, "shift+tab:focus out") {
+	if !strings.Contains(plain, "shift+tab focus out") {
 		t.Errorf("browseRepoChrome footer = %q, want shift+tab visible for the first time (PF-13)", plain)
+	}
+}
+
+// TestBrowseRepoChromeFooterMatchesQ06List guards Q06's finale, PO-verbatim
+// Footer-Liste (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): browseRepoLocalBindings()
+// renders EXACTLY "tab focus in · shift+tab focus out · / search · f Filter
+// · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank ·
+// a Parent · r Blocking" -- Navigation-Keys (Up/Down/Left/Right) are
+// entirely gone.
+func TestBrowseRepoChromeFooterMatchesQ06List(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	_, localKeys := m.browseRepoChrome(500) // wide enough for the whole list on one line
+	plain := stripHint(localKeys)
+	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking"
+	if plain != want {
+		t.Errorf("browseRepoChrome footer = %q, want exactly %q", plain, want)
+	}
+}
+
+// TestBrowseRepoLocalBindingsOmitsNavigation guards Q06's explicit removal
+// of Up/Down/Left/Right ("intuitiv genug", PO-Begruendung) from the Footer.
+func TestBrowseRepoLocalBindingsOmitsNavigation(t *testing.T) {
+	for _, nav := range []keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right} {
+		for _, b := range browseRepoLocalBindings() {
+			if strings.Join(b.Keys(), ",") == strings.Join(nav.Keys(), ",") {
+				t.Errorf("browseRepoLocalBindings() still contains navigation binding %v, want it removed (Q06)", nav.Keys())
+			}
+		}
 	}
 }
 
@@ -56,12 +97,68 @@ func TestBrowseRepoChromeFooterIsContextSensitiveOnFilterOpen(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.filterOpen = true
 	_, localKeys := m.browseRepoChrome(200)
-	plain := ansi.Strip(localKeys)
-	if !strings.Contains(plain, "space/x:Toggle facet") {
+	plain := stripHint(localKeys)
+	if !strings.Contains(plain, "space/x Toggle facet") {
 		t.Errorf("browseRepoChrome footer while filterOpen = %q, want the Toggle hint (Q04)", plain)
 	}
-	if strings.Contains(plain, "c:Create") {
+	if strings.Contains(plain, "c Create") {
 		t.Errorf("browseRepoChrome footer while filterOpen = %q, must not leak the (now irrelevant) view-local Create hint", plain)
+	}
+}
+
+// --- treeSearchLine sortSuffix (D02, design-spec.md §15 PF-16, bean
+// bt-ntoz/bt-d8kc): the Backlog-Sort-Indicator. treeSearchLine gained a
+// second `sortSuffix string` parameter -- Tree's own call site
+// (viewBrowseRepo) always passes "" (No-Op guarantee below), Backlog's call
+// site (viewBacklog) passes "sort "+backlogSortDisplayLabel(m.backlogSort).
+
+// TestTreeSearchLineEmptySuffixUnchanged is the Tree-side No-Op guarantee:
+// an empty sortSuffix must render BYTE-IDENTICAL to the pre-D02 idle hint
+// (tree.golden's own search-line fixture depends on this).
+func TestTreeSearchLineEmptySuffixUnchanged(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	got := m.treeSearchLine(40, "")
+	want := truncate(theme.Muted.Render(searchShield+" / search"), 40)
+	if got != want {
+		t.Errorf("treeSearchLine(40, \"\") = %q, want %q (byte-identical idle hint)", got, want)
+	}
+}
+
+// TestBacklogSortSuffixShowsAbbreviatedPriority guards the PO's own literal
+// example (bean bt-ntoz Grilling-Nachtrag): idle Backlog search line with a
+// non-empty sortSuffix renders "⌕ / search · sort prio" (ANSI-stripped).
+func TestBacklogSortSuffixShowsAbbreviatedPriority(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	got := m.treeSearchLine(40, "sort "+backlogSortDisplayLabel("priority"))
+	plain := ansi.Strip(got)
+	want := "⌕ / search · sort prio"
+	if plain != want {
+		t.Errorf("treeSearchLine(40, \"sort prio\") = %q, want %q", plain, want)
+	}
+}
+
+// TestTreeSearchLineSortSuffixAppendsInActiveSearchBranch guards that the
+// sortSuffix is appended in the searchActive branch too (bean bt-d8kc: "in
+// ALLEN DREI bestehenden Render-Zweigen"), not just the idle one.
+func TestTreeSearchLineSortSuffixAppendsInActiveSearchBranch(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.searchActive = true
+	got := m.treeSearchLine(120, "sort status") // wide enough: searchInput's own placeholder text is long
+	plain := ansi.Strip(got)
+	if !strings.HasSuffix(plain, "sort status") {
+		t.Errorf("treeSearchLine (searchActive) = %q, want it to end with the sortSuffix", plain)
+	}
+}
+
+// TestTreeSearchLineSortSuffixAppendsInTreeActiveBranch guards the same for
+// the treeActive (committed search/facet) branch.
+func TestTreeSearchLineSortSuffixAppendsInTreeActiveBranch(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.searchQuery = "task"
+	got := m.treeSearchLine(60, "sort created")
+	plain := ansi.Strip(got)
+	if !strings.HasSuffix(plain, "sort created") {
+		t.Errorf("treeSearchLine (treeActive) = %q, want it to end with the sortSuffix", plain)
 	}
 }
 

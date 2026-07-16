@@ -10,9 +10,11 @@ package tui
 // later epic (Review-Cockpit, E4); they get added to this single source when
 // their view lands, not speculatively now (YAGNI).
 //
-// Port-adaptation vs. devd: `B` (Blocking-Picker) is new — beans has no devd
-// equivalent (blocking/blocked_by relation, design-spec §4). `Editor` gains a
-// bare `e` alongside `ctrl+e` (design-spec §7: "e/ctrl+e Editor").
+// Port-adaptation vs. devd: the Blocking-Picker (now `r`, Q06 remap, design-
+// spec.md §15 PF-16, bean bt-ntoz/bt-d8kc — originally `B`) is new — beans
+// has no devd equivalent (blocking/blocked_by relation, design-spec §4).
+// `Editor` gains a bare `e` alongside `ctrl+e` (design-spec §7: "e/ctrl+e
+// Editor").
 
 import keybind "github.com/charmbracelet/bubbles/key"
 
@@ -59,7 +61,7 @@ type keyMap struct {
 	// Node-focused (act on the focused tree/list node).
 	Status    keybind.Binding // s — status menu (all node types)
 	Assign    keybind.Binding // a — parent assignment
-	Blocking  keybind.Binding // B — blocking picker
+	Blocking  keybind.Binding // r — blocking picker (Q06 remap: was B, PF-14 freed r)
 	Create    keybind.Binding // c — create
 	Delete    keybind.Binding // d — delete (confirm, no cascade -- E3 Task 6, bean bt-ppzb)
 	TagAssign keybind.Binding // t — tag picker
@@ -88,7 +90,7 @@ func newKeyMap() keyMap {
 		Left:  keybind.NewBinding(keybind.WithKeys("left", "j"), keybind.WithHelp("←/j", "back/out")),
 		Right: keybind.NewBinding(keybind.WithKeys("right", "l"), keybind.WithHelp("→/l", "in/expand")),
 
-		FocusIn:  keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "focus in/toggle")),
+		FocusIn:  keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "focus in")),
 		FocusOut: keybind.NewBinding(keybind.WithKeys("shift+tab"), keybind.WithHelp("shift+tab", "focus out")),
 
 		Enter:   keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "open/confirm")),
@@ -98,9 +100,9 @@ func newKeyMap() keyMap {
 		Palette: keybind.NewBinding(keybind.WithKeys("ctrl+k", "K"), keybind.WithHelp("ctrl+k", "commands")),
 		Picker:  keybind.NewBinding(keybind.WithKeys("p"), keybind.WithHelp("p", "repos")),
 		Backlog: keybind.NewBinding(keybind.WithKeys("b"), keybind.WithHelp("b", "Backlog")),
-		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "Search")),
+		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "search")),
 		Filter:  keybind.NewBinding(keybind.WithKeys("f"), keybind.WithHelp("f", "Filter")),
-		Yank:    keybind.NewBinding(keybind.WithKeys("y"), keybind.WithHelp("y", "Copy context")),
+		Yank:    keybind.NewBinding(keybind.WithKeys("y"), keybind.WithHelp("y", "Yank")),
 		Refresh: keybind.NewBinding(keybind.WithKeys("ctrl+r"), keybind.WithHelp("ctrl+r", "reload")),
 		Section: keybind.NewBinding(keybind.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"), keybind.WithHelp("1…9", "Section")),
 
@@ -108,13 +110,13 @@ func newKeyMap() keyMap {
 		Toggle:      keybind.NewBinding(keybind.WithKeys(" ", "x"), keybind.WithHelp("space/x", "Toggle facet")),
 		Sort:        keybind.NewBinding(keybind.WithKeys("S"), keybind.WithHelp("S", "Sort")),
 
-		Status:    keybind.NewBinding(keybind.WithKeys("s"), keybind.WithHelp("s", "Status menu")),
-		Assign:    keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Assign parent")),
-		Blocking:  keybind.NewBinding(keybind.WithKeys("B"), keybind.WithHelp("B", "Blocking picker")),
+		Status:    keybind.NewBinding(keybind.WithKeys("s"), keybind.WithHelp("s", "Status")),
+		Assign:    keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Parent")),
+		Blocking:  keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "Blocking")),
 		Create:    keybind.NewBinding(keybind.WithKeys("c"), keybind.WithHelp("c", "Create")),
 		Delete:    keybind.NewBinding(keybind.WithKeys("d"), keybind.WithHelp("d", "Delete")),
-		TagAssign: keybind.NewBinding(keybind.WithKeys("t"), keybind.WithHelp("t", "Assign tags")),
-		Editor:    keybind.NewBinding(keybind.WithKeys("e", "ctrl+e"), keybind.WithHelp("e", "Edit in $EDITOR")),
+		TagAssign: keybind.NewBinding(keybind.WithKeys("t"), keybind.WithHelp("t", "Tags")),
+		Editor:    keybind.NewBinding(keybind.WithKeys("e", "ctrl+e"), keybind.WithHelp("e", "Edit")),
 
 		NewTag: keybind.NewBinding(keybind.WithKeys("n"), keybind.WithHelp("n", "New tag")),
 	}
@@ -141,28 +143,38 @@ func (k keyMap) helpGroups() []helpGroup {
 	}
 }
 
-// globalBindings is Header Zone 1's single source (PF-11, design-spec.md
-// §15, erweitert Nachtrag 9, epic-E7-plan.md Task 7, bean bt-m6at): ALL 7
-// globally-reachable bindings that get their own dedicated header slot --
-// `ctrl+r:reload · ctrl+k:commands · p:repos · ?:help · esc:back ·
-// enter:open/confirm · q:quit`, in this exact order. Replaces the old
-// 3-item ad hoc `renderBindings([]keybind.Binding{keys.Refresh, keys.Help,
-// keys.Quit})` literal duplicated in both browseRepoChrome
-// (view_browse_repo.go) and backlogChrome (view_browse_backlog.go) --
-// esc/enter/ctrl+k/p were completely missing from the header before this.
+// globalBindings is Header Zone 1's single source (D04, design-spec.md §15
+// PF-16, bean bt-ntoz Grilling-Nachtrag/bt-d8kc -- SUPERSEDES PF-11's
+// original 7-item set below): EXACTLY 4 globally-reachable bindings get
+// their own dedicated header slot -- `Palette, Picker, Help, Quit`, in this
+// exact order (rendered by renderBindings, D06's shared Teal-key/
+// Subtext-desc optic). ctrl+r (Refresh)/esc (Back)/enter (Enter) fly OUT of
+// the header entirely (PO: too much noise for a 4-slot budget that must fit
+// 80 columns without wrap/truncation, TestGlobalBindingsFitIn80Columns) --
+// they stay documented in the Help-Overlay only (helpGroups() is
+// UNCHANGED, all three keys are already listed there) and do NOT resurface
+// in either view-local footer list either (Q06's verbatim list omits all
+// three too -- TestGlobalBindingsOmitsRefreshBackEnter guards the header
+// side of that).
+//
 // FocusIn/FocusOut (PF-13) are deliberately NOT here despite being
-// dispatched at the same global handleKey checkpoint as Refresh/Palette/
-// Picker/Quit -- dispatch POSITION and display BUCKET are two different
-// axes (see bt-t1uy's own T7 notes): FocusIn/FocusOut stay footer/view-local
-// (browseRepoLocalBindings/backlogLocalBindings). Every other
-// global-checkpoint key (Create/Status/TagAssign/Assign/Blocking/Delete/
-// Editor/Yank/Backlog/Search/Filter/FilterClear/Section) is the same --
-// reachable from anywhere, but shown per-view in the footer, not here
-// (TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList guards the two
-// footer lists against ever re-adding one of THESE 7, not against the
-// wider global-checkpoint set).
+// dispatched at the same global handleKey checkpoint as Palette/Picker/
+// Quit -- dispatch POSITION and display BUCKET are two different axes (see
+// bt-t1uy's own T7 notes): FocusIn/FocusOut stay footer/view-local
+// (browseRepoLocalBindings/backlogLocalBindings, now FIRST per Q06's
+// ordering). Every other global-checkpoint key (Create/Status/TagAssign/
+// Assign/Blocking/Delete/Editor/Yank/Backlog/Search/Filter/FilterClear/
+// Section) is the same -- reachable from anywhere, but shown per-view in
+// the footer, not here (TestNoDuplicateBindingBetweenGlobalAndAnyLocalHint
+// List guards the two footer lists against ever re-adding one of THESE 4).
+//
+// PF-11 precedent (superseded, kept for history): the original 7-item set
+// was `{Refresh, Palette, Picker, Help, Back, Enter, Quit}`, rendered
+// `ctrl+r:reload · ctrl+k:commands · p:repos · ?:help · esc:back ·
+// enter:open/confirm · q:quit` -- the PO's own Grilling feedback found this
+// too noisy; D04 is the direct fast-follow.
 func globalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Refresh, keys.Palette, keys.Picker, keys.Help, keys.Back, keys.Enter, keys.Quit}
+	return []keybind.Binding{keys.Palette, keys.Picker, keys.Help, keys.Quit}
 }
 
 // bindHas reports whether key k is part of binding b (exact match).

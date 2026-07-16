@@ -25,7 +25,8 @@ func viewLocalStub() []keybind.Binding {
 func TestContextualLocalHintDefaultUsesViewLocal(t *testing.T) {
 	m := model{}
 	got := m.contextualLocalHint(viewLocalStub())
-	if !strings.Contains(got, "z:stub-view-local") {
+	got = stripHint(got)
+	if !strings.Contains(got, "z stub-view-local") {
 		t.Errorf("default state: contextualLocalHint = %q, want it to contain the viewLocal stub hint", got)
 	}
 }
@@ -33,10 +34,11 @@ func TestContextualLocalHintDefaultUsesViewLocal(t *testing.T) {
 func TestContextualLocalHintFilterOpen(t *testing.T) {
 	m := model{filterOpen: true}
 	got := m.contextualLocalHint(viewLocalStub())
+	got = stripHint(got)
 	if strings.Contains(got, "stub-view-local") {
 		t.Errorf("filterOpen: contextualLocalHint = %q, must NOT contain the (irrelevant) viewLocal stub", got)
 	}
-	if !strings.Contains(got, "space/x:Toggle facet") {
+	if !strings.Contains(got, "space/x Toggle facet") {
 		t.Errorf("filterOpen: contextualLocalHint = %q, want it to contain the Toggle hint (Q04)", got)
 	}
 }
@@ -44,10 +46,11 @@ func TestContextualLocalHintFilterOpen(t *testing.T) {
 func TestContextualLocalHintOverlayValueMenu(t *testing.T) {
 	m := model{overlay: overlayValueMenu}
 	got := m.contextualLocalHint(viewLocalStub())
+	got = stripHint(got)
 	if strings.Contains(got, "stub-view-local") {
 		t.Errorf("overlayValueMenu: contextualLocalHint = %q, must not contain the viewLocal stub", got)
 	}
-	if !strings.Contains(got, "s:Status menu") {
+	if !strings.Contains(got, "s Status") {
 		t.Errorf("overlayValueMenu: contextualLocalHint = %q, want it to contain keys.Status (real close-alias, keyValueMenu)", got)
 	}
 }
@@ -63,7 +66,8 @@ func TestContextualLocalHintOverlayValueMenu(t *testing.T) {
 func TestContextualLocalHintOverlayTagPickerShowsToggle(t *testing.T) {
 	m := model{overlay: overlayTagPicker}
 	got := m.contextualLocalHint(viewLocalStub())
-	if !strings.Contains(got, "space/x:Toggle facet") {
+	got = stripHint(got)
+	if !strings.Contains(got, "space/x Toggle facet") {
 		t.Errorf("overlayTagPicker: contextualLocalHint = %q, want the Toggle hint", got)
 	}
 }
@@ -94,14 +98,16 @@ func TestTagPickerLocalBindingsIncludesNewTag(t *testing.T) {
 func TestContextualLocalHintOverlayTagPickerShowsNewTag(t *testing.T) {
 	m := model{overlay: overlayTagPicker}
 	got := m.contextualLocalHint(viewLocalStub())
-	if !strings.Contains(got, "n:New tag") {
-		t.Errorf("overlayTagPicker: contextualLocalHint = %q, want the New-Tag hint (%q)", got, "n:New tag")
+	got = stripHint(got)
+	if !strings.Contains(got, "n New tag") {
+		t.Errorf("overlayTagPicker: contextualLocalHint = %q, want the New-Tag hint (%q)", got, "n New tag")
 	}
 }
 
 func TestContextualLocalHintOverlayParentPickerOmitsToggle(t *testing.T) {
 	m := model{overlay: overlayParentPicker}
 	got := m.contextualLocalHint(viewLocalStub())
+	got = stripHint(got)
 	if strings.Contains(got, "Toggle") {
 		t.Errorf("overlayParentPicker: contextualLocalHint = %q, must NOT contain Toggle (keyParentPicker is single-select, no space/x case)", got)
 	}
@@ -113,7 +119,8 @@ func TestContextualLocalHintOverlayParentPickerOmitsToggle(t *testing.T) {
 func TestContextualLocalHintOverlayBlockingPickerShowsToggle(t *testing.T) {
 	m := model{overlay: overlayBlockingPicker}
 	got := m.contextualLocalHint(viewLocalStub())
-	if !strings.Contains(got, "space/x:Toggle facet") {
+	got = stripHint(got)
+	if !strings.Contains(got, "space/x Toggle facet") {
 		t.Errorf("overlayBlockingPicker: contextualLocalHint = %q, want the Toggle hint", got)
 	}
 }
@@ -125,13 +132,24 @@ func TestContextualLocalHintOverlayBlockingPickerShowsToggle(t *testing.T) {
 // plan's own switch-priority text never assigns a set to. Both confirm
 // gates (box_confirm_create.go/box_confirm_delete.go) really only answer to
 // Enter/Back, so that is the fallback here too.
+//
+// D05 VERIFICATION (design-spec.md §15 PF-16, bean bt-ntoz, cited in
+// bt-d8kc's own PO-Wortlaut): "Overlay-Footer zeigen enter/esc" -- these two
+// tests are the concrete Sign-off evidence that D04's Header-Global-Kürzung
+// (which degrades keys.Enter/keys.Back out of globalBindings()) is a No-Op
+// for the Create-/Delete-Confirm-Gate's OWN footer: confirmGateLocalBindings
+// (footer_context.go) was never derived FROM globalBindings() -- it is its
+// own independent {Enter, Back} literal -- so removing Enter/Back from the
+// header cannot silently remove them here too. Only the render OPTIC
+// changed (no more ":" -- D06), never the binding SET.
 func TestContextualLocalHintOverlayCreateConfirm(t *testing.T) {
 	m := model{overlay: overlayCreateConfirm}
 	got := m.contextualLocalHint(viewLocalStub())
+	got = stripHint(got)
 	if strings.Contains(got, "stub-view-local") {
 		t.Errorf("overlayCreateConfirm: contextualLocalHint = %q, must not contain the viewLocal stub", got)
 	}
-	if !strings.Contains(got, "enter:open/confirm") || !strings.Contains(got, "esc:back") {
+	if !strings.Contains(got, "enter open/confirm") || !strings.Contains(got, "esc back") {
 		t.Errorf("overlayCreateConfirm: contextualLocalHint = %q, want enter+back", got)
 	}
 }
@@ -139,10 +157,11 @@ func TestContextualLocalHintOverlayCreateConfirm(t *testing.T) {
 func TestContextualLocalHintOverlayDeleteConfirm(t *testing.T) {
 	m := model{overlay: overlayDeleteConfirm}
 	got := m.contextualLocalHint(viewLocalStub())
+	got = stripHint(got)
 	if strings.Contains(got, "stub-view-local") {
 		t.Errorf("overlayDeleteConfirm: contextualLocalHint = %q, must not contain the viewLocal stub", got)
 	}
-	if !strings.Contains(got, "enter:open/confirm") || !strings.Contains(got, "esc:back") {
+	if !strings.Contains(got, "enter open/confirm") || !strings.Contains(got, "esc back") {
 		t.Errorf("overlayDeleteConfirm: contextualLocalHint = %q, want enter+back", got)
 	}
 }
@@ -150,6 +169,7 @@ func TestContextualLocalHintOverlayDeleteConfirm(t *testing.T) {
 func TestContextualLocalHintSearchActive(t *testing.T) {
 	m := model{searchActive: true}
 	got := m.contextualLocalHint(viewLocalStub())
+	got = stripHint(got)
 	if strings.Contains(got, "stub-view-local") {
 		t.Errorf("searchActive: contextualLocalHint = %q, must not contain the viewLocal stub", got)
 	}
@@ -158,6 +178,7 @@ func TestContextualLocalHintSearchActive(t *testing.T) {
 func TestContextualLocalHintPaletteOpen(t *testing.T) {
 	m := model{paletteOpen: true}
 	got := m.contextualLocalHint(viewLocalStub())
+	got = stripHint(got)
 	if strings.Contains(got, "stub-view-local") {
 		t.Errorf("paletteOpen: contextualLocalHint = %q, must not contain the viewLocal stub", got)
 	}
@@ -166,8 +187,9 @@ func TestContextualLocalHintPaletteOpen(t *testing.T) {
 func TestContextualLocalHintHelpOpen(t *testing.T) {
 	m := model{helpOpen: true}
 	got := m.contextualLocalHint(viewLocalStub())
-	if got != "esc:back" {
-		t.Errorf("helpOpen: contextualLocalHint = %q, want exactly %q", got, "esc:back")
+	got = stripHint(got)
+	if got != "esc back" {
+		t.Errorf("helpOpen: contextualLocalHint = %q, want exactly %q", got, "esc back")
 	}
 }
 
@@ -185,13 +207,13 @@ func TestContextualLocalHintPriority(t *testing.T) {
 		m    model
 		want string // a substring only the winning branch's hint contains
 	}{
-		{"filter beats overlay", model{filterOpen: true, overlay: overlayValueMenu}, "X:Clear filters"},
-		{"overlay beats search", model{overlay: overlayValueMenu, searchActive: true}, "s:Status menu"},
-		{"palette beats help", model{paletteOpen: true, helpOpen: true}, "enter:open/confirm"},
+		{"filter beats overlay", model{filterOpen: true, overlay: overlayValueMenu}, "X Clear filters"},
+		{"overlay beats search", model{overlay: overlayValueMenu, searchActive: true}, "s Status"},
+		{"palette beats help", model{paletteOpen: true, helpOpen: true}, "enter open/confirm"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := c.m.contextualLocalHint(viewLocalStub())
+			got := stripHint(c.m.contextualLocalHint(viewLocalStub()))
 			if !strings.Contains(got, c.want) {
 				t.Errorf("%s: contextualLocalHint = %q, want it to contain %q", c.name, got, c.want)
 			}

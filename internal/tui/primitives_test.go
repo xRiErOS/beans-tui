@@ -11,6 +11,7 @@ import (
 
 	keybind "github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"beans-tui/internal/theme"
@@ -47,20 +48,101 @@ func TestBreadcrumbNarrowStacks(t *testing.T) {
 	}
 }
 
-// TestRenderBindingsSkipsHelplessAndJoinsWithTwoSpaces guards footer-hint
-// rendering (devd DD2-175: derived from the keymap, not hand-maintained
-// strings) — bindings without a Help().Key are skipped, entries join on two
-// spaces.
-func TestRenderBindingsSkipsHelplessAndJoinsWithTwoSpaces(t *testing.T) {
+// TestRenderBindingsSkipsHelplessAndColorSeparatesNoColon guards D06 (design-
+// spec.md §15 PF-16, bean bt-ntoz/bt-d8kc Grilling-Nachtrag: "Taste in TEAL,
+// Aktions-Wort grau (subtext), KEIN ':' mehr — Farbtrennung ersetzt den
+// Doppelpunkt"), superseding the previous plain "key:desc" colon-joined
+// rendering: bindings without a Help().Key are still skipped (devd DD2-175:
+// derived from the keymap, not hand-maintained strings), entries now join on
+// " · " (Q06's own verbatim separator), and the ANSI-stripped plain text of
+// each entry is "key desc" (single space, no colon) -- the color split IS
+// the separator now.
+func TestRenderBindingsSkipsHelplessAndColorSeparatesNoColon(t *testing.T) {
 	bs := []keybind.Binding{
 		keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "open")),
 		keybind.NewBinding(keybind.WithKeys("x")), // no Help() → must be skipped
 		keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithHelp("esc", "back")),
 	}
 	got := renderBindings(bs)
-	want := "enter:open  esc:back"
-	if got != want {
-		t.Errorf("renderBindings=%q, want %q", got, want)
+	plain := stripHint(got)
+	want := "enter open · esc back"
+	if plain != want {
+		t.Errorf("stripHint(renderBindings(bs))=%q, want %q (full=%q)", plain, want, got)
+	}
+	if strings.Contains(plain, ":") {
+		t.Errorf("renderBindings=%q, must not contain ':' anymore (D06)", plain)
+	}
+}
+
+// TestRenderBindingsColorsKeyTealDescSubtext guards D06's actual color
+// split: the key half carries theme.BindingKey's Teal escape, the
+// description half carries theme.BindingDesc's Subtext escape -- not just
+// that the plain text reads right (the test above), but that the RIGHT
+// substring carries EACH color, so a regression that swapped the two styles
+// (or dropped color entirely) would be caught here even though the
+// ANSI-stripped text alone wouldn't reveal it.
+func TestRenderBindingsColorsKeyTealDescSubtext(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	bs := []keybind.Binding{keybind.NewBinding(keybind.WithKeys("q"), keybind.WithHelp("q", "quit"))}
+	got := renderBindings(bs)
+
+	wantKey := theme.BindingKey.Render("q")
+	wantDesc := theme.BindingDesc.Render("quit")
+	if !strings.Contains(got, wantKey) {
+		t.Errorf("renderBindings=%q, want it to contain the Teal-rendered key %q", got, wantKey)
+	}
+	if !strings.Contains(got, wantDesc) {
+		t.Errorf("renderBindings=%q, want it to contain the Subtext-rendered desc %q", got, wantDesc)
+	}
+}
+
+// TestRenderBindingsKeepsKeyAndDescTogetherAcrossWrap guards a regression
+// found during this task's own tmux smoke test (D06, design-spec.md §15
+// PF-16, bean bt-ntoz/bt-d8kc): the pre-D06 "key:desc" rendering GLUED the
+// key to its desc's first word via ":" (no internal space -- wordwrap could
+// never split them). Replacing ":" with a plain " " (D06's own optic)
+// reintroduced a real breakable space there, so footer()'s own wordwrap
+// (view.go) could orphan a key alone on one line with its desc starting the
+// NEXT line (observed live: Backlog footer at 80 cols split "S" from
+// "Sort"). renderBindings must glue key+desc (and any multi-word desc's own
+// internal spaces) with a non-breaking space (U+00A0, x/ansi's own
+// wordwrap.go explicitly excludes nbsp from its breakpoint set) so an
+// entire binding's hint is always wrap-atomic -- only the " · "
+// between-entries separator may ever become a line break.
+func TestRenderBindingsKeepsKeyAndDescTogetherAcrossWrap(t *testing.T) {
+	bs := []keybind.Binding{
+		keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Alpha")),
+		keybind.NewBinding(keybind.WithKeys("S"), keybind.WithHelp("S", "Sort")),
+	}
+	hint := renderBindings(bs) // "a Alpha · S Sort"
+	wrapped := wrapText(hint, 11)
+	for _, line := range strings.Split(wrapped, "\n") {
+		if plain := strings.TrimSpace(ansi.Strip(line)); plain == "Sort" {
+			t.Fatalf("wrapText separated desc %q from its key %q onto the PREVIOUS line: %q", "Sort", "S", wrapped)
+		}
+	}
+}
+
+// TestRenderBindingsKeepsMultiWordDescTogether guards the same NBSP fix for
+// a multi-word Help().Desc (e.g. FocusIn's "focus in"): none of its own
+// internal words may split across a wrap boundary either.
+func TestRenderBindingsKeepsMultiWordDescTogether(t *testing.T) {
+	bs := []keybind.Binding{
+		keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "focus in")),
+	}
+	hint := "x " + renderBindings(bs) // "x " prefix forces a real wrap decision ahead of the entry
+	wrapped := wrapText(hint, 12)     // >= len("tab focus in")=12: exercises wordwrap's own
+	// atomicity, not the separate Hardwrap over-long-token fallback (which
+	// legitimately hard-chops ANY atomic unit, nbsp included, once it alone
+	// exceeds the width budget -- an unrelated, unavoidable edge case at
+	// pathologically narrow widths, out of scope here).
+	for _, line := range strings.Split(wrapped, "\n") {
+		plain := strings.TrimSpace(ansi.Strip(line))
+		if plain == "in" || plain == "focus" || plain == "tab" || plain == "tab focus" {
+			t.Fatalf("wrapText split the multi-word desc apart: line %q (full=%q)", plain, wrapped)
+		}
 	}
 }
 

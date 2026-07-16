@@ -16,6 +16,7 @@ import (
 	"beans-tui/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -55,6 +56,17 @@ func step(t *testing.T, m model, msg tea.Msg) model {
 
 func keyMsg(k tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: k} }
 func runeMsg(r rune) tea.KeyMsg       { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
+
+// stripHint is renderBindings' own test-side counterpart (view.go): strips
+// ANSI (ansi.Strip) AND normalizes the nbsp (U+00A0) renderBindings glues a
+// binding's key+desc together with (D06 regression fix, view.go's own doc
+// comment on the `nbsp` const -- prevents wordwrap from orphaning a key
+// alone on one line) back to a plain ASCII space, so Header/Footer-hint
+// assertions can keep comparing against ordinary "key desc" literals without
+// caring about that internal wrap-atomicity implementation detail.
+func stripHint(s string) string {
+	return strings.ReplaceAll(ansi.Strip(s), "\u00a0", " ")
+}
 
 func nodeIDs(nodes []treeNode) []string {
 	ids := make([]string, len(nodes))

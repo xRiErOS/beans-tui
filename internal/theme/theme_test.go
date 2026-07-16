@@ -192,3 +192,19 @@ func TestHeaderInactiveStyleIsTeal(t *testing.T) {
 		t.Errorf("HeaderInactive.GetForeground() = %v, must not still be Hint-grey (Muted's color)", got)
 	}
 }
+
+// TestBindingKeyDescStylesAreTealAndSubtext guards D06 (design-spec.md §15
+// PF-16, bean bt-ntoz/bt-d8kc): the Header/Footer keybinding-hint tokens --
+// key rendered Teal, description rendered Subtext -- and that BindingKey is
+// its OWN token, independent of the B06-EXPERIMENT HeaderInactive (which
+// happens to share the same Teal hex today but is a separate, still-pending
+// decision -- see this file's own TestHeaderInactiveStyleIsTeal and
+// theme.go's BindingKey doc comment).
+func TestBindingKeyDescStylesAreTealAndSubtext(t *testing.T) {
+	if got := BindingKey.GetForeground(); got != Teal {
+		t.Errorf("BindingKey.GetForeground() = %v, want Teal %v", got, Teal)
+	}
+	if got := BindingDesc.GetForeground(); got != Subtext {
+		t.Errorf("BindingDesc.GetForeground() = %v, want Subtext %v", got, Subtext)
+	}
+}

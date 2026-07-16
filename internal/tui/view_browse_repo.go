@@ -570,8 +570,8 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 // verbatim here for the same EAW-neutral reason).
 const searchShield = "⌕"
 
-// treeSearchLine renders the Tree pane's persistent search head row (design-
-// spec.md §6 V2 "Such-/Filterkopf", port devd treeSearchLine
+// treeSearchLine renders the Tree/Backlog pane's persistent search head row
+// (design-spec.md §6 V2 "Such-/Filterkopf", port devd treeSearchLine
 // view_browse_project.go:1099-1117): the live textinput while typing, the
 // committed query AND/OR the active-facet summary in Red once either is
 // active (DD2-53 "Filter aktiv" signal, E2 Task 4/bean bt-9ldr: extended to
@@ -579,13 +579,32 @@ const searchShield = "⌕"
 // The idle-hint text is deliberately UNCHANGED from Task 3 (no "f filter"
 // addition) so the existing tree.golden fixture (no search/filter state)
 // keeps rendering byte-identical -- only the active-state branches grew.
-func (m model) treeSearchLine(w int) string {
+//
+// sortSuffix (D02, design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc, the
+// Backlog-Sort-Indicator) is appended, ALWAYS theme.Muted ("dezenter
+// Suffix", PO-Wortlaut) regardless of the branch's own color, in all THREE
+// render branches below when non-empty -- rendered as its OWN span AFTER
+// the branch's already-terminated Render() call (never nested inside it):
+// ANSI styles do not nest (an inner Reset would clobber an outer wrap, see
+// footer()'s own doc comment for the general rule), so concatenating two
+// independently-rendered spans is the only way the suffix stays Muted even
+// inside the Red-styled treeActive branch. Tree's own call site
+// (viewBrowseRepo) always passes "" -- an empty suffix appends nothing, so
+// the Tree's search line renders BYTE-IDENTICAL to before D02
+// (TestTreeSearchLineEmptySuffixUnchanged, tree.golden's own guarantee).
+// Backlog's call site (viewBacklog) passes
+// "sort "+backlogSortDisplayLabel(m.backlogSort).
+func (m model) treeSearchLine(w int, sortSuffix string) string {
+	suffix := ""
+	if sortSuffix != "" {
+		suffix = theme.Muted.Render(" · " + sortSuffix)
+	}
 	if m.searchActive {
 		line := searchShield + " " + m.searchInput.View()
 		if fs := m.filterSummary(); fs != "" {
 			line += "  " + fs
 		}
-		return truncate(line, w)
+		return truncate(line+suffix, w)
 	}
 	if m.treeActive() {
 		var parts []string
@@ -600,9 +619,10 @@ func (m model) treeSearchLine(w int) string {
 			parts = append(parts, fs)
 		}
 		line := searchShield + " " + strings.Join(parts, "  ")
-		return truncate(lipgloss.NewStyle().Foreground(theme.Red).Render(line), w)
+		styled := lipgloss.NewStyle().Foreground(theme.Red).Render(line)
+		return truncate(styled+suffix, w)
 	}
-	return truncate(theme.Muted.Render(searchShield+" / search"), w)
+	return truncate(theme.Muted.Render(searchShield+" / search")+suffix, w)
 }
 
 // repoLabel is the breadcrumb `> repo` segment: the repo directory's base
@@ -704,19 +724,24 @@ func (m model) browseRepoChrome(innerW int) (head, localKeys string) {
 	return
 }
 
-// browseRepoLocalBindings is the Tree view's own Footer Zone 3 local set
-// (PF-11, design-spec.md §15, epic-E7-plan.md Task 7 Step 5, bean bt-m6at):
-// browseRepoChrome's PREVIOUS inline list, minus Refresh/Enter (now
-// globalBindings(), header-only -- duplicating them here is exactly what
-// PF-11 removes), plus FocusIn/FocusOut (PF-13) replacing the hand-typed
-// "  tab:focus" footer suffix -- shift+tab is now visible for the first
-// time. Everything else (Up/Down/Left/Right/Search/Status/Create/Delete/
-// Editor) is UNCHANGED from the pre-T7 list: T7's scope is the header/
-// footer SPLIT + disjointness, not a completeness pass over every key
-// keyNodeAction/keyTree also happen to handle (f/X/b/t/a/B/y are a
-// pre-existing gap -- see this task's Deviations).
+// browseRepoLocalBindings is the Tree view's own Footer Zone 3 local set --
+// D06+Q06 (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc) REBUILD this from
+// scratch, superseding PF-11's list: Navigation (Up/Down/Left/Right) is
+// removed entirely ("intuitiv genug", PO-Begruendung), FocusIn/FocusOut come
+// FIRST, then the PO-verbatim action order -- `tab focus in · shift+tab
+// focus out · / search · f Filter · s Status · c Create · d Delete · e Edit
+// · b Backlog · t Tags · y Yank · a Parent · r Blocking`. Backlog (`b`) is
+// NEW here (a sensible Tree->Backlog entry point that PF-11's list never
+// carried); Filter/Tags/Yank/Parent/Blocking close the pre-existing gap
+// PF-11's own doc comment flagged (f/X/b/t/a/B/y were handled by
+// keyNodeAction/keyTree but never shown in the footer). X (FilterClear)
+// stays deliberately OUT (Q06's list omits it too, same as before).
 func browseRepoLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Left, keys.Right, keys.Search, keys.Status, keys.Create, keys.Delete, keys.Editor, keys.FocusIn, keys.FocusOut}
+	return []keybind.Binding{
+		keys.FocusIn, keys.FocusOut,
+		keys.Search, keys.Filter, keys.Status, keys.Create, keys.Delete, keys.Editor,
+		keys.Backlog, keys.TagAssign, keys.Yank, keys.Assign, keys.Blocking,
+	}
 }
 
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors
@@ -759,7 +784,7 @@ func (m model) viewBrowseRepo() string {
 	// now that renderPane no longer reserves its own title+separator lines)
 	// so the combined [searchLine, ...treeRows] slice still fits renderPane's
 	// own Golden-Rule-#1 line cap.
-	searchLine := m.treeSearchLine(lw - 2)
+	searchLine := m.treeSearchLine(lw-2, "") // D02: Tree never shows a sort suffix
 	treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-1)...)
 	treeBox := renderPane(pane{rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
 	detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)

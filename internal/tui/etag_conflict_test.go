@@ -145,9 +145,9 @@ func TestEtagConflictSweep(t *testing.T) {
 		m := fixtureModel(t, fixtureBeansWithBlocking())
 		m.client = &data.Client{RepoDir: t.TempDir()}
 		m = focusBeanFull(m, "bean-a")
-		m = step(t, m, runeMsg('B'))
+		m = step(t, m, runeMsg('r'))
 		if m.overlay != overlayBlockingPicker {
-			t.Fatal("setup: B did not open the blocking picker")
+			t.Fatal("setup: r did not open the blocking picker")
 		}
 		for i, it := range m.blockItems {
 			if it.id == "ep-1" {

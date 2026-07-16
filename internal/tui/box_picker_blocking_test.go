@@ -1,6 +1,7 @@
 package tui
 
-// box_picker_blocking_test.go — TDD coverage for the Blocking-Picker (`B`,
+// box_picker_blocking_test.go — TDD coverage for the Blocking-Picker (`r`,
+// remapped from `B` by Q06, design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc;
 // E3 Task 3, bean bt-p1uz): toggle-multi-select over every OTHER bean
 // (design decision g: deliberately NO cycle/descendant exclusion, port-
 // parity with beans-src blockingpicker.go). Pending-Diff pattern ported
@@ -28,7 +29,7 @@ func TestBlockingPickerExcludesOnlySelf(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans()) // ms-1 -> ep-1 -> tk-1, tk-2
 	m = focusBean(m, "ep-1")
 
-	m = step(t, m, runeMsg('B'))
+	m = step(t, m, runeMsg('r'))
 
 	if m.overlay != overlayBlockingPicker {
 		t.Fatalf("overlay = %v, want overlayBlockingPicker", m.overlay)
@@ -56,7 +57,7 @@ func TestBlockingPickerSeedsPendingFromFocusedBean(t *testing.T) {
 	m := fixtureModel(t, fixtureBeansWithBlocking()) // bean-a Blocking: [bean-b]
 	m = focusBeanFull(m, "bean-a")
 
-	m = step(t, m, runeMsg('B'))
+	m = step(t, m, runeMsg('r'))
 
 	if m.overlay != overlayBlockingPicker {
 		t.Fatalf("overlay = %v, want overlayBlockingPicker", m.overlay)
@@ -82,7 +83,7 @@ func TestBlockingPickerSeedsPendingFromFocusedBean(t *testing.T) {
 func TestBlockingPickerToggleFlipsPendingOnly(t *testing.T) {
 	m := fixtureModel(t, fixtureBeansWithBlocking())
 	m = focusBeanFull(m, "bean-a") // Blocking: [bean-b]
-	m = step(t, m, runeMsg('B'))
+	m = step(t, m, runeMsg('r'))
 
 	cursorTo := func(m model, id string) model {
 		for i, it := range m.blockItems {
@@ -123,7 +124,7 @@ func TestBlockingPickerEnterDiffsViaSetBlocking(t *testing.T) {
 	m := fixtureModel(t, fixtureBeansWithBlocking())
 	m.client = &data.Client{RepoDir: "/nonexistent-bt-e3-t3-scratch-dir"}
 	m = focusBeanFull(m, "bean-a") // Blocking: [bean-b]
-	m = step(t, m, runeMsg('B'))
+	m = step(t, m, runeMsg('r'))
 
 	for i, it := range m.blockItems {
 		switch it.id {
@@ -164,7 +165,7 @@ func TestBlockingPickerEnterDiffsViaSetBlocking(t *testing.T) {
 func TestBlockingPickerEnterNoChangesNoMutation(t *testing.T) {
 	m := fixtureModel(t, fixtureBeansWithBlocking())
 	m = focusBeanFull(m, "bean-a")
-	m = step(t, m, runeMsg('B'))
+	m = step(t, m, runeMsg('r'))
 
 	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
 	nm := tm.(model)
@@ -181,7 +182,7 @@ func TestBlockingPickerEnterNoChangesNoMutation(t *testing.T) {
 func TestBlockingPickerEscDiscards(t *testing.T) {
 	m := fixtureModel(t, fixtureBeansWithBlocking())
 	m = focusBeanFull(m, "bean-a")
-	m = step(t, m, runeMsg('B'))
+	m = step(t, m, runeMsg('r'))
 	for i, it := range m.blockItems {
 		if it.id == "ep-1" {
 			m.menu.cursor = i
@@ -214,9 +215,9 @@ func TestBlockingPickerEnterTargetVanishedClosesGracefully(t *testing.T) {
 	beans := fixtureBeansWithBlocking()
 	m := fixtureModel(t, beans)
 	m = focusBeanFull(m, "bean-a") // Blocking: [bean-b]
-	m = step(t, m, runeMsg('B'))
+	m = step(t, m, runeMsg('r'))
 	if m.overlay != overlayBlockingPicker {
-		t.Fatal("setup: B did not open the blocking picker")
+		t.Fatal("setup: r did not open the blocking picker")
 	}
 	for i, it := range m.blockItems {
 		if it.id == "ep-1" {

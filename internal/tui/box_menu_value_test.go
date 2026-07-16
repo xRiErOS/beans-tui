@@ -327,16 +327,18 @@ func TestValueMenuBoxTitleReflectsGroup(t *testing.T) {
 // --- keyNodeAction: focused-bean guard ---
 
 // TestKeyNodeActionRequiresFocusedBeanExceptCreate guards that every T1
-// node-action key except Create (s/t/a/B/d/e) is a handled-but-silent no-op
+// node-action key except Create (s/t/a/r/d/e) is a handled-but-silent no-op
 // with no focused bean (an empty repo / the orphan-root cursor), while
 // Create (c) is handled regardless -- it works on an empty repo (T4).
+// Blocking-Picker key per Q06 remap (design-spec.md §15 PF-16, bean
+// bt-ntoz/bt-d8kc): was `B`, now `r`.
 func TestKeyNodeActionRequiresFocusedBeanExceptCreate(t *testing.T) {
 	m := fixtureModel(t, nil) // no beans -> focusedBean() == nil
 	if m.focusedBean() != nil {
 		t.Fatal("setup: expected focusedBean() == nil with zero beans loaded")
 	}
 
-	for _, k := range []tea.KeyMsg{runeMsg('s'), runeMsg('t'), runeMsg('a'), runeMsg('B'), runeMsg('d'), runeMsg('e')} {
+	for _, k := range []tea.KeyMsg{runeMsg('s'), runeMsg('t'), runeMsg('a'), runeMsg('r'), runeMsg('d'), runeMsg('e')} {
 		handled, nm, cmd := m.keyNodeAction(k)
 		if !handled {
 			t.Fatalf("key %v: handled = false, want true (handled-but-silent no-op)", k)

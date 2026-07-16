@@ -37,7 +37,16 @@ func breadcrumb(repo, title, globalHint string, width int) string {
 	if title != "" {
 		left += theme.Chevron.Render(":") + " " + theme.Header.Render(title)
 	}
-	right := theme.Muted.Render(globalHint)
+	// D06 (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): globalHint
+	// arrives PRE-STYLED from renderBindings (Teal key / Subtext desc, no
+	// more ":") -- no outer Muted wash anymore. ANSI styles do not nest: an
+	// outer Style.Render's own trailing reset only wraps the string once,
+	// so any inner Reset (renderBindings emits one per key/desc span) would
+	// already have clobbered it well before the end, silently reverting
+	// every span AFTER the first one back to the terminal's raw default
+	// foreground instead of staying Muted (see footer()'s own doc comment,
+	// same underlying reasoning).
+	right := globalHint
 	if lipgloss.Width(left)+lipgloss.Width(right)+1 > width { // narrow: stack instead of overflow
 		return ansi.Truncate(left, width, "…") + "\n" + ansi.Truncate(right, width, "…")
 	}
@@ -82,26 +91,63 @@ func statusBar(indicator, errNote string, width int) string {
 	return strings.Repeat(" ", gap) + right
 }
 
-// renderBindings renders a binding list as a "key:desc" hint, joined by two
-// spaces. Bindings without a Help().Key are skipped (devd DD2-175: footer
-// hints are derived from the keymap, single source, can never drift from the
-// real bindings).
+// nbsp is U+00A0 NO-BREAK SPACE. x/ansi's own Wordwrap (wrap.go) explicitly
+// excludes it from its whitespace-breakpoint set (`unicode.IsSpace(r) && r
+// != nbsp`) -- used below to glue a rendered binding's key+desc into one
+// wrap-atomic unit (see renderBindings' own doc comment for why).
+const nbsp = "\u00a0"
+
+// renderBindings renders a binding list as a colored "key desc" hint, joined
+// by " · " (D06, design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc Grilling-
+// Nachtrag, PO-Wortlaut "Taste in TEAL, Aktions-Wort grau (subtext), KEIN
+// ':' mehr — Farbtrennung ersetzt den Doppelpunkt"): key rendered
+// theme.BindingKey (Teal), description theme.BindingDesc (Subtext) --
+// replaces the previous plain "key:desc" colon-joined, blanket-Dim-washed
+// rendering. This is the ONE shared render path for BOTH Header Zone 1
+// (globalBindings()) AND Footer Zone 3 (browseRepoLocalBindings/
+// backlogLocalBindings, plus every overlay-local set in footer_context.go)
+// -- one function, one optic, "gilt einheitlich" (PO). Bindings without a
+// Help().Key are skipped (devd DD2-175: footer hints are derived from the
+// keymap, single source, can never drift from the real bindings).
+//
+// REGRESSION FIX (found live, this task's own tmux smoke test): the old
+// "key:desc" rendering glued the key to its desc's first word via ":" (no
+// internal space at all -- footer()'s wordwrap, view.go, could never split
+// them). Replacing ":" with a plain " " reintroduced a real breakable
+// space, so a narrow-terminal wrap could orphan a key alone on one line
+// with its own desc starting the next (observed: Backlog footer at 80
+// columns split "S" from "Sort"). Every space WITHIN one binding's own
+// "key desc..." -- between key and desc, AND between a multi-word desc's
+// own words (e.g. FocusIn's "focus in") -- is therefore nbsp, not " ":
+// the whole entry becomes one wrap-atomic unit. Only the " · " SEPARATOR
+// BETWEEN entries stays a real, breakable space -- that IS where wrapping
+// should be free to happen.
 func renderBindings(bs []keybind.Binding) string {
 	parts := make([]string, 0, len(bs))
 	for _, b := range bs {
 		h := b.Help()
 		if h.Key != "" {
-			parts = append(parts, h.Key+":"+h.Desc)
+			desc := strings.ReplaceAll(h.Desc, " ", nbsp)
+			parts = append(parts, theme.BindingKey.Render(h.Key)+nbsp+theme.BindingDesc.Render(desc))
 		}
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, " · ")
 }
 
 // footer renders footer Zone 3 (local + global hints, already joined into
-// hint) dimmed and wrapped to width — narrow terminals wrap instead of
-// overflowing into the pane columns (mirrors breadcrumb/chrome).
+// hint by renderBindings) wrapped to width — narrow terminals wrap instead
+// of overflowing into the pane columns (mirrors breadcrumb/chrome). No
+// longer blanket-Dim-washes the string (pre-D06 behavior, design-spec.md §15
+// PF-16, bean bt-ntoz/bt-d8kc): hint arrives PRE-STYLED (Teal key / Subtext
+// desc, renderBindings' own doc comment) — an outer Style.Render's own
+// trailing reset only wraps the whole string ONCE, so it would get
+// immediately clobbered by the first inner Reset renderBindings' per-key/
+// -desc spans already emit (ANSI styles do not nest), silently reverting
+// every span AFTER the first back to the terminal's raw default foreground
+// instead of staying Dim. wrapText itself is ANSI-aware (x/ansi Wordwrap/
+// Hardwrap), so pre-styled input still wraps correctly across lines.
 func footer(hint string, width int) string {
-	return theme.Dim.Render(wrapText(hint, width))
+	return wrapText(hint, width)
 }
 
 // truncate ANSI-safely truncates s to w cells (never cuts an escape

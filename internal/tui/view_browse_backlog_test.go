@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"beans-tui/internal/data"
+	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -227,6 +227,26 @@ func TestBacklogSortOrdersChangeVisibly(t *testing.T) {
 	vis = m.backlogVisible() // bk-a has nil UpdatedAt -- must sort last, not panic
 	if vis[0].ID != "bk-b" {
 		t.Fatalf("updated sort first = %s, want bk-b (nil UpdatedAt sorts last)", vis[0].ID)
+	}
+}
+
+// TestBacklogSortDisplayLabel guards D02's own tiny mapping helper
+// (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): "" aliases to "status"
+// (same alias nextBacklogSort itself already uses), "priority" abbreviates
+// to "prio" (PO example verbatim: "⌕ / search · sort prio"), every other
+// mode renders unchanged.
+func TestBacklogSortDisplayLabel(t *testing.T) {
+	cases := []struct{ mode, want string }{
+		{"", "status"},
+		{"status", "status"},
+		{"priority", "prio"},
+		{"created", "created"},
+		{"updated", "updated"},
+	}
+	for _, c := range cases {
+		if got := backlogSortDisplayLabel(c.mode); got != c.want {
+			t.Errorf("backlogSortDisplayLabel(%q) = %q, want %q", c.mode, got, c.want)
+		}
 	}
 }
 
@@ -480,13 +500,22 @@ func TestBacklogGoldenDeterministic(t *testing.T) {
 // Header 7-Globals/Footer-context contract, just this view's own Chrome
 // function.
 
-func TestBacklogChromeHeaderShowsAllSevenGlobals(t *testing.T) {
+// TestBacklogChromeHeaderShowsExactlyFourGlobals guards D04 (design-spec.md
+// §15 PF-16, bean bt-ntoz/bt-d8kc, SUPERSEDES the previous 7-Globals
+// header): mirrors view_browse_repo_test.go's own coverage, this view's own
+// Chrome function.
+func TestBacklogChromeHeaderShowsExactlyFourGlobals(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	head, _ := m.backlogChrome(200) // wide enough to never trigger breadcrumb's narrow-stack fallback
-	plain := ansi.Strip(head)
-	for _, want := range []string{"ctrl+r:reload", "ctrl+k:commands", "p:repos", "?:help", "esc:back", "enter:open/confirm", "q:quit"} {
+	plain := stripHint(head)
+	for _, want := range []string{"ctrl+k commands", "p repos", "? help", "q quit"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("backlogChrome header = %q, want it to contain %q", plain, want)
+		}
+	}
+	for _, absent := range []string{"ctrl+r", "esc back", "enter open"} {
+		if strings.Contains(plain, absent) {
+			t.Errorf("backlogChrome header = %q, must NOT contain %q (D04 degrades it out of the header)", plain, absent)
 		}
 	}
 }
@@ -494,21 +523,72 @@ func TestBacklogChromeHeaderShowsAllSevenGlobals(t *testing.T) {
 func TestBacklogChromeFooterOmitsEnter(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	_, localKeys := m.backlogChrome(200)
-	plain := ansi.Strip(localKeys)
-	if strings.Contains(plain, "enter:") {
-		t.Errorf("backlogChrome footer = %q, must NOT contain enter: (now header-only, PF-11)", plain)
+	plain := stripHint(localKeys)
+	if strings.Contains(plain, "enter open") {
+		t.Errorf("backlogChrome footer = %q, must NOT contain enter open (now header-only, D04)", plain)
 	}
 }
 
 func TestBacklogChromeFooterShowsFocusInFocusOut(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	_, localKeys := m.backlogChrome(200)
-	plain := ansi.Strip(localKeys)
-	if !strings.Contains(plain, "tab:focus in/toggle") {
+	plain := stripHint(localKeys)
+	if !strings.Contains(plain, "tab focus in") {
 		t.Errorf("backlogChrome footer = %q, want FocusIn's real hint (not a hand-typed suffix)", plain)
 	}
-	if !strings.Contains(plain, "shift+tab:focus out") {
+	if !strings.Contains(plain, "shift+tab focus out") {
 		t.Errorf("backlogChrome footer = %q, want shift+tab visible for the first time (PF-13)", plain)
+	}
+}
+
+// TestBacklogChromeFooterMatchesQ06ListPlusSort guards Q06's finale,
+// PO-verbatim Footer-Liste PLUS the Planner-Entscheidung (bean bt-d8kc,
+// ERRATUM vs. the literal Q06 wording, which never mentions Sort since
+// Backlog is the only view Sort applies to): Sort stays ADDITIONALLY at the
+// end, a Backlog-exclusive extra, not withdrawn without explicit PO
+// instruction.
+func TestBacklogChromeFooterMatchesQ06ListPlusSort(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	_, localKeys := m.backlogChrome(500) // wide enough for the whole list on one line
+	plain := stripHint(localKeys)
+	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking · S Sort"
+	if plain != want {
+		t.Errorf("backlogChrome footer = %q, want exactly %q", plain, want)
+	}
+}
+
+// TestBacklogLocalBindingsIncludesSort is the direct binding-list guard
+// (bean bt-d8kc TDD-Schritte, named explicitly): backlogLocalBindings()
+// carries keys.Sort, browseRepoLocalBindings() (the Tree's own list) does
+// NOT -- Sort is Backlog-exclusive (sortBacklog/nextBacklogSort have no Tree
+// analog).
+func TestBacklogLocalBindingsIncludesSort(t *testing.T) {
+	found := false
+	for _, b := range backlogLocalBindings() {
+		if strings.Join(b.Keys(), ",") == strings.Join(keys.Sort.Keys(), ",") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("backlogLocalBindings() = %v, want it to include keys.Sort %v", backlogLocalBindings(), keys.Sort.Keys())
+	}
+	for _, b := range browseRepoLocalBindings() {
+		if strings.Join(b.Keys(), ",") == strings.Join(keys.Sort.Keys(), ",") {
+			t.Error("browseRepoLocalBindings() unexpectedly includes keys.Sort -- Sort is Backlog-exclusive")
+		}
+	}
+}
+
+// TestBacklogLocalBindingsOmitsNavigation mirrors
+// TestBrowseRepoLocalBindingsOmitsNavigation (view_browse_repo_test.go):
+// Q06 removes Up/Down from the Backlog footer too.
+func TestBacklogLocalBindingsOmitsNavigation(t *testing.T) {
+	for _, nav := range []keybind.Binding{keys.Up, keys.Down} {
+		for _, b := range backlogLocalBindings() {
+			if strings.Join(b.Keys(), ",") == strings.Join(nav.Keys(), ",") {
+				t.Errorf("backlogLocalBindings() still contains navigation binding %v, want it removed (Q06)", nav.Keys())
+			}
+		}
 	}
 }
 
@@ -516,11 +596,11 @@ func TestBacklogChromeFooterIsContextSensitiveOnOverlayOpen(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	m.overlay = overlayValueMenu
 	_, localKeys := m.backlogChrome(200)
-	plain := ansi.Strip(localKeys)
-	if !strings.Contains(plain, "s:Status menu") {
+	plain := stripHint(localKeys)
+	if !strings.Contains(plain, "s Status") {
 		t.Errorf("backlogChrome footer while overlayValueMenu = %q, want the Value-Menu's own context set", plain)
 	}
-	if strings.Contains(plain, "c:Create") {
+	if strings.Contains(plain, "c Create") {
 		t.Errorf("backlogChrome footer while overlayValueMenu = %q, must not leak the (now irrelevant) view-local Create hint", plain)
 	}
 }

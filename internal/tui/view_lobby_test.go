@@ -12,6 +12,7 @@ import (
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // lobbyFixtureModel builds a model already positioned in the Lobby, with
@@ -286,29 +287,51 @@ func TestLobbyEscReturnsToBrowseWithLiveClient(t *testing.T) {
 // client, the old combined "esc/q:back" would promise q takes you back --
 // exactly the surprise-copy problem quitBox's own hint fix (B08 Planner
 // add-on) exists to prevent. With no client both keys still quit-confirm,
-// so the combined "esc/q:quit" stays.
+// so the combined "esc/q quit" stays.
+//
+// D06 OPTIK-ANGLEICHUNG (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc,
+// Notes-für-bt-d8kc in bean bt-1u0t): lobbyExitHint's own ":"-format is
+// aligned to the new Header/Footer optic here -- key/desc color-separated,
+// no more ":" -- BEHAVIOR (which text shows when) stays byte-for-byte
+// unchanged, only scoped to lobbyExitHint's own two segments (the REST of
+// viewLobby's hint line, "i/k:↑↓  enter:open  type:filter", is untouched --
+// out of scope, a separate ad hoc literal, not this function).
 func TestLobbyHintReflectsSplitEscQBehavior(t *testing.T) {
 	t.Run("live client: esc back, q quit", func(t *testing.T) {
 		m := lobbyFixtureModelWithClient(t, []string{"/tmp/repo-alpha"})
 		m.width, m.height = 100, 30
-		out := m.viewLobby()
-		if strings.Contains(out, "esc/q:") {
+		out := ansi.Strip(m.viewLobby())
+		if strings.Contains(out, "esc/q") {
 			t.Fatalf("viewLobby() hint still shows the combined esc/q label despite esc and q now diverging:\n%s", out)
 		}
-		if !strings.Contains(out, "esc:back") {
-			t.Fatalf("viewLobby() hint missing esc:back:\n%s", out)
+		if !strings.Contains(out, "esc back") {
+			t.Fatalf("viewLobby() hint missing esc back:\n%s", out)
 		}
-		if !strings.Contains(out, "q:quit") {
-			t.Fatalf("viewLobby() hint missing q:quit:\n%s", out)
+		if !strings.Contains(out, "q quit") {
+			t.Fatalf("viewLobby() hint missing q quit:\n%s", out)
 		}
 	})
 
-	t.Run("no client: combined esc/q:quit stays", func(t *testing.T) {
+	t.Run("no client: combined esc/q quit stays", func(t *testing.T) {
 		m := lobbyFixtureModel(t, []string{"/tmp/repo-alpha"})
 		m.width, m.height = 100, 30
-		out := m.viewLobby()
-		if !strings.Contains(out, "esc/q:quit") {
-			t.Fatalf("viewLobby() hint missing esc/q:quit for the first-screen Lobby:\n%s", out)
+		out := ansi.Strip(m.viewLobby())
+		if !strings.Contains(out, "esc/q quit") {
+			t.Fatalf("viewLobby() hint missing esc/q quit for the first-screen Lobby:\n%s", out)
 		}
 	})
+}
+
+// TestLobbyExitHintNoColon guards D06's own optic directly against
+// lobbyExitHint() (not just through the full viewLobby() render): neither
+// branch's rendered (ANSI-stripped) text may contain ':' anymore.
+func TestLobbyExitHintNoColon(t *testing.T) {
+	withClient := model{client: &data.Client{}}
+	if plain := ansi.Strip(lobbyExitHint(withClient)); strings.Contains(plain, ":") {
+		t.Errorf("lobbyExitHint(with client) = %q, must not contain ':' (D06)", plain)
+	}
+	noClient := model{}
+	if plain := ansi.Strip(lobbyExitHint(noClient)); strings.Contains(plain, ":") {
+		t.Errorf("lobbyExitHint(no client) = %q, must not contain ':' (D06)", plain)
+	}
 }

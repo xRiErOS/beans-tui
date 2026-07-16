@@ -82,6 +82,23 @@ func nextBacklogSort(current string) string {
 	return backlogSortModes[0]
 }
 
+// backlogSortDisplayLabel maps the active Sort-Toggle mode to its Backlog-
+// search-line suffix label (D02, design-spec.md §15 PF-16, bean bt-ntoz/
+// bt-d8kc): "" aliases to "status" (same alias nextBacklogSort itself uses
+// -- idx.Backlog()'s own canonical order IS status-tier order), "priority"
+// abbreviates to "prio" (PO example verbatim: "⌕ / search · sort prio"),
+// every other mode (status/created/updated) renders as its own word
+// unchanged.
+func backlogSortDisplayLabel(mode string) string {
+	if mode == "" {
+		mode = "status"
+	}
+	if mode == "priority" {
+		return "prio"
+	}
+	return mode
+}
+
 // backlogVisible returns idx.Backlog() (E1 Task 3, unchanged) narrowed by
 // the SAME shared search+facet predicate the Tree uses (m.beanMatches, Task
 // 3/4), then ordered per the active Sort-Toggle mode (sortBacklog).
@@ -209,17 +226,23 @@ func (m model) backlogChrome(innerW int) (head, localKeys string) {
 }
 
 // backlogLocalBindings is the Backlog view's own Footer Zone 3 local set --
-// mirrors browseRepoLocalBindings' own rationale (view_browse_repo.go):
-// backlogChrome's PREVIOUS inline list, minus Enter (now globalBindings(),
-// header-only -- backlogChrome never duplicated Refresh, only Enter), plus
-// FocusIn/FocusOut (PF-13) replacing the hand-typed "  tab:focus" footer
-// suffix. Everything else (Up/Down/Sort/Search/Filter/Backlog/Status/
-// Create/Delete/Editor) is UNCHANGED from the pre-T7 list, including its
-// pre-existing asymmetry vs. the Tree list (e.g. Filter WAS already shown
-// here but not in Tree) -- preserved as-is, not reconciled (out of T7's
-// scope, see this task's Deviations).
+// D06+Q06 (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc) REBUILD this from
+// scratch, superseding PF-11's list, mirroring browseRepoLocalBindings'
+// exact Q06 order (view_browse_repo.go) PLUS Sort appended at the end.
+//
+// ERRATUM vs. Q06's literal wording (bean bt-d8kc, documented Planner-
+// Entscheidung, not a silent omission): Q06's PO-verbatim list is phrased
+// once for BOTH Browse and Backlog and never mentions Sort (`S`) -- Sort has
+// no Tree analog (sortBacklog/nextBacklogSort are Backlog-only), so the
+// shared list simply never had occasion to name it. Sort stays a
+// Backlog-EXCLUSIVE addition here rather than being silently dropped: it is
+// a pre-existing, frequently-used, currently-visible feature, and no PO
+// instruction asked for its removal ("kein Entzug ohne PO-Anweisung").
+// Filter (already shown here pre-T7) is no longer an asymmetry vs. Tree --
+// Q06's list adds it to Tree too now, reconciling the two lists' shape
+// except for this one documented Sort exception.
 func backlogLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Sort, keys.Search, keys.Filter, keys.Backlog, keys.Status, keys.Create, keys.Delete, keys.Editor, keys.FocusIn, keys.FocusOut}
+	return append(append([]keybind.Binding{}, browseRepoLocalBindings()...), keys.Sort)
 }
 
 // viewBacklog renders the two-pane master-detail Backlog view -- mirrors
@@ -256,7 +279,10 @@ func (m model) viewBacklog() string {
 	// content budget, so the actual rows window to bodyH-1 (PF-10, bean
 	// bt-uyzf, widened from bodyH-3 now that renderPane no longer reserves
 	// its own title+separator lines).
-	searchLine := m.treeSearchLine(lw - 2)
+	// D02 (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): the Backlog-Sort-
+	// Indicator -- a dezent (theme.Muted) suffix on the search line showing
+	// the active Sort-Toggle mode.
+	searchLine := m.treeSearchLine(lw-2, "sort "+backlogSortDisplayLabel(m.backlogSort))
 	rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-1)...)
 	listBox := renderPane(pane{rows: rows}, lw, bodyH, !m.detailFocus)
 	detailBox := m.renderBacklogDetailPane(vis, rw, bodyH, m.detailFocus)

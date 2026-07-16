@@ -282,11 +282,22 @@ func (m model) viewLobby() string {
 // sensitive hint (B08 Planner add-on) exists to prevent. With no client
 // both keys still quit-confirm (first-screen Lobby, design decision d), so
 // the combined label stays there.
+//
+// D06 OPTIK-ANGLEICHUNG (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc,
+// Notes-für-bt-d8kc in bean bt-1u0t): the ":" format is replaced with the
+// same Teal-key/Subtext-desc color split renderBindings uses (theme.
+// BindingKey/BindingDesc directly -- there is no keybind.Binding to hand
+// renderBindings here, esc/q/esc-q are ad hoc label pairs, not real
+// bindings). WHICH text shows (esc:back+q:quit vs. the combined esc/q:quit)
+// is UNCHANGED -- only the optic. Scoped to lobbyExitHint's own segment
+// only: the surrounding hint line ("i/k:↑↓  enter:open  type:filter  ",
+// viewLobby) keeps its own colon format, out of this task's scope.
 func lobbyExitHint(m model) string {
 	if m.client != nil {
-		return "esc:back  q:quit"
+		return theme.BindingKey.Render("esc") + " " + theme.BindingDesc.Render("back") + "  " +
+			theme.BindingKey.Render("q") + " " + theme.BindingDesc.Render("quit")
 	}
-	return "esc/q:quit"
+	return theme.BindingKey.Render("esc/q") + " " + theme.BindingDesc.Render("quit")
 }
 
 // openLobby transitions into the Lobby (E5 Task 6, design decision h):

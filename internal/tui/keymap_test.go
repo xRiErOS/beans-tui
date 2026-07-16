@@ -92,13 +92,14 @@ func TestNewTagKeyBound(t *testing.T) {
 	}
 }
 
-// TestGlobalBindingsExactSet guards PF-11 (design-spec.md §15, E7 T7, bean
-// bt-m6at): globalBindings() is Header Zone 1's single source -- exactly the
-// 7 header-global bindings, in the exact display order design-spec §15
-// specifies (`ctrl+r:reload · ctrl+k:commands · p:repos · ?:help · esc:back
-// · enter:open/confirm · q:quit`).
+// TestGlobalBindingsExactSet guards D04 (design-spec.md §15 PF-16, bean
+// bt-ntoz Grilling-Nachtrag/bt-d8kc, SUPERSEDES PF-11's original 7-item
+// set): globalBindings() is Header Zone 1's single source -- EXACTLY 4
+// header-global bindings, in this exact order: Palette, Picker, Help, Quit.
+// ctrl+r/esc/enter fly out of the header entirely (helpGroups() still lists
+// them -- Help-Overlay only, unchanged).
 func TestGlobalBindingsExactSet(t *testing.T) {
-	want := []keybind.Binding{keys.Refresh, keys.Palette, keys.Picker, keys.Help, keys.Back, keys.Enter, keys.Quit}
+	want := []keybind.Binding{keys.Palette, keys.Picker, keys.Help, keys.Quit}
 	got := globalBindings()
 	if len(got) != len(want) {
 		t.Fatalf("globalBindings() has %d entries, want %d", len(got), len(want))
@@ -106,6 +107,68 @@ func TestGlobalBindingsExactSet(t *testing.T) {
 	for i := range want {
 		if strings.Join(got[i].Keys(), ",") != strings.Join(want[i].Keys(), ",") {
 			t.Errorf("globalBindings()[%d].Keys() = %v, want %v", i, got[i].Keys(), want[i].Keys())
+		}
+	}
+}
+
+// TestGlobalBindingsOmitsRefreshBackEnter is D04's own negative-space guard
+// (design-spec.md §15 PF-16): the three keys degraded out of the header
+// (Refresh/Back/Enter) must genuinely be ABSENT from globalBindings() now,
+// not just outnumbered -- a regression that re-added one of them alongside
+// a 4-length slice of different composition would slip past
+// TestGlobalBindingsExactSet's own by-position check if it also removed a
+// different entry by mistake.
+func TestGlobalBindingsOmitsRefreshBackEnter(t *testing.T) {
+	got := map[string]bool{}
+	for _, b := range globalBindings() {
+		got[strings.Join(b.Keys(), ",")] = true
+	}
+	for _, degraded := range []keybind.Binding{keys.Refresh, keys.Back, keys.Enter} {
+		if got[strings.Join(degraded.Keys(), ",")] {
+			t.Errorf("globalBindings() still contains %v, want it degraded out of the header (D04)", degraded.Keys())
+		}
+	}
+}
+
+// TestGlobalBindingsFitIn80Columns guards D04's explicit width constraint
+// (bean bt-ntoz Grilling-Nachtrag: "Passt in 80 Spalten ohne
+// Truncation/Wrap"): a realistic Browse header (breadcrumb repo+title, real
+// renderBindings(globalBindings()) hint) rendered at an 80-column terminal's
+// innerW (78, matching browseRepoChrome's own w-2) must stay on ONE line --
+// no breadcrumb narrow-stack fallback, no truncate() ellipsis.
+func TestGlobalBindingsFitIn80Columns(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	head, _ := m.browseRepoChrome(78)
+	if strings.Contains(head, "\n") {
+		t.Fatalf("header wrapped/stacked onto two lines at 80 columns (want one line): %q", head)
+	}
+	if strings.Contains(head, "…") {
+		t.Fatalf("header truncated at 80 columns: %q", head)
+	}
+}
+
+// TestBlockingKeyIsR guards Q06's Blocking-Remap (design-spec.md §15 PF-16,
+// bean bt-ntoz/bt-d8kc): keys.Blocking moves from "B" to "r" ("r" free since
+// PF-14's Review-Cockpit removal, verified -- no other keyMap field binds
+// it; "B" becomes free, verified -- no other keyMap field/raw string
+// reference used it either).
+func TestBlockingKeyIsR(t *testing.T) {
+	k := newKeyMap()
+	if !bindHas(k.Blocking, "r") {
+		t.Errorf("Blocking.Keys() = %v, want to contain %q", k.Blocking.Keys(), "r")
+	}
+	if bindHas(k.Blocking, "B") {
+		t.Errorf("Blocking.Keys() = %v, must NOT still contain %q (Q06 remap frees it)", k.Blocking.Keys(), "B")
+	}
+	v := reflect.ValueOf(k)
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		b, ok := v.Field(i).Interface().(keybind.Binding)
+		if !ok || typ.Field(i).Name == "Blocking" {
+			continue
+		}
+		if bindHas(b, "B") {
+			t.Errorf("field %s unexpectedly still binds %q -- Q06 expected B to be fully free after the remap", typ.Field(i).Name, "B")
 		}
 	}
 }
