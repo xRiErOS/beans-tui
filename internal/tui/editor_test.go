@@ -90,6 +90,21 @@ exit 1
 `)
 }
 
+// fakeBeansValidationError installs a fake "beans" that always fails with a
+// real VALIDATION_ERROR JSON error envelope on stdout (the OTHER
+// classifyError primary-branch shape, mutations.go -- e.g. what a hand-typed
+// invalid status: value in the whole-bean $EDITOR produces on submit,
+// F01/bt-z4b1 Review-Runde 1). Deliberately NOT a CONFLICT: F01's whole
+// point is that the recovery-tempfile path must fire for EVERY UpdateWhole
+// failure, not just the errors.Is(_, data.ErrConflict) subset.
+func fakeBeansValidationError(t *testing.T) {
+	t.Helper()
+	fakeBeansOnPath(t, `#!/bin/sh
+echo '{"success":false,"error":"invalid status: banana","code":"VALIDATION_ERROR"}'
+exit 1
+`)
+}
+
 // rawEditorText builds a whole-bean $EDITOR raw text (the SAME shape
 // data.Client.ShowRaw's seed / a submitted editorFinishedMsg.content carry)
 // from a rawBeanFrontmatter + explicit body, via yaml.Marshal against the
@@ -305,6 +320,50 @@ Epic fixture body.
 	const wantBody = "\nEpic fixture body.\n"
 	if body != wantBody {
 		t.Errorf("body = %q, want %q", body, wantBody)
+	}
+}
+
+// TestParseRawBeanBodyWithEmbeddedDelimiterLines pins the split-at-SECOND-
+// delimiter contract against a body that itself contains "---" lines (F03,
+// bt-z4b1 Review-Runde 1): markdown horizontal rules (a completely normal
+// bean-body construct -- this very repo's own bean bodies use them) must
+// stay IN the body, never be mistaken for the frontmatter's closing
+// delimiter. parseRawBean's strings.Index finds the FIRST "\n---\n" after
+// the opening delimiter, which is the frontmatter's close -- everything
+// after it, embedded "---" lines included, is body verbatim. The logic was
+// correct from the start (reviewer sandbox-verified); this test exists to
+// keep it correct across refactors.
+func TestParseRawBeanBodyWithEmbeddedDelimiterLines(t *testing.T) {
+	const raw = `---
+# tt-hr
+title: Horizontal Rule Fixture
+status: todo
+type: task
+priority: normal
+---
+
+Intro paragraph.
+
+---
+
+Section below a markdown horizontal rule.
+
+---
+Another one, no blank line before it.
+`
+	fm, body, err := parseRawBean(raw)
+	if err != nil {
+		t.Fatalf("parseRawBean() error = %v", err)
+	}
+	if fm.Title != "Horizontal Rule Fixture" {
+		t.Errorf("Title = %q, want %q (frontmatter must end at the FIRST closing delimiter)", fm.Title, "Horizontal Rule Fixture")
+	}
+	if fm.Status != "todo" || fm.Type != "task" || fm.Priority != "normal" {
+		t.Errorf("frontmatter = %+v, want status/type/priority from the REAL frontmatter block only", fm)
+	}
+	const wantBody = "\nIntro paragraph.\n\n---\n\nSection below a markdown horizontal rule.\n\n---\nAnother one, no blank line before it.\n"
+	if body != wantBody {
+		t.Errorf("body = %q, want %q (embedded --- lines must stay in the body verbatim)", body, wantBody)
 	}
 }
 
@@ -715,14 +774,19 @@ func TestEditorFinishedUsesEtagCapturedAtOpenNotFreshIndexRead(t *testing.T) {
 	}
 }
 
-// TestApplyEditorFinishedRecoversTempfileOnValidationError guards the
+// TestApplyEditorFinishedRecoversTempfileOnParseError guards the
 // parse-error recovery path (design-spec.md §15 PF-17 "Fehlerfall"): the
 // Ganz-Bean-Editor is bewusst UNconstrained (Freitext-YAML) -- a malformed
 // edit (e.g. a broken frontmatter delimiter) must not silently discard the
 // PO's work. Mirrors writeConflictTempFile's existing recovery convention,
 // but persists the FULL raw text (not just a body), since the whole edited
-// file is what needs to survive.
-func TestApplyEditorFinishedRecoversTempfileOnValidationError(t *testing.T) {
+// file is what needs to survive. RENAMED from ...OnValidationError (F02,
+// bt-z4b1 Review-Runde 1): the old name suggested CLI-VALIDATION_ERROR
+// coverage while only exercising the parseRawBean failure BEFORE any CLI
+// call ever fires -- exactly the false confidence that let F01 slip
+// through. The CLI-side case has its own dedicated test now
+// (TestApplyEditorFinishedRecoversTempfileOnCLIValidationError below).
+func TestApplyEditorFinishedRecoversTempfileOnParseError(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.client = &data.Client{RepoDir: t.TempDir()}
 	m.editorTarget = "tk-1"
@@ -756,6 +820,72 @@ func TestApplyEditorFinishedRecoversTempfileOnValidationError(t *testing.T) {
 	}
 	if string(content) != malformed {
 		t.Fatalf("recovery tempfile content = %q, want %q", content, malformed)
+	}
+}
+
+// TestApplyEditorFinishedRecoversTempfileOnCLIValidationError is F01's
+// regression test (critical, bt-z4b1 Review-Runde 1, live reproduced by the
+// reviewer): a CLI-side VALIDATION_ERROR from UpdateWhole AFTER a successful
+// parse (e.g. a hand-typed `status: banana`, or a deleted title: line
+// reaching the CLI as --title "") used to lose the ENTIRE $EDITOR raw text
+// -- applyEditorFinished's mutateCmd closure only wrapped
+// errors.Is(err, data.ErrConflict) failures in writeConflictTempFile/
+// conflictWithRecovery, so every non-conflict CLI rejection fell through to
+// applyMutationResult's bare else branch with nothing persisted.
+// design-spec §15 PF-17's Fehlerfall wording explicitly covers BOTH
+// ("Parse-Fehler ODER CLI-VALIDATION_ERROR ... mirrort
+// writeConflictTempFile"). EVERY UpdateWhole failure must now be
+// recoverable: tempfile exists, carries the FULL raw edited text, and its
+// path rides along in the status-line text.
+func TestApplyEditorFinishedRecoversTempfileOnCLIValidationError(t *testing.T) {
+	fakeBeansValidationError(t)
+
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: t.TempDir()}
+	m.editorTarget = "tk-1"
+	m.editorETag = "etag-open"
+	m.editorSnapshot = &data.Bean{ID: "tk-1", Title: "Task One", Status: "in-progress", Type: "task", Priority: "high"}
+
+	// Parses fine (valid YAML/delimiters) -- the CLI is what rejects it.
+	fm := rawBeanFrontmatter{Title: "Task One", Status: "banana", Type: "task", Priority: "high"}
+	raw := rawEditorText(t, fm, "edited body that must not be lost to a CLI rejection")
+
+	tm, cmd := m.Update(editorFinishedMsg{content: raw, changed: true})
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(editorFinishedMsg) did not return a model, got %T", tm)
+	}
+	if cmd == nil {
+		t.Fatal("changed editor content must fire a mutation Cmd")
+	}
+	msg := cmd()
+	mdm, ok := msg.(mutationDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want mutationDoneMsg", msg)
+	}
+	if mdm.err == nil {
+		t.Fatal("setup: the fake beans script always exits 1")
+	}
+	if errors.Is(mdm.err, data.ErrConflict) {
+		t.Fatalf("mutationDoneMsg.err = %v, want a NON-conflict error (F01 is precisely about the non-conflict path)", mdm.err)
+	}
+
+	fm2 := step(t, nm, mdm)
+	if !strings.Contains(fm2.err, "VALIDATION_ERROR") {
+		t.Fatalf("status line = %q, want it to surface the CLI's own validation error", fm2.err)
+	}
+	const marker = "your version: "
+	idx := strings.Index(fm2.err, marker)
+	if idx < 0 {
+		t.Fatalf("status line = %q, want it to carry the recovery tempfile's path (%q) -- F01: a CLI rejection must not lose the PO's edits", fm2.err, marker)
+	}
+	path := strings.TrimSpace(fm2.err[idx+len(marker):])
+	content, rerr := os.ReadFile(path)
+	if rerr != nil {
+		t.Fatalf("ReadFile(%q) error = %v (recovery tempfile missing)", path, rerr)
+	}
+	if string(content) != raw {
+		t.Fatalf("recovery tempfile content = %q, want the FULL raw edited text %q", content, raw)
 	}
 }
 

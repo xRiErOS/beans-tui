@@ -284,19 +284,40 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 			m, toastCmd = m.showToast(toastError, "Conflict: bean changed externally", toastCtx, nil, true)
 		} else {
 			m.err = err.Error()
-			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+			// F01 (bt-z4b1 Review-Runde 1): applyEditorFinished's mutateCmd
+			// closure now wraps EVERY UpdateWhole failure (not just genuine
+			// conflicts) in *conflictWithRecovery -- a CLI-side
+			// VALIDATION_ERROR from a whole-bean $EDITOR submit lands HERE
+			// (it is not ErrConflict), and its recovery-tempfile path must
+			// surface exactly like the conflict branch above does, or the
+			// PO's whole $EDITOR session is silently lost to this
+			// function's unconditional reload. Every OTHER mutation site's
+			// plain error simply doesn't match (errors.As returns false),
+			// leaving their existing behavior untouched. Toast title stays
+			// the bare error (short); the path rides in ctx, mirroring the
+			// conflict branch's own title/ctx split.
+			toastCtx := ""
+			var cr *conflictWithRecovery
+			if errors.As(err, &cr) {
+				m.err += " — your version: " + cr.path
+				toastCtx = "Version saved: " + cr.path
+			}
+			m, toastCmd = m.showToast(toastError, err.Error(), toastCtx, nil, false)
 		}
 	}
 	return m, tea.Batch(toastCmd, loadCmd(m.client))
 }
 
-// conflictWithRecovery wraps an ErrConflict-classified mutation error with
-// the path of a KEPT tempfile holding content the mutation was about to
-// silently lose to applyMutationResult's unconditional reload (F2, Review-
-// Runde 2, applyEditorFinished's $EDITOR-conflict nicety below). Unwrap
-// preserves errors.Is(_, data.ErrConflict) so applyMutationResult's existing
-// conflict branch still fires unmodified; errors.As there additionally
-// recovers path to append to the status-line text.
+// conflictWithRecovery wraps a mutation error with the path of a KEPT
+// tempfile holding content the mutation was about to silently lose to
+// applyMutationResult's unconditional reload (F2, Review-Runde 2 -- widened
+// by F01, bt-z4b1 Review-Runde 1, from ErrConflict-only to EVERY whole-bean
+// $EDITOR UpdateWhole failure, CLI VALIDATION_ERROR included: the name kept
+// its historical "conflict" prefix, the mechanism is generic recovery).
+// Unwrap preserves errors.Is(_, data.ErrConflict) for genuinely
+// conflict-classified inner errors, so applyMutationResult's conflict branch
+// still fires unmodified for those; BOTH of its branches errors.As-recover
+// path to append to the status-line text.
 type conflictWithRecovery struct {
 	err  error
 	path string
@@ -307,11 +328,13 @@ func (c *conflictWithRecovery) Unwrap() error { return c.err }
 
 // writeConflictTempFile persists body to a NEW, deliberately KEPT tempfile
 // (unlike readEditorResult's own scratch file, editor.go, which os.Remove's
-// itself once read) -- a PO who just lost an ErrConflict race against
-// SetBody can recover the edited content manually instead of losing the
-// whole $EDITOR session to applyMutationResult's unconditional reload.
-// Best-effort: any failure here must not mask the underlying conflict, so
-// the caller (applyEditorFinished) falls back to the bare conflict error.
+// itself once read) -- a PO whose whole-bean $EDITOR submit just got
+// rejected (ETag conflict, CLI VALIDATION_ERROR -- F01, bt-z4b1
+// Review-Runde 1 -- or a parse failure before any CLI call) can recover the
+// edited content manually instead of losing the whole $EDITOR session to
+// applyMutationResult's unconditional reload. Best-effort: any failure here
+// must not mask the underlying error, so the caller (applyEditorFinished)
+// falls back to the bare unwrapped error.
 func writeConflictTempFile(body string) (path string, err error) {
 	f, err := os.CreateTemp("", "beans-tui-conflict-*.md")
 	if err != nil {
@@ -456,12 +479,15 @@ func (m model) applyBeanRawLoaded(msg beanRawLoadedMsg) (tea.Model, tea.Cmd) {
 //   - parseRawBean fails (malformed frontmatter, invalid YAML): the FULL
 //     raw text is persisted to a kept recovery tempfile immediately, no CLI
 //     call ever fires (there is nothing valid to diff).
-//   - UpdateWhole fails with a genuine ErrConflict (a parallel external
-//     write raced this submit): the FULL raw text is persisted the SAME
+//   - UpdateWhole fails -- ANY failure (F01, bt-z4b1 Review-Runde 1: a
+//     genuine ErrConflict from a parallel external write AND equally a CLI
+//     VALIDATION_ERROR from a hand-typed invalid field value; the original
+//     conflict-only wrap lost the whole session on the latter, live
+//     reproduced by the reviewer): the FULL raw text is persisted the SAME
 //     way, wrapped as *conflictWithRecovery so its path rides along in the
-//     surfaced status-line text (applyMutationResult above) -- otherwise
-//     applyMutationResult's unconditional reload would silently discard the
-//     PO's just-edited content.
+//     surfaced status-line text (applyMutationResult above, BOTH branches)
+//     -- otherwise applyMutationResult's unconditional reload would
+//     silently discard the PO's just-edited content.
 //
 // m.beanETag(id) is still consulted for the vanished-target guard below,
 // but ONLY for its ok bool (bean presence) -- the etag VALUE it would
@@ -515,7 +541,18 @@ func (m model) applyEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	client := m.client
 	return m, mutateCmd(func() error {
 		err := client.UpdateWhole(id, diff, etag)
-		if err != nil && errors.Is(err, data.ErrConflict) {
+		if err != nil {
+			// F01 (bt-z4b1 Review-Runde 1, critical, live reproduced):
+			// EVERY UpdateWhole failure -- not just errors.Is(_,
+			// data.ErrConflict) -- must be recoverable. A CLI-side
+			// VALIDATION_ERROR after a successful parse (hand-typed
+			// `status: banana`, deleted title: line, ...) used to fall
+			// through here bare, and applyMutationResult's else branch
+			// discarded the PO's whole $EDITOR session to its
+			// unconditional reload. conflictWithRecovery's Unwrap passes
+			// ErrConflict through, so the conflict branch's errors.Is
+			// still fires for genuine conflicts -- no separate conflict
+			// special-case needed anymore.
 			if path, werr := writeConflictTempFile(content); werr == nil {
 				return &conflictWithRecovery{err: err, path: path}
 			}
