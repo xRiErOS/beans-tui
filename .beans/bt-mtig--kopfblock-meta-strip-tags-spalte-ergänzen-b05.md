@@ -1,10 +1,11 @@
 ---
 # bt-mtig
 title: 'Kopfblock-Meta-Strip: Tags-Spalte ergänzen (B05)'
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:40Z
-updated_at: 2026-07-16T06:45:40Z
+updated_at: 2026-07-16T07:40:03Z
 parent: bt-tct9
 ---
 
