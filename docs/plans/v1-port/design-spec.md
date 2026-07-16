@@ -277,6 +277,10 @@ validiert statt gegen einen veralteten. Q01 (Header-Inhalt) und Q02
 offenen Q-Marker mehr in diesem Abschnitt.
 
 **PF-1 — Meta-Sektion `[1]` nicht kollabierbar (Planner-Entscheidung, devd-Blick).**
+**REVIDIERT durch PF-18, s. u.** (PO-Feedback 2026-07-16, bean `bt-98cb`): Meta
+verhält sich seither exklusiv-offen wie jede andere Sektion, nicht mehr "immer
+zusätzlich offen" — die folgende Begründung ist damit historisch, nicht mehr
+geltend.
 Von den zwei durch die PO offengelassenen Interpretationen (`nicht kollabierbar` vs.
 `Default-offen`) wird **nicht kollabierbar** gewählt: `renderAccordion`
 (`accordion.go`) rendert Sektion 1 (Meta) IMMER mit Body, unabhängig vom
@@ -1262,6 +1266,14 @@ Klick-Geometrie) wird im Gleichschritt angepasst.
   andere Sektion aktiv gewählt wird -- das ursprünglich gemeldete NB-1-
   Verhalten ("voriges Segment kollabiert nicht") existiert für Meta damit
   nicht mehr.
+
+**Präzisierung (Prelude, bt-b0w0, 2026-07-16):** `accOpen` persistiert über
+einen FocusOut/View-Wechsel (Tree↔Backlog) hinweg -- der oben beschriebene
+"Default `accOpen == 0`" gilt nur für den ANFANGSZUSTAND (Browse, bevor
+Detail-Focus je betreten wurde), nicht als Reset bei jedem Fokus-Verlust.
+Vorbestehendes, gewolltes Verhalten (nur `update.go`s FocusIn-Reset --
+`secCursor, accOpen, detailLevel, fieldCursor = 0, 1, 0, 0` -- setzt
+`accOpen` je explizit zurück, KEIN Pfad setzt es beim Fokus-Verlassen auf 0).
 
 **Goldens:** `testdata/tree.golden`/`testdata/backlog.golden` (Default-
 Browse-Zustand, `accOpen == 0`) verlieren die 5 Meta-Feldzeilen unterhalb
