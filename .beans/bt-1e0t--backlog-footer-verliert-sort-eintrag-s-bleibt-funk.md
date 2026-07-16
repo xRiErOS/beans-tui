@@ -1,11 +1,11 @@
 ---
 # bt-1e0t
 title: Backlog-Footer verliert Sort-Eintrag, S bleibt funktional (D02)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:48Z
-updated_at: 2026-07-16T12:28:39Z
+updated_at: 2026-07-16T12:48:11Z
 parent: bt-tct9
 ---
 
@@ -77,14 +77,14 @@ die sichtbare Laufzeit-Anzeige des aktiven Sort-Modus.
 
 ## Akzeptanz-Checkliste
 
-- [ ] `backlogLocalBindings()` enthält `keys.Sort` nicht mehr
-- [ ] `S` bleibt funktional (Backlog-Sort-Zyklus unverändert)
-- [ ] `keys.Sort` bleibt in `helpGroups()` (Help-Overlay), Drift-Guard-Tests grün
-- [ ] Suchzeilen-Suffix `· sort <modus>` unverändert sichtbar
-- [ ] Backlog-Footer passt bei 80 Spalten in 2 Zeilen (tmux-Smoke-Beleg im Commit-Body)
-- [ ] Tree-Footer unverändert (Gegenbeleg dokumentiert)
-- [ ] Goldens regeneriert (Backlog/Chrome) + Vorher/Nachher-Beschreibung im Commit-Body
-- [ ] Voller Testlauf grün, gofmt/vet leer
+- [x] `backlogLocalBindings()` enthält `keys.Sort` nicht mehr
+- [x] `S` bleibt funktional (Backlog-Sort-Zyklus unverändert)
+- [x] `keys.Sort` bleibt in `helpGroups()` (Help-Overlay), Drift-Guard-Tests grün
+- [x] Suchzeilen-Suffix `· sort <modus>` unverändert sichtbar
+- [x] Backlog-Footer passt bei 80 Spalten in 2 Zeilen (tmux-Smoke-Beleg im Commit-Body)
+- [x] Tree-Footer unverändert (Gegenbeleg dokumentiert)
+- [x] Goldens regeneriert (Backlog/Chrome) + Vorher/Nachher-Beschreibung im Commit-Body
+- [x] Voller Testlauf grün, gofmt/vet leer
 
 
 ## PRELUDE (2026-07-16, aus T5-Review F02/F03 — ZUERST erledigen, eigener Commit)
@@ -98,3 +98,84 @@ Zwei Test-Härtungen aus dem T5-Review (bt-4mo9), beide low, kein eigener Review
    sind selbstreferenziell (wantW := wideModalWidth(m.width)+2). Je einen unabhängigen
    Literal-Erwartungswert ergänzen (z.B. bei termW=120 → wantW 104).
 Commit: `test(tui): Picker-Jitter-Parity + Literal-Breiten-Pins (T5-F02/F03)`, `Refs: bt-1e0t`.
+
+
+## Summary
+
+D02 umgesetzt: `backlogLocalBindings()` gibt jetzt unverändert `browseRepoLocalBindings()`
+zurück, kein angehängtes `keys.Sort` mehr. `S` bleibt funktional (`keyBacklog`s Sort-Case
+unverändert), taucht nur noch im Help-Overlay auf (`helpGroups()`, keymap.go — unverändert,
+Sort war dort bereits gelistet). Suchzeilen-Suffix `· sort <modus>` unverändert. PRELUDE
+(F02/F03 aus dem T5-Review, bean bt-4mo9) zuerst erledigt, eigener Commit.
+
+Zwei Folgeänderungen waren durch D02 zwingend mitgezogen (nicht im TDD-Schritt-Text
+explizit genannt, aber direkte Konsequenz der Architektur-Vorgabe):
+- `TestBacklogChromeFooterMatchesQ06ListPlusSort` → umbenannt `...MatchesQ06List`, want-
+  String verliert `· S Sort` (jetzt byte-identisch mit `TestBrowseRepoChromeFooterMatchesQ06List`).
+- `TestDetailClickBacklogThreeLineFooterAt80Cols` (mouse_test.go) → umbenannt
+  `...FooterAt80Cols`: dieser Test baute seine Unterscheidungskraft explizit auf der
+  3-vs-2-Zeilen-Divergenz zwischen Backlog- und Browse-Footer bei 80 Spalten auf
+  (bt-d8kc-Ära). D02 macht beide Footer-Listen identisch — die Divergenz existiert nicht
+  mehr. Test bleibt als Grenzbreiten-Pin für den dynamischen footH-Mechanismus (footerY ==
+  originY+bodyH+2, click/border-Auflösung) bestehen, Verlust der Chrome-Unterscheidungskraft
+  ist im Kommentar dokumentiert statt stillschweigend übergangen.
+
+## Test-Output
+
+RED (vor Implementierung, `TestBacklogLocalBindingsOmitsSort`):
+
+    view_browse_backlog_test.go:584: backlogLocalBindings() unexpectedly includes
+    keys.Sort -- D02 moved Sort to Help-overlay-only (bean bt-1e0t)
+    --- FAIL: TestBacklogLocalBindingsOmitsSort (0.00s)
+
+GREEN (nach Implementierung, gleicher Test):
+
+    --- PASS: TestBacklogLocalBindingsOmitsSort (0.00s)
+
+Mitgezogene Tests (nach Implementierung aktualisiert, dann grün):
+`TestBacklogChromeFooterMatchesQ06List`, `TestDetailClickBacklogFooterAt80Cols`,
+`TestHelpGroupsCoverEveryBindingExactlyOnce`, `TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList`
+— alle PASS.
+
+Voller Lauf (Commit-Gate):
+
+    go test ./... -short -count=1   -> ok (2x, alle Pakete)
+    go test ./... -count=1          -> ok (alle Pakete, internal/tui 139.4s)
+    go test ./internal/tui/ -race -count=1 -> ok (141.1s)
+    gofmt -l .                      -> leer
+    go vet ./...                    -> leer
+
+## Smoke
+
+tmux 80 Spalten, Backlog-View (`b`): Footer rendert exakt 2 Zeilen —
+`tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create` /
+`· d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking` — kein
+`S Sort` mehr, kein Umbruch auf eine dritte Zeile (vorher potenziell 3 Zeilen, PO-Aussage
+empirisch bestätigt). `S` gedrückt: Suchzeilen-Suffix wechselt sichtbar `· sort status` →
+`· sort prio` (Sort-Zyklus funktional unverändert). `?` (Help-Overlay, Fenster auf 45
+Zeilen vergrößert um die volle Liste zu sehen): `S Sort` unter "Actions" weiterhin
+gelistet.
+
+## Deviations/ERRATA
+
+- Commit-Titel-Format korrigiert: die Prelude- und D02-Commit-Titel wurden initial mit
+  67 bzw. 53 Zeichen committet (Bean-Text schlug `test(tui): Picker-Jitter-Parity +
+  Literal-Breiten-Pins (T5-F02/F03)` wörtlich vor, das überschreitet die harte
+  ≤50-Zeichen-Vorgabe dieser Session) — per `git reset --soft` (kein Push erfolgt, keine
+  Historie extern sichtbar) neu committet als `test(tui): Picker-Jitter + Breiten-Pins
+  (F02/F03)` (49 Zeichen) und `feat(tui): Backlog-Footer verliert Sort (D02)` (45
+  Zeichen), Refs-Footer beider Commits auf `bt-1e0t` korrigiert (Bean-Text schlug
+  `Refs: bt-tct9` vor, Session-Vorgabe verlangt `bt-1e0t`). Kein Diff auf Produktionscode/
+  Testcode durch diesen Reset, nur Commit-Metadaten.
+- F02/F03 (PRELUDE) manuell mutations-verifiziert: temporärer Pad-Revert (1→2 Leerzeichen)
+  in `box_picker_blocking.go`/`box_picker_parent.go` ließ beide neuen Jitter-Parity-Tests
+  sichtbar fehlschlagen (Indent-Differenz 1 Spalte), danach zurückgesetzt — kein Diff auf
+  Produktionscode im Prelude-Commit, reiner Test-Zuwachs.
+
+## Notes for T(n+1)
+
+- Beide Footer-Listen (`backlogLocalBindings`/`browseRepoLocalBindings`) sind jetzt
+  identisch — ein zukünftiger Task, der die beiden wieder divergieren lässt (z. B. ein
+  neues Backlog-exklusives Binding), sollte `TestBacklogChromeFooterMatchesQ06List` und
+  `TestDetailClickBacklogFooterAt80Cols` gegenlesen, deren Kommentare die jetzige Parität
+  explizit dokumentieren.
