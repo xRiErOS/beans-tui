@@ -1,11 +1,11 @@
 ---
 # bt-6ppq
 title: E8-Abschluss (Voll-Validierung, Doku-Finalisierung, Epic to-review)
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-15T21:10:37Z
-updated_at: 2026-07-16T00:27:18Z
+updated_at: 2026-07-16T03:16:46Z
 parent: bt-ntoz
 blocked_by:
     - bt-czpf
@@ -81,3 +81,10 @@ um diese 5 Sites ergänzen — reine Nachvollziehbarkeit.
 ## Prelude aus E8-T7-Review (2026-07-16, non-blocking, Quelle: bt-yqdy-Review APPROVED)
 
 - I01 (Doku): bt-yqdy-Summary referenziert nicht-existente Datei 'search.go' — /-Suche-Logik liegt in view_browse_repo.go/update.go/messages.go/types.go, Tests in search_test.go. Bei Doku-Finalisierung im bean-Body korrigieren.
+
+
+## Prelude aus E8-T8-Review (2026-07-16, Quelle: bt-d8kc-Review APPROVED)
+
+- Q-PO (offen, an PO im Chat): Backlog-Footer braucht bei 80 Spalten 3 Zeilen (D06 erlaubt 2). Reviewer-Messung: Klartext 161 Zeichen > 2×78; Umschlagpunkt exakt 82 Spalten. Spec-konformer Fix ohne PO unmöglich (Q06-Liste wortgesperrt, Sort-Entzug gegen Planner-ERRATUM). Optionen für PO: (a) 3 Zeilen bei <82 Spalten akzeptieren, (b) Sort-Footer-Eintrag streichen (Suffix in Suchzeile trägt die Info bereits), (c) Wortkürzungen freigeben. NICHT selbst entscheiden — im Abschluss-Report als offene Frage ausweisen.
+- I01 (low): mouse_test.go clickPaneGeometry-Tests nur Width:100 — 3-Zeilen-Footer-Fall (80 Sp. Backlog) ohne automatisierte Abdeckung. Als kleinen Regressionstest im Abschluss-Task ergänzen (footH-Dynamik pinnen).
+- I02 (low, Doku): footer()/breadcrumb() erwarten vorgefärbten renderBindings()-Output (kein Dim-Wash mehr) — stille Konvention, nur Doc-Kommentar. In LESSONS-LEARNED als Falle notieren.
