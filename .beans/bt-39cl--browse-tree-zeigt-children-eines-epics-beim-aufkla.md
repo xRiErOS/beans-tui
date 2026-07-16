@@ -5,7 +5,7 @@ status: in-progress
 type: bug
 priority: high
 created_at: 2026-07-16T20:20:40Z
-updated_at: 2026-07-16T20:59:50Z
+updated_at: 2026-07-16T21:05:13Z
 parent: bt-tct9
 ---
 
@@ -147,3 +147,31 @@ lean-stack-Repo (PO-Demo lief per Commit b1212e0 gegen
 exakt mit dem Investigation-Root-Cause (alle Direkt-Children archiviert +
 showArchived=false-Default ⇒ Marker ▾, keine Kind-Zeilen). Investigation damit
 doppelt bestätigt (generisches Repro-Repo + Original-Fall).
+
+
+## D01 entschieden: Platzhalter-Zeile (PO, 2026-07-16)
+
+PO: "B passt" — Variante (b): Beim Aufklappen eines Epics, dessen sichtbare
+Kinderzahl 0 ist (alle Direkt-Children archiviert, showArchived=false), rendert
+der Tree eine Platzhalter-Zeile im Kind-Einzug, Stil gedimmt/Hint-Ton, Muster:
+`N archiviert — f→Archive`. Marker bleibt ▾ (Epic HAT Children — Marker lügt
+damit nicht mehr, die Zeile erklärt den Zustand). Verworfen: (a) Marker
+unterdrücken (versteckt Existenz der Children), (c) archivierte Children bei
+Expand zeigen (bricht Filter-Konsistenz).
+
+Fix-Ort: `filteredBeanNode` (`view_browse_repo.go:303-328`) — Zweig `open &&
+hasKids && anyChildHit==false` → Platzhalter-Node statt nichts. Platzhalter ist
+NICHT selektierbar (Cursor überspringt) ODER selektierbar mit No-Op — Implementer
+prüft, was `flattenTree`/Cursor-Logik sauberer trägt, Entscheidung im ERRATUM/
+Notes dokumentieren. Zählwert N = Anzahl der weggefilterten Direkt-Children.
+
+Abweichung vom Plan-Wortlaut (Item 1: "eigenes Fix-Task-bean danach"): Fix läuft
+IN diesem Bug-bean — Investigation + Fix gehören zusammen, ein separates bean
+wäre Kontext-Kopie ohne Gewinn.
+
+Akzeptanz:
+- [ ] Repro-Szenario (Epic, alle Children archiviert): Expand zeigt Platzhalter-Zeile mit korrektem N
+- [ ] showArchived=true: unverändert, kein Platzhalter
+- [ ] Epic mit Mix (1 offen, 2 archiviert): offene Children sichtbar, KEIN Platzhalter (nur Voll-Verdeckungs-Fall) — ODER Implementer begründet abweichend, falls Mix-Hinweis konsistenter
+- [ ] Tabellentest für filteredBeanNode-Fälle + Golden falls Tree-Render betroffen
+- [ ] tmux-Smoke im Repro-Repo (Investigation-Setup) beider Fälle
