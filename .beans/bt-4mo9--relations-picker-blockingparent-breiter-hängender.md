@@ -1,11 +1,11 @@
 ---
 # bt-4mo9
 title: Relations-Picker (Blocking/Parent) breiter + hängender Einzug (B06)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:53Z
-updated_at: 2026-07-16T11:39:25Z
+updated_at: 2026-07-16T12:10:22Z
 parent: bt-tct9
 blocked_by:
     - bt-b0w0
@@ -110,14 +110,14 @@ Fenster auf).
 
 ## Akzeptanz-Checkliste
 
-- [ ] `wideModalWidth` skaliert mit der Terminalbreite (≈85%, Boden 60, Deckel termW-4)
-- [ ] Blocking-Picker UND Parent-Picker nutzen `wideModalWidth` statt `clampModalWidth(48,…)`
-- [ ] Kein Eintrag bricht mehr mitten in der ID um (hängender Einzug, ID ist Teil des
+- [x] `wideModalWidth` skaliert mit der Terminalbreite (≈85%, Boden 60, Deckel termW-4)
+- [x] Blocking-Picker UND Parent-Picker nutzen `wideModalWidth` statt `clampModalWidth(48,…)`
+- [x] Kein Eintrag bricht mehr mitten in der ID um (hängender Einzug, ID ist Teil des
       unwrappable Präfix)
-- [ ] Höhe (`parentPickerRowBudget = 14`) unverändert
-- [ ] tmux-Smoke bei 80 Spalten belegt (Commit-Body)
-- [ ] Keine Tree/Backlog/Chrome-Goldens betroffen (Gegenbeleg grün)
-- [ ] Voller Testlauf grün, gofmt/vet leer
+- [x] Höhe (`parentPickerRowBudget = 14`) unverändert
+- [x] tmux-Smoke bei 80 Spalten belegt (Commit-Body/Summary)
+- [x] Keine Tree/Backlog/Chrome-Goldens betroffen (Gegenbeleg grün)
+- [x] Voller Testlauf grün, gofmt/vet leer
 
 
 ## PRELUDE (2026-07-16, aus T4-Re-Review F05 — ZUERST erledigen, eigener Mini-Commit oder im Haupt-Commit, kein eigener Zyklus)
@@ -126,3 +126,70 @@ Doku-Nit in view_detail_bean.go:236 (Kommentar über dem Hardwrap-Aufruf in hang
 "(true = preserve ANSI sequences)" ist falsch beschriftet — Hardwraps dritter Parameter ist
 preserveSpace (führende Leerzeichen erhalten); ANSI-Sequenzen werden immer erhalten.
 Korrektur: "(true = preserveSpace, wie wrapText)". Kein Verhaltens-Fix, reine Kommentar-Korrektur.
+
+
+## Summary
+
+wideModalWidth(termW) hinzugefuegt (box_filter_facets.go, neben clampModalWidth): ~85% termW, Boden 60, Deckel termW-4, absoluter Boden 24. blockingPickerBox/parentPickerBox wechseln von clampModalWidth(48, m.width) auf wideModalWidth(m.width). relationRowPrefix(rel) aus relationRow extrahiert (view_detail_bean.go) -- Blocking-/Parent-Picker komponieren jetzt prefix (Cursor-Bar/Dot + Glyph+ID) und text (Titel) getrennt und reichen sie an hangingIndentWrap mit der ECHTEN, live berechneten Picker-Breite durch, statt der alten relationRowNoWrap-Sentinel (entfernt, keine Aufrufer mehr). pickerItem trägt jetzt prefix/title statt eines vorgerenderten label. D08-Cursor-Behandlung (ansi.Strip + Accent-Recolor) bleibt erhalten, jetzt auf den prefix (inkl. Dot/Cursor-Bar) UND separat auf title beschränkt statt auf die alte Ein-Zeilen-Konkatenation -- Pending-Dot-SHAPE (●/○) bleibt auch unter Accent-Override lesbar. Hoehe (parentPickerRowBudget=14) unveraendert.
+
+## Test-Output
+
+RED (Compile-Fail, wideModalWidth undefined):
+```
+internal/tui/box_filter_facets_test.go:296:14: undefined: wideModalWidth
+internal/tui/box_filter_facets_test.go:311:10: undefined: wideModalWidth
+FAIL	beans-tui/internal/tui [build failed]
+```
+
+GREEN (Ziel-Tests):
+```
+--- PASS: TestWideModalWidthScalesWithTerminal (0.00s)
+--- PASS: TestWideModalWidthNeverNarrowerThanOldFixedPicker (0.00s)
+--- PASS: TestBlockingPickerBoxUsesWideModalWidth (0.00s)
+--- PASS: TestBlockingPickerBoxLongTitleWrapsWithHangingIndent (0.00s)
+--- PASS: TestParentPickerBoxUsesWideModalWidth (0.00s)
+--- PASS: TestParentPickerBoxLongTitleWrapsWithHangingIndent (0.00s)
+```
+
+Voller Lauf (2x -short, 1x voll, -race, gofmt, vet) -- alle gruen:
+```
+go test ./... -short -count=1  -> ok (alle Pakete)
+go test ./... -count=1         -> ok (alle Pakete, internal/tui 139.6s)
+go test ./internal/tui/ -race -count=1 -> ok (142.5s)
+gofmt -l .  -> leer
+go vet ./... -> leer
+```
+
+## Golden-Gegenbeleg
+
+```
+go test ./internal/tui/ -run "TestTreeGolden|TestBacklogGolden|TestChromeGolden" -v
+--- PASS: TestChromeGolden
+--- PASS: TestTreeGolden
+--- PASS: TestTreeGoldenDeterministic
+--- PASS: TestBacklogGolden
+--- PASS: TestBacklogGoldenDeterministic
+PASS
+```
+Kein -update noetig, alle drei Basis-Goldens unveraendert gruen (Picker-Overlays sind nicht Teil dieser Goldens).
+
+## Smoke
+
+tmux 80 Spalten, Blocking-Picker ('r' auf bt-apmy): Overlay deutlich breiter als der alte 48er-Fixwert (spannt fast die volle 80er-Breite), alle 14 IDs (bt-blsy, bt-aq5s, bt-gzcu, bt-tfqi, bt-zk9p, bt-ntoz, bt-tct9, bt-5h4d, bt-4mo9, bt-heg9, bt-de1v [Test-Kandidat, langer Titel], bt-gdkx, bt-6oyy, bt-1e0t) vollstaendig intakt, kein Umbruch mitten in der ID. bt-de1v (Testbean, 4-zeiliger Titel) wrapt hängend eingerückt exakt unter dem Titelbeginn. Kein Layout-Bruch bei 80 Spalten, Hoehe passt ins 30-Zeilen-Fenster.
+
+tmux 80 Spalten, Parent-Picker ('a' auf bt-6oyy, Feature): identisches Bild -- "(No parent)"-Zeile + alle eligiblen Milestones/Epics mit intakter ID, bt-de1v hängend eingerückt ueber 4 Zeilen.
+
+tmux 160 Spalten (beide Picker): wideModalWidth(160)=136 -- die meisten Titel jetzt einzeilig (Ziel "Einträge einzeilig wo möglich" erfuellt), nur bt-de1v's extrem langer Testtitel wrapt noch (2 Zeilen), weiterhin sauber hängend eingerueckt. Deutlich sichtbare 85%-Skalierung ggue. 80 Spalten.
+
+Testbean bt-de1v (temporaerer Kandidat mit langem Titel fuer den Smoke) nach dem Smoke wieder geloescht (beans delete bt-de1v --force) -- .beans/ danach clean, kein Rueckstand.
+
+## Deviations/ERRATA
+
+- **Cursor-Farb-Konvention geaendert (dokumentierter Judgment Call):** Die alte D08-Behandlung faerbte die GESAMTE Zeile (Dot+Glyphen+ID+Titel) als EINEN String-Block Accent ein (ansi.Strip + ein Accent.Render-Aufruf ueber alles). Da hangingIndentWrap prefix (gestylt) und text (roh) getrennt entgegennimmt, faerbe ich jetzt prefix und title SEPARAT Accent (zwei Render-Aufrufe statt einem) -- visuell identisch (durchgehend Accent-farbig inkl. Pending-Dot, dessen ●/○-FORM auch unter Accent-Override lesbar bleibt), aber nicht mehr byte-identisch (zwei SGR-Paare statt einem an der Naht). Da Picker-Overlays nicht golden-getestet sind (E8-Konvention), keine Golden-Auswirkung. Non-Cursor-Prefix wechselt von festen 2 Leerzeichen auf 1 Leerzeichen (Breitenparitaet mit dem 1-Zeichen-Cursor-Balken "▌", noetig damit hangingIndentWrap den Einzug korrekt und konsistent zwischen Cursor-/Nicht-Cursor-Zustand berechnet -- sonst haette ein Zeilenumbruch beim Cursor-Wechsel den Einzug um 1 Spalte verschoben).
+- **contW-Herleitung empirisch verifiziert:** modalBox nutzt lipgloss `.Width(w).Border(...).Padding(0,1)` -- per go-run-Experiment verifiziert, dass Padding INNERHALB des deklarierten Width absorbiert wird (nicht davor addiert), Border dagegen AUSSERHALB addiert (+2 Gesamt). contW = w-2 (nur Padding-Abzug) ist damit die korrekte Textbreite fuer hangingIndentWrap, NICHT das an anderer Stelle etablierte "w-4"-Muster (das ist accordion-spezifisch: Cursor-Praefix-Reservierung + eigenes PaddingLeft, eine andere Geometrie).
+- **relationRowNoWrap entfernt** (dead code nach dem Refactor, keine Aufrufer mehr) statt nur ungenutzt liegen gelassen -- Compiler-gesteuerte Verifikation, Muster PF-14/B13-Removal.
+
+## Notes for T9 (Abschluss)
+
+- design-spec.md §15 PF-17 Abschnitt B06 bleibt inhaltlich konsistent mit dem Code-Stand -- hangingIndentWrap jetzt geteilt zwischen T4 (RELATIONS-Sektion) und T5 (Blocking-/Parent-Picker), wie im Plan vorgesehen.
+- Kein neuer Wrap-Helfer eingefuehrt (relationRowPrefix ist eine reine Extraktion, keine neue Wrap-Logik).
