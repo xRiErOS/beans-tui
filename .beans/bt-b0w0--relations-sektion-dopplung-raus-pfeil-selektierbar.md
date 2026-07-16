@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:47Z
-updated_at: 2026-07-16T11:32:09Z
+updated_at: 2026-07-16T20:47:11Z
 parent: bt-tct9
 ---
 
@@ -359,3 +359,72 @@ Commit-Gate: `command go test ./...` → alle Packages `ok` (`internal/tui` 138.
 ### Notes for T5 — AKTUALISIERT (supersedet den ersten Spiegelstrich oben)
 
 `hangingIndentWrap` ist jetzt hardwrap-gesichert: Zwei-Pass `ansi.Hardwrap(ansi.Wordwrap(text, contW, ""), contW, true)` — spaceless Long-Tokens (URLs, Komposita, lange IDs, CJK) brechen hart an der Zellgrenze statt überzulaufen, double-width (CJK/Emoji) wird je ZELLE budgetiert. Signatur/Ablageort unverändert (`func hangingIndentWrap(prefix, text string, w int) string`, `internal/tui/view_detail_bean.go` neben `relationRow`). T5/bt-4mo9 kann den Helfer ohne eigene Wrap-Härtung übernehmen; weiterhin gilt: echte Picker-Breite (`wideModalWidth(...)`) durchreichen, NICHT `relationRowNoWrap`.
+
+
+## Review-Rejection 2026-07-16 (PO, US-Review Runde 3)
+
+**US-05 (redundante Fields-Zeile raus) REJECTED** — PO kann Darstellung nicht
+abschließend beurteilen: bei einem Bean mit vielen Relations-Einträgen wird die
+Liste im Accordion abgeschnitten statt zu scrollen (NB-2, s.u.) — dadurch nicht
+verifizierbar, ob die Dopplung bei langen Listen wirklich weg ist bzw. korrekt
+bleibt.
+
+**US-06 (Pfeil-Selektion Parent/Children/BlockedBy) accepted.**
+**US-07 (hängender Einzug bei langen Titeln) accepted.**
+
+**NB-2 (Nacharbeit für US-05-Reopen):** Relations-Liste im Accordion muss
+scrollen können, wenn viele Einträge erfasst sind — aktuell wird der Rest
+abgeschnitten. Ohne Scroll ist US-05 nicht abnehmbar.
+
+
+
+## Planner-Konkretisierung (2026-07-16)
+
+**Scope:** NUR NB-2 (Relations-Liste scrollt nicht, wird bei vielen Einträgen
+abgeschnitten) — US-06/US-07 bleiben `accepted`, unverändert. Reopen-Grund:
+US-05 kann erst nach diesem Fix erneut zur PO-Abnahme.
+
+**Root Cause:** `renderAccordionPane` (view_browse_repo.go:542-560) baut `rows`
+= `detailHeaderBlock` (5 Zeilen) + der komplette `renderAccordion`-Output
+(JEDE Zeile jeder offenen Sektion, inkl. der potenziell langen RELATIONS-Body
+bei vielen Einträgen) und übergibt das Ganze en bloc an `renderPane`
+(render_shared.go:40-63) — dessen Zeilen-Cap (`for i := 0; i < len(p.rows) &&
+len(lines) < h; i++`) schneidet stumpf ab `h` Zeilen ab, KEIN Scroll, KEIN
+Indikator. Genau der von `renderDetailPane`s eigenem Doc-Kommentar
+(view_browse_repo.go, ~Zeile 496: "a future accordion-pane change (e.g.
+scrolling) can't drift between Tree and Backlog") bereits antizipierte Fall.
+
+**Wiederverwendbarer Baustein:** `windowAround`/`windowStart`
+(view_browse_repo.go:456-482) — dasselbe deterministische, cursor-zentrierte
+Fenster-Prinzip, das `treeRows` (Zeile 437) bereits für die Tree-Liste nutzt
+(kein verstecktes Scroll-Offset-Feld, rein aus `(n, height, cursor)`
+berechnet). Alternative/Ergänzung: `scrollView` (view.go:205-242) liefert
+zusätzlich einen sichtbaren `↑/↓`-Indikator-String, wird heute von `Chrome()`
+für Lobby/Help-Bodies genutzt — beide Muster existieren bereits im Code,
+Implementer wählt (Empfehlung: `windowAround`, weil es exakt dieselbe
+Konvention wie Tree/Backlog ist und die Relations-Cursor-Navigation
+[`▷`/`▶`, B04] schon einen Fokus-Index hat, den man zentrieren kann;
+`scrollView`s Indikator-String kann trotzdem für die sichtbare
+`L n–m/total`-Anzeige übernommen werden).
+
+**Betroffene Funktionen:** `renderAccordionPane` (view_browse_repo.go:542),
+`renderBeanAccordionPane` (view_browse_repo.go:527) als Caller, `renderPane`
+(render_shared.go:40) bleibt für andere Panes UNVERÄNDERT — die neue
+Fensterung passiert VOR dem Aufruf von `renderPane`, nicht in `renderPane`
+selbst (sonst müsste jeder andere `renderPane`-Aufrufer den neuen
+Cursor-Parameter mitschleppen).
+
+**Akzeptanzkriterium-Zusatz (für Reopen der US-05):**
+- Öffnet ein Bean mit vielen (>H) Relations-Einträgen (Parent/Children/
+  Blocking/Blocked-By kombiniert) die RELATIONS-Sektion, zeigt die Pane ein
+  Fenster um den aktuell selektierten Eintrag (▶-Marker bleibt sichtbar),
+  NICHT nur die ersten H Zeilen.
+- Pfeiltasten (rauf/runter) über die Relations-Einträge halten den Cursor
+  innerhalb des sichtbaren Fensters (Auto-Scroll, mirrort Tree-Verhalten).
+- Ein sichtbarer Hinweis (z. B. `↑`/`↓` oder `L n–m/total`, mirrort
+  `scrollView`s Indikator) zeigt an, dass mehr Einträge oberhalb/unterhalb
+  liegen.
+- Kein Golden-Regressions-Bruch für Beans mit WENIGEN Relations (<H) —
+  Fenster == volle Liste, Verhalten unverändert.
+- tmux-Smoke mit einem relations-reichen Bean (z. B. `bt-apmy`, 11 Children)
+  PFLICHT, analog dem ursprünglichen Task-Smoke.

@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T14:56:31Z
+updated_at: 2026-07-16T20:27:41Z
 parent: bt-apmy
 ---
 
@@ -147,3 +147,54 @@ PO-bestätigten D02-Präzedenzfall (Taste funktional, nur im Help).
 
 **Q03 (PO):** v Help-only akzeptiert — oder Footer-Sichtbarkeit gewünscht (dann müsste
 ein anderer Eintrag weichen, PO-Wahl welcher)? Bis zur Antwort gilt Help-only.
+
+
+## US-Review 2026-07-16 (PO, Runde 1)
+
+- US-01 (enter=Feld-Edit-Kaskade): accepted
+- US-02 (e=Ganzes-Bean-im-$EDITOR überall): accepted
+
+
+## US-Review 2026-07-16 (PO, Runde 2)
+
+- US-03 (n=Neuer-Tag im Tag-Overlay): accepted
+- US-04 (Tags im Kopfblock-Meta-Strip): accepted
+
+
+## US-Review 2026-07-16 (PO, Runde 3)
+
+- US-05 (Relations: Fields-Zeile raus): REJECTED — Feedback im Task-bean bt-b0w0 (Scroll-Blocker NB-2)
+- US-06 (Relations-Einträge per Pfeil selektierbar): accepted
+- US-07 (hängender Einzug bei langen Titeln): accepted
+
+## Nebenbefunde (PO, Runde 3, 2026-07-16)
+
+- NB-1: Meta-Accordion kollabiert das vorherige Segment nicht, wenn ein anderes
+  Segment ausgewählt wird (mehrere Segmente bleiben gleichzeitig offen).
+- NB-2: siehe bt-b0w0 (Relations-Liste braucht Scroll bei vielen Einträgen).
+- NB-3: created_at/modified_at erscheinen doppelt (in '1 META' UND '4 HISTORY')
+  — gehören nur nach '4 HISTORY'.
+- NB-4: Bean 'a2ca' (Typ Epic, hat Children) zeigt seine Children im
+  Browse-Tree links beim Aufklappen NICHT an. Exakte ID im Repo nicht
+  gefunden (PO-Kurzform evtl. abweichend) — Investigator muss beim
+  Nacharbeits-Start zuerst das betroffene Bean identifizieren.
+
+
+## US-Review 2026-07-16 (PO, Runde 4)
+
+- US-08 (v=Listen-Vollbild): accepted
+- US-09 (v=Detail-Vollbild): accepted
+- US-10 (enter im Listen-Vollbild -> Detail-Vollbild): accepted
+
+
+## US-Review 2026-07-16 (PO, Runde 5)
+
+- US-11 (Relations-Sprung im Detail-Vollbild): accepted
+- US-12 (esc -> zurueck zu Browse/Backlog mit aktuellem Bean): accepted
+- US-13 (History Back/Forward ctrl+links/rechts, [/]): accepted
+
+
+## US-Review 2026-07-16 (PO, Runde 6)
+
+- US-14 (Blocking/Parent-Picker breiter): accepted
+- US-15 (Backlog-Footer ohne S-Sort-Eintrag, Help-only): accepted

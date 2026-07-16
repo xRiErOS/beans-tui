@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-16T19:36:46Z
+updated_at: 2026-07-16T20:36:23Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
@@ -266,3 +266,48 @@ SaveTagDefs/Add|Remove|RenameTagDefName validieren bewusst NICHT gegen ValidTagN
 ## Q04 (2026-07-16, aus T5-Review F01 — PO-Frage, nicht blockierend)
 
 Soll Rename eines definierten Tags AUF den Namen eines existierenden freien Tags erlaubt sein (= Merge: Registry-Eintrag umbenennen + Sweep vereinigt beide Tag-Populationen)? Aktuell per Dedupe abgelehnt (T3-Erbe, Dedupe gegen ALLE Zeilennamen). data.RenameTagDefName erlaubt es auf Datenebene bereits ('Rename onto an unregistered name is allowed'). Empfehlung Supervisor: v-nächste-Iteration, nicht in E10 — Merge hat eigene Confirm-UX-Fragen (Populations-Vereinigung irreversibel).
+
+
+## US-Review 2026-07-16 (PO, Runde 7)
+
+- US-16 (Command-Center 'go to tags'): accepted
+- US-17 (Liste definiert+frei mit Marker/Count): accepted
+
+## Nebenbefund (PO, Runde 7)
+
+e/d wirkten auf Tag 'smoke' wie kaputte Keybinds -- Ursache: 'smoke' ist ein
+FREIER Tag (Registry .beans-tags.yml existiert im Repo noch nicht, kein Tag
+je definiert), e/d sind auf freien Zeilen laut D12/D13 bewusster No-Op. Echtes
+Problem: Footer zeigt e/d unbedingt, ohne dass ersichtlich ist ob die
+aktuelle Zeile definiert/frei ist -- kein Feedback bei No-Op-Tastendruck.
+-> Bug bt-<folgt> angelegt.
+
+
+## US-Review 2026-07-16 (PO, Runde 8)
+
+- US-18 (n=neuer Tag, reiner Registry-Akt): accepted
+- US-19 (d=Delete Registry-only, Live-Count-Confirm): accepted
+- US-20 (e=Rename mit Bean-Propagation): accepted
+
+## Nebenbefunde (PO, Runde 8)
+
+- NB-5: 'n' auf einer bereits vorhandenen FREIEN Tag-Zeile registriert diesen
+  Tag nicht -- PO erwartet: Cursor auf freier Zeile + n = genau dieser Tag
+  wird automatisch registriert (adoptiert), statt nur ein Blank-Create-Input
+  zu oeffnen. -> Feature bt-<folgt> angelegt.
+- NB-6: e/d auf freier Zeile soll eine Notification zeigen, PO-Wortlaut:
+  'unregistred tag - modification not possible' -- praezisiert bt-ct3k.
+
+
+## US-Review 2026-07-16 (PO, Runde 9)
+
+- US-21 (Tag-Picker Suggest-Mode, definiert zuerst): accepted
+
+## US-Review Abschluss (2026-07-16)
+
+21/21 User-Stories durchgesprochen: 20 accepted, 1 rejected (US-05, Feedback
+-> bt-b0w0). 6 neue Follow-Up-beans aus Nebenbefunden: bt-9ipw (Feature,
+Tag-Picker-Typeahead), bt-98cb (Bug, Accordion-Kollaps), bt-lg68 (Bug,
+Datums-Dopplung Meta/History), bt-39cl (Bug, Tree-Children-Aufklapp-Fehler,
+high), bt-ct3k (Bug, fehlendes Feedback e/d auf freier Zeile), bt-idm1
+(Feature, n=Adopt auf freier Zeile).
