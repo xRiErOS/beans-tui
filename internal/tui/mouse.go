@@ -360,7 +360,7 @@ func detailClickRow(m model, b *data.Bean, msg tea.MouseMsg) (secIdx, fieldIdx i
 	row := 0
 	for i, s := range secs {
 		n := i + 1
-		isOpen := n == m.accOpen || n == 1 // PF-1: Meta always open, mirrors renderAccordion
+		isOpen := n == m.accOpen // PF-18: exclusive-open incl. Meta, mirrors renderAccordion (revises PF-1)
 		if accordionRow == row {
 			return i, -1, true // this section's own header row
 		}

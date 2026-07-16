@@ -114,11 +114,21 @@ func backlogDetailClickAt(t *testing.T, m model, substr string) tea.MouseMsg {
 // detailFocusModel builds a fixtureModel with tk-2 focused, ancestors
 // expanded (focusBean, box_menu_value_test.go), and a real terminal size --
 // shared setup for the detailClickRow/mouseDetailClick tests below (B07).
+//
+// PF-18 (design-spec.md §15, PO-Feedback 2026-07-16, bean bt-98cb) revises
+// PF-1: Meta is no longer forced-open, so a Meta field row (e.g. "tags:")
+// only renders when Meta is the ACTUAL active+open section. This fixture
+// mirrors the real Detail-Pane FocusIn reset (update.go's keys.FocusIn/
+// keyFullscreen's Enter case: secCursor/accOpen/detailLevel/fieldCursor =
+// 0,1,0,0) so it represents a genuinely detail-focused model with Meta
+// open, not just a cursor parked on a bean in Browse mode.
 func detailFocusModel(t *testing.T) model {
 	t.Helper()
 	m := fixtureModel(t, fixtureBeans())
 	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = focusBean(m, "tk-2")
+	m.detailFocus = true
+	m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = metaSectionIdx, metaSectionIdx+1, 0, 0
 	return m
 }
 
@@ -579,7 +589,7 @@ func TestDetailClickRowNoOffByOneWhenRelationsSectionActiveWithFields(t *testing
 	m := detailFocusModel(t)
 	m.detailFocus = true
 	m.secCursor = relationsSectionIdx
-	m.accOpen = relationsSectionIdx + 1 // opens RELATIONS (PF-1 keeps Meta open too)
+	m.accOpen = relationsSectionIdx + 1 // opens RELATIONS exclusively (PF-18: Meta closes)
 
 	b := m.focusedBean()
 	msg := detailClickAt(t, m, "[4]") // "> [4] HISTORY" header marker
@@ -857,6 +867,15 @@ func TestMouseDetailClickTreeClickIndexDoesNotAliasFieldClickKey(t *testing.T) {
 	if m2.cursorID != "ep-1" || m2.lastClickIdx != 1 {
 		t.Fatalf("setup: cursorID=%q lastClickIdx=%d, want ep-1/1 (tree row index)", m2.cursorID, m2.lastClickIdx)
 	}
+	// PF-18 (design-spec.md §15, bean bt-98cb) revises PF-1: Meta only
+	// renders its field rows when actively open -- a plain Tree-row click
+	// does not open it. Simulate the realistic reachable state "Meta was
+	// left open from an earlier Detail-Pane visit" (accOpen persists
+	// across a Back to Browse, exit to no other FocusIn ever forced a
+	// reset here) so "title:" is on screen for the aliasing click below --
+	// the regression this test guards (B01, clickKey numbering collision)
+	// is independent of whether Meta is open.
+	m2.accOpen = metaSectionIdx + 1
 
 	// 2nd click, same fixed time (<500ms): FIRST click on the Detail pane's
 	// title: row -- must ONLY select the field, never open a form/overlay.

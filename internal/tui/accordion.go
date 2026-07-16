@@ -58,9 +58,16 @@ type accordionSection struct {
 // renderAccordion rendert die Sektions-Header (`> [n] Title`) und klappt die
 // offene Sektion (1-basiert, exklusiv) als eingerückten Body darunter auf
 // (port devd accordion.go:309-355). active/activeIdx/fieldIdx replace devd's
-// detailFocusView{sec,field}. PF-1 (design-spec.md §15, E7 T4, bean bt-kyj5):
-// section 1 (Meta) is never collapsible -- its body renders regardless of
-// `open`, sections 2-4 stay exclusive-open.
+// detailFocusView{sec,field}.
+//
+// PF-1 (design-spec.md §15, E7 T4, bean bt-kyj5) originally made section 1
+// (Meta) a forced-open exception -- its body rendered regardless of `open`,
+// while sections 2-4 stayed exclusive-open. PF-18 REVISED PF-1 (design-
+// spec.md §15, PO-Feedback 2026-07-16, bean bt-98cb): the PO wants Meta
+// default-CLOSED, since the relevant info already lives in the Meta-Strip
+// header (detailHeaderBlock) -- Meta only opens when actively selected. All
+// four sections are now exclusive-open with NO special case, section 1
+// included.
 //
 // fieldIdx is UNUSED inside this function since B04 removed fieldStrip (its
 // only reader here) -- kept in the signature anyway (not worth rippling a
@@ -82,7 +89,7 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 	var b strings.Builder
 	for i, s := range secs {
 		n := i + 1
-		isOpen := n == open || n == 1         // PF-1: Meta (section 1) always shows its body
+		isOpen := n == open                   // PF-18: exclusive-open for every section, Meta (n==1) included (revises PF-1)
 		activeSec := active && activeIdx == i // D08: focus is on this section
 		marker := theme.Chevron.Render("> ") + theme.Key.Render(fmt.Sprintf("[%d]", n)) + " "
 		// B05 (design-spec.md §15 PF-16, bean bt-ntoz/bt-czpf, 2026-07-16):

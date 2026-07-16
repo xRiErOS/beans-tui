@@ -6,13 +6,19 @@ package tui
 // is no reason to hide an empty section; digit jump 1..4 stays meaningful for
 // every bean. Section titles are uppercase English (PF-7, E7 T3 deliberately
 // left these 4 to this task -- bt-w9o8 "Notes for T4"). META additionally
-// carries a NEW, non-collapsible (PF-1) 5-entry field list (PF-4 + PF-15/D01)
-// instead of its old 4-line status/type/priority/tags summary -- tags
-// rejoined Meta as its own field (E8 Task 1, bean bt-e6q9, directly after
-// priority). Shrunk from 7 to 5 entries by bt-lg68 (PO-Nebenbefund, US-
-// Review Runde 3): created_at/updated_at were doubly rendered in META AND
-// HISTORY -- removed from META, HISTORY (historieSectionBody) stays the
-// sole source.
+// carries a 5-entry field list (PF-4 + PF-15/D01) instead of its old 4-line
+// status/type/priority/tags summary -- tags rejoined Meta as its own field
+// (E8 Task 1, bean bt-e6q9, directly after priority). Shrunk from 7 to 5
+// entries by bt-lg68 (PO-Nebenbefund, US-Review Runde 3): created_at/
+// updated_at were doubly rendered in META AND HISTORY -- removed from META,
+// HISTORY (historieSectionBody) stays the sole source.
+//
+// META's section-level open/closed behavior: originally PF-1 made META
+// non-collapsible (always rendered its body). PF-18 REVISED this (design-
+// spec.md §15, PO-Feedback 2026-07-16, bean bt-98cb) -- META now behaves
+// exclusive-open like every other section (accordion.go's renderAccordion),
+// default-closed until actively selected, since the relevant summary info
+// already lives in the always-visible Meta-Strip header (detailHeaderBlock).
 
 import (
 	"fmt"

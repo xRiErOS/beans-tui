@@ -4,13 +4,18 @@ package tui
 // 1, bean bt-ms0k): renderAccordion's exclusive-open/digit-numbering algebra
 // (port of devd accordion.go:309-373, minus the edit-field concept) and
 // glowRender (port of devd editor.go:102-126). E7 Task 4 (bean bt-kyj5,
-// PF-1/PF-12) adds: section 1 (Meta) always renders its body regardless of
+// PF-1/PF-12) added: section 1 (Meta) always renders its body regardless of
 // `open` (PF-1, "nicht kollabierbar"), and renderAccordion's header styling
 // reserves a stable 1-column gutter for its active/inactive marker (PF-12)
 // instead of conditionally prefixing it only when active (fieldStrip ALSO
 // carried this same PF-12 fix once, but fieldStrip itself was removed
 // wholesale by B04, design-spec.md §15 PF-17, bean bt-b0w0 -- see
 // TestRenderAccordionOmitsFieldStripForRelations, below).
+//
+// PF-1 REVISED by PF-18 (design-spec.md §15, PO-Feedback 2026-07-16, bean
+// bt-98cb): Meta's "always open" exception is GONE -- Meta now behaves like
+// every other section, exclusive-open, closed by default until actively
+// selected. See TestRenderAccordionSectionOneExclusiveLikeOthers, below.
 
 import (
 	"strings"
@@ -23,10 +28,11 @@ import (
 )
 
 // TestRenderAccordionExclusiveOpen guards the exclusive-open contract: with 3
-// sections and open=2, section 2's body renders (the open target) AND
-// section 1's body ALSO renders (PF-1: Meta is never collapsible, `isOpen :=
-// n == open || n == 1`) -- section 3 stays header-only, the same as before
-// PF-1.
+// sections and open=2, ONLY section 2's body renders (the open target) --
+// section 1 (Meta) and section 3 both stay header-only. PF-18 (design-
+// spec.md §15, PO-Feedback 2026-07-16, bean bt-98cb) REVISED PF-1's "Meta
+// (section 1) is never collapsible" special case -- Meta now behaves like
+// any other section, exclusive-open, no forced-open exception.
 func TestRenderAccordionExclusiveOpen(t *testing.T) {
 	secs := []accordionSection{
 		{title: "One", body: "body-one-content"},
@@ -35,8 +41,8 @@ func TestRenderAccordionExclusiveOpen(t *testing.T) {
 	}
 	out := renderAccordion(secs, 2, 60, false, 0, 0)
 
-	if !strings.Contains(out, "body-one-content") {
-		t.Error("PF-1: section 1's body must ALWAYS render, regardless of open")
+	if strings.Contains(out, "body-one-content") {
+		t.Error("PF-18: section 1 (Meta) body must NOT render when another section is open (PF-1 exception revised)")
 	}
 	if !strings.Contains(out, "body-two-content") {
 		t.Error("open section 2's body must render")
@@ -100,20 +106,31 @@ func TestRenderAccordionClosedHeaderUsesTealNotMuted(t *testing.T) {
 	}
 }
 
-// TestRenderAccordionSectionOneAlwaysOpenRegardlessOfOpenParam guards PF-1
-// directly: section 1's body renders no matter what `open` is set to,
-// including 0 (design-spec.md §15 PF-1: `accOpen == 0` is a legitimate rest
-// state post-PF-1 -- "only Meta visible, no section 2-4 additionally open"),
-// a value pointing at another section, and section 1 itself.
-func TestRenderAccordionSectionOneAlwaysOpenRegardlessOfOpenParam(t *testing.T) {
+// TestRenderAccordionSectionOneExclusiveLikeOthers guards PF-18 (design-
+// spec.md §15, PO-Feedback 2026-07-16, bean bt-98cb -- REVISES PF-1):
+// section 1 (Meta) is no longer a forced-open exception -- its body renders
+// ONLY when open==1 (Meta itself is the active section), exactly like any
+// other section. open==0 (no section active/selected, e.g. before the
+// Detail-Pane has focus) and open pointing at another section must both
+// leave Meta's body closed.
+func TestRenderAccordionSectionOneExclusiveLikeOthers(t *testing.T) {
 	secs := []accordionSection{
 		{title: "Meta", body: "meta-body-content"},
 		{title: "Body", body: "body-body-content"},
 	}
-	for _, open := range []int{0, 1, 2} {
-		out := renderAccordion(secs, open, 60, false, 0, 0)
-		if !strings.Contains(out, "meta-body-content") {
-			t.Errorf("open=%d: section 1 (Meta) body must always render (PF-1)", open)
+	cases := []struct {
+		open     int
+		wantMeta bool
+	}{
+		{open: 0, wantMeta: false},
+		{open: 1, wantMeta: true},
+		{open: 2, wantMeta: false},
+	}
+	for _, c := range cases {
+		out := renderAccordion(secs, c.open, 60, false, 0, 0)
+		got := strings.Contains(out, "meta-body-content")
+		if got != c.wantMeta {
+			t.Errorf("open=%d: meta body rendered=%v, want %v (PF-18: Meta exclusive like every other section)", c.open, got, c.wantMeta)
 		}
 	}
 }

@@ -1209,6 +1209,67 @@ Vollbreite-Pane statt zwei nebeneinander. Kein neuer `viewID`-Enum-Wert
 (bestätigt gegen `types.go`: `m.view` bleibt `viewBrowseRepo`/`viewBacklog`
 — Vollbild ist orthogonal, s. Zustandsmodell oben).
 
+## PF-18 — META-Accordion default geschlossen, REVIDIERT PF-1 (PO-Feedback
+2026-07-16, bean `bt-98cb`)
+
+PO-Nebenbefund NB-1 (`bt-tct9` US-Review Runde 3) meldete: "Meta-Accordion
+kollabiert das vorherige Segment nicht, wenn ein anderes Segment ausgewählt
+wird." Code-Review fand keinen Regressions-Pfad — das beobachtete Verhalten
+war exakt PF-1s eigene Spezifikation ("Meta-Sektion `[1]` nicht
+kollabierbar", §15 oben): Meta blieb IMMER zusätzlich zur aktiv gewählten
+Sektion offen. Auf Rückfrage (Q1, `epic-E11-plan.md` Item 3) antwortete der
+PO:
+
+> "Meta kann geschlossen sein als default, da die relevanten Informationen
+> im meta-strip sitzen. Erst wenn ich in das detail-pane gehe und meta
+> wähle, klappt es auf."
+
+**Entscheidung: PF-1 wird REVIDIERT, nicht stillschweigend überschrieben**
+(Revisions-Konvention dieses Dokuments). PF-1s Begründung (devds
+Referenzarchitektur, "immer sichtbarer Banner") gilt nicht mehr — der PO
+bevorzugt explizit die zweite, damals verworfene Interpretation
+("Default-offen" as reguläre exklusive Sektion), NICHT "nicht
+kollabierbar". Meta (Sektion 1) verhält sich ab sofort exakt wie Sektion
+2-4: exklusiv-offen, nur wenn `accOpen == 1` (aktiv gewählt via Ziffer `1`,
+Pfeiltasten-Navigation, oder Klick auf den `[1] META`-Header) — kein
+Sonderfall mehr in `renderAccordion` (`accordion.go`).
+
+**Code-Änderung:** `accordion.go`s `isOpen`-Berechnung (vormals `n == open
+|| n == 1`) verliert die `|| n == 1`-Ausnahme -- wird zu `n == open`. Der
+identische Ausdruck in `mouse.go`s `detailClickRow` (row-counting, MUSS die
+exakt gleiche Formel spiegeln wie `renderAccordion`, sonst Off-by-one bei
+Klick-Geometrie) wird im Gleichschritt angepasst.
+
+**Auswirkung auf den Default-Zustand:**
+- **Browse/Backlog, Cursor auf einem Bean, KEIN Detail-Focus** (`accOpen`
+  bleibt beim Zero-Value `0`): vormals zeigte das Detail-Pane trotzdem
+  Metas 5 Feldzeilen (title/status/type/priority/tags) als Vorschau --
+  entfällt jetzt vollständig, das Pane zeigt nur noch die 4
+  Sektions-Header ohne Body. Deckt sich mit der PO-Begründung: der
+  Meta-Strip-Kopfblock (`detailHeaderBlock`, PF-3/PF-4) trägt
+  type/status/prio/tags bereits permanent sichtbar oberhalb des
+  Accordions -- keine Information geht verloren, nur die redundante
+  Doppel-Anzeige.
+- **Detail-Pane FRISCH betreten** (`update.go`s/`view_fullscreen.go`s
+  FocusIn-Reset: `secCursor, accOpen, detailLevel, fieldCursor = 0, 1, 0,
+  0`): Meta bleibt der aktive Default -- `accOpen == 1` heißt Meta IST die
+  aktive Sektion, ihr Body rendert also weiterhin beim ersten Eintritt.
+  Das ist explizit LEGITIM (aktiv=offen, kein PF-1-Sonderfall) und deckt
+  sich mit dem PO-Zitat ("wenn ich ... meta wähle, klappt es auf") --
+  Meta-Auswahl ist genau das, was FocusIn tut.
+- **Sektionswechsel (Tastatur Ziffer/Pfeiltasten, Maus-Klick auf einen
+  anderen Header):** Meta kollabiert wie jede andere Sektion, sobald eine
+  andere Sektion aktiv gewählt wird -- das ursprünglich gemeldete NB-1-
+  Verhalten ("voriges Segment kollabiert nicht") existiert für Meta damit
+  nicht mehr.
+
+**Goldens:** `testdata/tree.golden`/`testdata/backlog.golden` (Default-
+Browse-Zustand, `accOpen == 0`) verlieren die 5 Meta-Feldzeilen unterhalb
+`[1] META` -- der Header selbst bleibt (jetzt inaktiv/Teal statt
+aktiv/Mauve gefärbt, B06-Konvention unverändert), 5 Leerzeilen am
+Pane-Ende statt der Feldliste. Bewusst regeneriert, kein stiller Golden-
+Bruch.
+
 ## 16. Tag-Management (E10) — zentrale Tag-Definition (v1.1, bean `bt-6oyy`, Epic `bt-362n`)
 
 Nachgeliefert 2026-07-16 (Tasks T1-T6, Epic `bt-362n`). Superseded damit §4s
