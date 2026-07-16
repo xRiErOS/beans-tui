@@ -262,7 +262,7 @@ func (m model) viewLobby() string {
 	// via repoPickerWidth's own fix), this literal string has no natural
 	// truncation point of its own -- a narrow terminal must cut it, not
 	// silently word-wrap it into a second, unbudgeted line.
-	hintText := truncate("i/k:↑↓  enter:open  type:filter  esc/q:"+lobbyBackHint(m), innerW)
+	hintText := truncate("i/k:↑↓  enter:open  type:filter  "+lobbyExitHint(m), innerW)
 	hint := theme.Muted.Render(centerInto(hintText, innerW))
 	bodyH := innerH - 1 // innerH total inner lines, minus the 1 reserved for hint below
 	if bodyH < 1 {
@@ -274,16 +274,19 @@ func (m model) viewLobby() string {
 	return m.composeOverlays(out, w, h)
 }
 
-// lobbyBackHint disambiguates the Lobby's own esc/q footer hint between its
-// two entry paths (keyLobby's own doc-stamp has the full rationale): "back"
-// when a live repo already exists to return to (p from a running session),
-// "quit" when the Lobby IS the very first screen (design decision d, no
-// repo resolved yet).
-func lobbyBackHint(m model) string {
+// lobbyExitHint renders the exit-key segment of the Lobby's footer hint.
+// Since the B01 fix (bt-1u0t Fix-Runde 1) decoupled keyLobby's exit keys,
+// esc and q DIVERGE once a live repo exists (esc goes back, q quit-confirms)
+// -- the pre-fix combined "esc/q:back" label would promise that q takes you
+// back too, exactly the surprise-copy problem quitBox's own context-
+// sensitive hint (B08 Planner add-on) exists to prevent. With no client
+// both keys still quit-confirm (first-screen Lobby, design decision d), so
+// the combined label stays there.
+func lobbyExitHint(m model) string {
 	if m.client != nil {
-		return "back"
+		return "esc:back  q:quit"
 	}
-	return "quit"
+	return "esc/q:quit"
 }
 
 // openLobby transitions into the Lobby (E5 Task 6, design decision h):
@@ -321,9 +324,12 @@ func (m model) openLobby() (tea.Model, tea.Cmd) {
 
 // keyLobby drives the Lobby (Port devd keyHome's own structure,
 // view_home.go): nav + selection dispatches switchRepoCmd (the watcher-
-// lifecycle switch, messages.go), esc/q returns to the live repo if one
-// already exists or quit-confirms otherwise (US-01 parity doc-stamp,
-// lobbyBackHint above), any other key filters repoQuery live.
+// lifecycle switch, messages.go); the three exit keys are DECOUPLED since
+// the B01 fix (bt-1u0t Fix-Runde 1): esc returns to the live repo if one
+// exists or quit-confirms otherwise (US-01 parity doc-stamp, lobbyExitHint
+// above), q ALWAYS quit-confirms (B08 stage 2 must stay reachable), ctrl+c
+// ALWAYS quits immediately (bt-7jr8 kill-switch contract); any other key
+// filters repoQuery live.
 //
 // notify is wired here (not messages.go) as
 // func(){ activeProgram.Send(watchMsg{}) } -- activeProgram (app.go) is
@@ -349,17 +355,35 @@ func (m model) keyLobby(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		target := filtered[m.repoList.cursor]
 		notify := func() { activeProgram.Send(watchMsg{}) }
 		return m, switchRepoCmd(m.watchStop, target, notify)
-	case "esc", "q", "ctrl+c":
+	case "esc":
 		if m.client != nil {
 			// A live repo already exists (p from a running session) -- go
 			// back to it instead of force-quitting a working session
 			// (design decision, bean bt-zhwl Step 9: devd's own keyHome has
 			// no equivalent case since devd's Home is its ONLY entry point;
-			// beans-tui's Lobby is reachable a SECOND way).
+			// beans-tui's Lobby is reachable a SECOND way). D03: esc goes
+			// exactly ONE level back -- the Lobby was a side trip.
 			m.view = viewBrowseRepo
 			return m, nil
 		}
 		return m.requestQuit()
+	case "q":
+		// B01 fix (bt-1u0t Fix-Runde 1): q quit-confirms REGARDLESS of
+		// m.client -- the pre-fix uniform esc/q/ctrl+c case made stage 2 of
+		// the B08 quit cascade unreachable once a repo had ever been opened
+		// (q always bounced back to Browse), contradicting the PO wording
+		// (bt-ntoz B08: "aus der Lobby q→enter beendet die TUI").
+		// keyConfirmQuit's quitBoxWillGoToLobby() is already false here
+		// (m.view == viewLobby), so the confirm's hint reads "enter: quit"
+		// and enter resolves to tea.Quit -- stage 2 complete.
+		return m.requestQuit()
+	case "ctrl+c":
+		// B01 fix, same hole: ctrl+c stays the hard/immediate kill switch
+		// (bean bt-7jr8) inside the Lobby too -- the pre-fix "ctrl+c -> back
+		// to Browse" was the only place in the app where ctrl+c did NOT
+		// quit. Mirrors handleKey's own ctrl+c case (update.go), which the
+		// Lobby's full-capture positioning otherwise shadows.
+		return m, tea.Quit
 	}
 
 	// Port devd projFilterType's own Focus()-before-Update() precedent

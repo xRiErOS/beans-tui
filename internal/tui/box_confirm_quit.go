@@ -4,8 +4,12 @@ package tui
 // (~/Obsidian/tools/DeveloperDashboard/apps/cli-go/internal/tui/
 // box_confirm_quit.go, DD2-49/DD2-174): `q` opens this confirm instead of
 // quitting immediately; `enter` confirms, `esc` cancels. `ctrl+c` bypasses
-// this entirely (handleKey routes it straight to tea.Quit, bean bt-7jr8 task
-// scope: ctrl+c is the hard/immediate kill switch, q is the soft prompt).
+// this confirm AS LONG AS it is not already open (handleKey/keyLobby route
+// it straight to tea.Quit, bean bt-7jr8 task scope: ctrl+c is the hard/
+// immediate kill switch, q is the soft prompt) -- once confirmQuit IS open,
+// keyConfirmQuit's full capture swallows ctrl+c like every other non-enter/
+// non-esc key (same precedent as every full-capture state in handleKey;
+// I01, bt-1u0t Fix-Runde 1: comment precision only, behavior unchanged).
 
 import (
 	"beans-tui/internal/theme"
