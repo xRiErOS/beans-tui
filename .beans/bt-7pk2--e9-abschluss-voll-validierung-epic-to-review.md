@@ -3,8 +3,9 @@
 title: E9-Abschluss (Voll-Validierung, Epic to-review)
 status: todo
 type: task
+priority: normal
 created_at: 2026-07-16T06:46:07Z
-updated_at: 2026-07-16T06:46:07Z
+updated_at: 2026-07-16T09:11:02Z
 parent: bt-tct9
 blocked_by:
     - bt-mtig
@@ -13,6 +14,7 @@ blocked_by:
     - bt-4mo9
     - bt-1e0t
     - bt-1vbp
+    - bt-6bgn
 ---
 
 E9 Task 9 — Abschluss. blocked_by: alle acht Implementierungs-Tasks dieses Eposs (deckt
