@@ -974,8 +974,13 @@ func TestEditorFinishedTargetVanishedSurfacesError(t *testing.T) {
 	// conflict branch and the F01 else branch (applyMutationResult,
 	// update.go). The Dual-Write contract (toast mirrors the status-line
 	// NOTE) holds as a prefix relation now.
-	if nm.toast == nil || nm.toast.kind != toastWarn || !strings.HasPrefix(nm.err, nm.toast.title) {
-		t.Fatalf("toast = %+v, want a non-nil toastWarn whose title prefixes m.err %q (E5 Task 1 Dual-Write, F04 title/ctx split)", nm.toast, nm.err)
+	// bt-6bgn-Review F05 hardening (2026-07-16, PRELUDE of bt-2v38):
+	// strings.HasPrefix(nm.err, nm.toast.title) is trivially true for an
+	// EMPTY toast.title (every string has "" as a prefix) -- the explicit
+	// nm.toast.title == "" check below closes that blind spot so this guard
+	// can no longer pass on an accidentally-blank toast title.
+	if nm.toast == nil || nm.toast.kind != toastWarn || nm.toast.title == "" || !strings.HasPrefix(nm.err, nm.toast.title) {
+		t.Fatalf("toast = %+v, want a non-nil toastWarn with a non-empty title that prefixes m.err %q (E5 Task 1 Dual-Write, F04 title/ctx split, F05 hardening)", nm.toast, nm.err)
 	}
 	if nm.editorTarget != "" {
 		t.Errorf("editorTarget = %q, want cleared even on the vanished-target path", nm.editorTarget)
