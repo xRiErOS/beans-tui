@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T06:25:52Z
+updated_at: 2026-07-16T06:26:05Z
 parent: bt-apmy
 ---
 
@@ -77,3 +77,12 @@ Hypothesen für PO-Befund: stale Binary ODER Discoverability ODER Validierungs-A
 (nur a-z0-9/Hyphen — Großbuchstaben/Leerzeichen werden abgelehnt).
 KEIN Code-Task — PO-Retest mit frischem bin/bt angefragt; falls Retest fehlschlägt,
 mit exaktem Ablauf (welcher Pfad, welche Eingabe) als Bug reaktivieren.
+
+
+## PO-Bestätigungen (2026-07-16, Chat)
+
+- **D02 BESTÄTIGT (Option b + Präzisierung):** 'S Sort' fliegt aus dem Backlog-Footer;
+  die S-Taste bleibt funktional, wird aber NUR im Help-Overlay ('?') dokumentiert.
+  Suchzeilen-Suffix '· sort <modus>' bleibt die sichtbare Zustandsanzeige.
+- **D01 BESTÄTIGT:** "egal an welcher stelle öffne ich mit 'e' das bean im $EDITOR" —
+  e = Ganz-Bean-Editor überall (Tree, Backlog, Detail-View, jede Sektion/Feld-Ebene).
