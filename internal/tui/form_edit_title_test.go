@@ -87,6 +87,97 @@ func TestEditTitleSubmitFiresSetTitleDirectlyNoConfirm(t *testing.T) {
 	}
 }
 
+// TestBuildEditTitleFormUsesMultiLineText guards B03's core swap (design-
+// spec.md §15 PF-17, bean bt-2v38): the title field itself must now be a
+// *huh.Text (multi-line textarea, huh v1.0.0 field_text.go), not the
+// single-line *huh.Input E3 Task 5 originally wired. huh.Text exposes no
+// getter to read .Lines(3) back off the field directly, so the
+// CONFIGURATION is checked via its own documented, version-independent
+// render contract instead (bubbles textarea.go:1182-1199, "Always show at
+// least `m.Height` lines"): a Text field's View() ALWAYS reserves exactly
+// its configured height's worth of rows regardless of content -- strictly
+// MORE rows than an equivalent *huh.Input's fixed single row renders for
+// the SAME title/width. That row-count delta IS the observable proof
+// .Lines(3) took effect, not just the bare type swap.
+func TestBuildEditTitleFormUsesMultiLineText(t *testing.T) {
+	f := buildEditTitleForm("Original Title")
+
+	field := f.GetFocusedField()
+	textField, ok := field.(*huh.Text)
+	if !ok {
+		t.Fatalf("field type = %T, want *huh.Text (B03: huh.NewInput -> huh.NewText)", field)
+	}
+	textField.WithWidth(40)
+	textRows := strings.Count(textField.View(), "\n") + 1
+
+	v := "Original Title"
+	inputField := huh.NewInput().Key("title").Title("Title").Value(&v).Validate(nonEmpty)
+	inputField.WithWidth(40)
+	inputRows := strings.Count(inputField.View(), "\n") + 1
+
+	if textRows <= inputRows {
+		t.Fatalf("multi-line field rendered %d row(s), want MORE than the single-line Input's %d row(s) for the same title/width (Lines(3) must reserve extra height)", textRows, inputRows)
+	}
+}
+
+// TestOpenEditTitleFormRoundTripsLongTitleUnchanged guards B03's data-
+// integrity contract: a title long enough to need the new multi-line wrap
+// (.Lines(3), > 60 chars) must survive an UNEDITED submit byte-for-byte --
+// no truncation, no embedded newline snuck in by the Input->Text field-type
+// swap. Two halves, both a REAL huh.Form/model tea.Update round-trip (Port
+// devd-style, ANALOG TestEditTitleSubmitFiresSetTitleDirectlyNoConfirm
+// above): (1) the exact string huh hands back via GetString("title") -- the
+// SAME untransformed read submitForm's "editTitle" case performs
+// (box_confirm_create.go, `title := m.form.GetString("title")`), checked
+// directly since this suite has no PATH-stubbed "beans" binary to intercept
+// the mutation's real CLI args (every sibling test in this package settles
+// for the same "beans update" dispatch-proof instead); (2) submitForm
+// itself still fires the SAME mutateCmd with no Confirm-Gate detour.
+func TestOpenEditTitleFormRoundTripsLongTitleUnchanged(t *testing.T) {
+	long := "A bean title that runs well past sixty characters so the new multi-line Text field must wrap it instead of truncating or scrolling"
+	if len(long) <= 60 {
+		t.Fatalf("setup: fixture title is %d chars, want > 60", len(long))
+	}
+
+	f := buildEditTitleForm(long)
+	f = driveForm(f, enterMsg())
+	if f.State != huh.StateCompleted {
+		t.Fatalf("setup: form.State = %v, want StateCompleted after the single field's enter", f.State)
+	}
+	if got := f.GetString("title"); got != long {
+		t.Fatalf("GetString(title) after an unedited submit = %q (%d chars), want the full unchanged title (%d chars) -- B03 must not truncate", got, len(got), len(long))
+	}
+	if strings.Contains(f.GetString("title"), "\n") {
+		t.Fatal("GetString(title) contains a newline -- B03's multi-line Text field must not leak its internal line-wrap into the stored value")
+	}
+
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: "/nonexistent-bt-2v38-scratch-dir"}
+	m.form = f
+	m.formKind = "editTitle"
+	m.mutTarget = "tk-1"
+
+	tm, cmd := m.submitForm()
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("submitForm() did not return a model, got %T", tm)
+	}
+	if nm.form != nil {
+		t.Fatal("form still open after submitForm, want nil (editTitle: no Confirm-Gate)")
+	}
+	if cmd == nil {
+		t.Fatal("submitForm(editTitle) must fire a Cmd (mutateCmd(SetTitle))")
+	}
+	msg := cmd()
+	mdm, ok := msg.(mutationDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want mutationDoneMsg", msg)
+	}
+	if mdm.err == nil || !strings.Contains(mdm.err.Error(), "beans update") {
+		t.Fatalf("mutationDoneMsg.err = %v, want an error containing %q (proves SetTitle dispatched, same GetString(title) verified full/unchanged above)", mdm.err, "beans update")
+	}
+}
+
 // TestKeyNodeActionEDoesNotOpenEditTitleFormAnymore is D01's regression
 // guard for this file's own scope (design-spec.md §15 PF-17, bean bt-z4b1,
 // SUPERSEDES design decision h's original "e opens Title-Edit-Form"

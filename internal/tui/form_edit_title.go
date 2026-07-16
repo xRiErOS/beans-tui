@@ -19,11 +19,23 @@ import (
 )
 
 // buildEditTitleForm constructs the keyed single-field form, pre-filled with
-// the bean's current title (huh.Input.Value(&v), field_input.go), nonEmpty-
-// required (Port devd forms_shared.go nonEmpty).
+// the bean's current title (huh.Text.Value(&v), field_text.go), nonEmpty-
+// required (Port devd forms_shared.go nonEmpty). B03 (design-spec.md §15
+// PF-17, bean bt-2v38): swapped from huh.NewInput() (single-line, horizontal
+// scroll on long titles) to huh.NewText().Lines(3) (multi-line, wraps
+// instead). .ExternalEditor(false) is MANDATORY, not cosmetic: huh.Text
+// brings its OWN ctrl+e editor-suspend mechanism (field_text.go default
+// true) that would collide with D01's app-wide e/ctrl+e whole-bean $EDITOR
+// (bt-z4b1) -- disabled so keyForm's own keyboard semantics
+// (forms_shared.go) stay the only ctrl+e in play here. .Lines(3) is a
+// Planner estimate (PO gave no line count); GetValue()/the Value(&v)
+// binding still returns a plain string (verified against field_text.go),
+// so submitForm's "editTitle" case (m.form.GetString("title"),
+// box_confirm_create.go) is UNCHANGED by this swap.
 func buildEditTitleForm(title string) *huh.Form {
 	v := title
-	field := huh.NewInput().Key("title").Title("Title").Value(&v).Validate(nonEmpty)
+	field := huh.NewText().Key("title").Title("Title").Lines(3).
+		ExternalEditor(false).Value(&v).Validate(nonEmpty)
 	return huh.NewForm(huh.NewGroup(field))
 }
 
