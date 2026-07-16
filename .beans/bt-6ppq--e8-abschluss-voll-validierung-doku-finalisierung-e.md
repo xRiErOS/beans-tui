@@ -1,11 +1,11 @@
 ---
 # bt-6ppq
 title: E8-Abschluss (Voll-Validierung, Doku-Finalisierung, Epic to-review)
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-07-15T21:10:37Z
-updated_at: 2026-07-16T03:16:46Z
+updated_at: 2026-07-16T03:47:42Z
 parent: bt-ntoz
 blocked_by:
     - bt-czpf
@@ -48,12 +48,12 @@ docs(release): E8-Abschluss — Epic to-review, US-08/bt-gdkx-Status, B06-Sign-o
 
 ## Akzeptanz-Checkliste
 
-- [ ] Voller Testlauf (inkl. -race, 2x ohne -short, Golden-Funktionen mit -count=2) gruen, gofmt/vet leer
-- [ ] bt-gdkx traegt Tag to-review mit Body-Verweis auf den Fix (bleibt selbst NICHT completed)
-- [ ] bt-ntoz traegt Tag to-review, ist NICHT completed
-- [ ] T1-T8 alle completed (verifiziert)
-- [ ] B06-Sign-off-Verweis im Epic-Bean bt-ntoz auffindbar
-- [ ] validation.md-Konsistenz verifiziert (kein Widerspruch Doku vs. Code)
+- [x] Voller Testlauf (inkl. -race, 2x ohne -short, Golden-Funktionen mit -count=2) gruen, gofmt/vet leer
+- [x] bt-gdkx traegt Tag to-review mit Body-Verweis auf den Fix (bleibt selbst NICHT completed)
+- [x] bt-ntoz traegt Tag to-review, ist NICHT completed
+- [x] T1-T8 alle completed (verifiziert)
+- [x] B06-Sign-off-Verweis im Epic-Bean bt-ntoz auffindbar
+- [x] validation.md-Konsistenz verifiziert (kein Widerspruch Doku vs. Code)
 
 
 ## Prelude aus E8-T3-Review (2026-07-16, Quelle: bt-qbyq-Review APPROVED, I01 non-blocking)
@@ -88,3 +88,103 @@ um diese 5 Sites ergänzen — reine Nachvollziehbarkeit.
 - Q-PO (offen, an PO im Chat): Backlog-Footer braucht bei 80 Spalten 3 Zeilen (D06 erlaubt 2). Reviewer-Messung: Klartext 161 Zeichen > 2×78; Umschlagpunkt exakt 82 Spalten. Spec-konformer Fix ohne PO unmöglich (Q06-Liste wortgesperrt, Sort-Entzug gegen Planner-ERRATUM). Optionen für PO: (a) 3 Zeilen bei <82 Spalten akzeptieren, (b) Sort-Footer-Eintrag streichen (Suffix in Suchzeile trägt die Info bereits), (c) Wortkürzungen freigeben. NICHT selbst entscheiden — im Abschluss-Report als offene Frage ausweisen.
 - I01 (low): mouse_test.go clickPaneGeometry-Tests nur Width:100 — 3-Zeilen-Footer-Fall (80 Sp. Backlog) ohne automatisierte Abdeckung. Als kleinen Regressionstest im Abschluss-Task ergänzen (footH-Dynamik pinnen).
 - I02 (low, Doku): footer()/breadcrumb() erwarten vorgefärbten renderBindings()-Output (kein Dim-Wash mehr) — stille Konvention, nur Doc-Kommentar. In LESSONS-LEARNED als Falle notieren.
+
+
+
+## Summary (2026-07-16, E8-Abschluss)
+
+Alle 6 Arbeitspakete abgearbeitet: (1) Voll-Validierung gruen (Detail
+unten). (2) I01-Regressionstest
+`TestDetailClickBacklogThreeLineFooterAt80Cols` (mouse_test.go, Commit
+`3c084d2`) — pinnt die footH-Dynamik am realen 3-Zeilen-Backlog-Footer
+bei 80 Spalten via render-geerdetem Boundary-Paar (letzte Body-Zeile
+trifft, Pane-Bottom-Border/Footer-Zeile nicht); RED via gezielter
+Mutation des detailClickRow-Chrome-Branches bewiesen. (3)
+Doku-Finalisierung (Commit `7dbab76`): esc-Audit-Vervollstaendigung im
+Epic (5 Zusatz-Sites, alle konform, Zeilendrift-ERRATUM 307→333) ·
+'stat'-Fuzzy-Pruefbeleg an bt-y2iw · search.go-Korrektur an bt-yqdy
+(ERRATUM: Auftrag ordnete sie bt-y2iw zu, der Fehler steht in bt-yqdys
+Summary) · validation.md §7 "E8-Umsetzung" (D01-D08 + B01-B14 mit
+Commits) + US-08 auf "PASS (pending PO-Sichtpruefung, bt-gdkx)". (4)
+docs/LESSONS-LEARNED.md angelegt (7 Eintraege, jeder mit
+Forward-Guard; Commit `1a6bb4f`, inkl. neuer CLAUDE.md-Guard-Zeile
+"Footer-/Wrap-Aenderungen → Smoke bei 80 Spalten"). (5) beans-Pflege:
+bt-gdkx Aufloesung + Tag to-review (Status unveraendert, live
+verifiziert: `▷ tags: ● to-review` im Detail-Pane von bt-apmy) · Epic
+bt-ntoz Tag to-review + Sektionen "B06-Sign-off ausstehend" und
+"E8-Abschluss" · T1-T8 alle completed verifiziert. (6) Abschluss:
+Checkboxen, Pflicht-Sektionen, completed, finaler Commit.
+
+SSTD (Step 6): geprueft, unveraendert — docs/SSTD.md verweist auf
+design-spec.md/implementation-plan.md/`beans list --ready`, alle
+Referenzen weiterhin gueltig, kein Update noetig.
+
+## Validierungs-Output (Voll-Gate-Beleg, 2026-07-16)
+
+- `command go build -o bin/bt .` — clean
+- `command go vet ./...` — leer · `gofmt -l .` — leer
+- `command go test ./... -count=1` ZWEIMAL frisch: Lauf 1 `ok
+  beans-tui/internal/tui 137.484s` (total 2:17.84), Lauf 2 `ok
+  beans-tui/internal/tui 137.163s` (total 2:17.54) — alle Pakete
+  (cmd/config/data/theme/tui) beide Male gruen; 462 Testfunktionen
+  repo-weit (390 in internal/tui, inkl. neuem I01-Test)
+- Goldens byte-stabil zwischen den Laeufen: tree/backlog/chrome.golden
+  `diff -q` IDENTICAL gegen Vor-Lauf-Kopie, `git status
+  internal/tui/testdata/` leer
+- `command go test ./... -race -count=1` — gruen (`ok
+  beans-tui/internal/tui 140.050s`, total 2:20.70), KEINE DATA RACE
+- Golden-Funktionen `-count=2`: TestChromeGolden/TestTreeGolden/
+  TestTreeGoldenDeterministic/TestBacklogGolden/
+  TestBacklogGoldenDeterministic — alle 2x PASS
+- Nach dem I01-Test ein weiterer voller Lauf vor dessen Commit: `ok
+  beans-tui/internal/tui 137.399s` (total 2:17.77), gruen
+
+I01-Test RED→GREEN: Mutation (detailClickRow-Chrome-Branch auf
+browseRepoChrome gezwungen) → `mouse_test.go:825: click below the pane
+(Y=23) must not resolve to a Detail hit (footH under-counts the 3-line
+footer)` FAIL → Revert (mouse.go byte-identisch, leerer git diff) →
+PASS.
+
+## Deviations/ERRATA
+
+1. **ERRATUM (Zeilendrift, T3-Prelude):** esc-Site
+   view_browse_backlog.go:307 liegt nach den T8-Edits auf Zeile 333
+   (keys.Backlog/keys.Back-Case) — Site konform, nur Zeilennummer
+   gedriftet; die 4 uebrigen Prelude-Zeilennummern stimmen exakt.
+2. **ERRATUM (Zuordnung, Auftrags-Paket 3b):** die search.go-Korrektur
+   war als "bt-y2iw-Korrektur" gruppiert — der Fehler steht in bt-yqdys
+   Summary (so benennt es auch das T7-Prelude). An bt-yqdy geroutet,
+   in dessen Nachtrag dokumentiert.
+3. **Layout-Detail (I01-Test):** die Status-Zeile rendert UNTER dem
+   Footer, nicht dazwischen — die Relation ist footerY = originY +
+   bodyH + 2 (Border+Divider), nicht +3; per Render-Probe verifiziert,
+   Test entsprechend geerdet.
+4. **Erste RED-Mutation verworfen:** footH-Hartkodierung INNERHALB von
+   clickPaneGeometry ist als RED-Beweis untauglich — View und Klick-Pfad
+   teilen die Funktion (Single Source), beide verschieben sich
+   konsistent. Der Beweis nutzt stattdessen die einzig real
+   desynchronisierbare Stelle (detailClickRow-Chrome-Branch) — genau
+   die Bug-Klasse, die der Test pinnt.
+5. **Zusatz ueber den Wortlaut hinaus (begruendet):** CLAUDE.md-Zeile
+   "Footer-/Wrap-Aenderungen → tmux-Smoke bei 80 Spalten" ergaenzt —
+   LESSONS-LEARNED-Eintrag 4 verlangt einen Guard mit Zaehnen; ohne die
+   Zeile waere der zitierte CLAUDE.md-Guard fiktiv gewesen.
+
+## Handover
+
+- **PO-Review-Paket (Epic bt-ntoz, Tag to-review):** (1) B06-Sign-off —
+  Beleg docs/plans/v1-port/b06-experiment/; Rollback = 1 Zeile,
+  D06-Farben entkoppelt (gegengeprueft). (2) Q-PO Backlog-Footer:
+  3 Zeilen bei <82 Spalten — Optionen (a) akzeptieren / (b)
+  Sort-Eintrag streichen (Suchzeilen-Suffix traegt die Info) / (c)
+  Wortkuerzungen; bewusst NICHT entschieden. (3) US-08-Sichtpruefung
+  bt-gdkx (Tag to-review; live vorverifiziert). (4) Epic-Abnahme.
+- **Nach v1-Abnahme:** D07/T03 Upstream-ETag-Issue-Entwurf (hmans/
+  beans), POST nur mit PO-Freigabe — Minimal-Repro-Beleg im Epic-bean
+  ("D07-Repro-Beleg").
+- **Kleinkram fuer die naechste mouse_test.go-Beruehrung:**
+  TestDetailClickKeyDisjointNumberSpaces auf Literal 1000 umstellen
+  (selbst-referenzieller Pin-Test, LESSONS-LEARNED Eintrag 5).
+- **Einstiegspunkte:** validation.md §7 (Umsetzungsstand) ·
+  docs/LESSONS-LEARNED.md (Muster/Guards) · Epic-bean bt-ntoz
+  (E8-Abschluss-Sektion mit Commit-Spanne).

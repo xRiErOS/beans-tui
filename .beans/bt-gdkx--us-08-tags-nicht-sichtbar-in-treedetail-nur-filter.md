@@ -4,8 +4,10 @@ title: 'US-08: Tags nicht sichtbar in Tree/Detail (nur Filter-Facette)'
 status: todo
 type: bug
 priority: normal
+tags:
+    - to-review
 created_at: 2026-07-15T19:21:19Z
-updated_at: 2026-07-15T20:18:42Z
+updated_at: 2026-07-16T03:45:47Z
 parent: bt-ntoz
 ---
 
@@ -58,3 +60,26 @@ inspizieren (kein Indikator), Detail öffnen (META hat kein Tags-Feld), `f` →
 Tags-Facette togglen (funktioniert).
 
 Quelle: bean bt-9yvh (E6 T2), docs/_free-notes/e6-t2-evidence.md.
+
+
+
+## Auflösung (2026-07-16)
+
+Gelöst durch **D01** (Grilling-Entscheidung, Epic `bt-ntoz`) — Umsetzung
+E8 Task 1 / bean `bt-e6q9`, Commit `397a70f` (`feat(tui): Meta tags row +
+Kopfblock/marker fixes`): Tags sind wieder sichtbar als **7. Meta-Feld**
+(`tags:` nach `priority`, vor `created_at`; Hash-Swatch via reaktiviertem
+`tagsInline`, leere Tags → `(none)`), und `enter` auf der tags-Zeile
+öffnet den Tag-Picker (Kaskaden-Verhalten analog status/type/priority).
+KEIN Tree-Suffix — per D01 bewusst: der Überblick läuft über die
+f-Filter-Tags-Facette.
+
+Live-Verifikation beim E8-Abschluss (bt-6ppq, 2026-07-16, echtes Binary
+gegen dieses Repo in tmux): Detail-Pane von `bt-apmy` zeigt
+`▷ tags:       ● to-review` als 7. Meta-Zeile — der in diesem bean
+dokumentierte Fehlzustand („META hat kein Tags-Feld") besteht nicht mehr.
+validation.md: US-08-Zeile auf „PASS (pending PO-Sichtprüfung)" gehoben,
+Detail-Tabelle in §7 „E8-Umsetzung".
+
+Status bleibt bewusst UNVERÄNDERT (PO-Gate, Review-Flow §5) — Tag
+`to-review` gesetzt, der PO schließt nach eigener Sichtprüfung.

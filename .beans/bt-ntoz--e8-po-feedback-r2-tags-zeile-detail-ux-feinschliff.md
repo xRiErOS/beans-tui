@@ -4,8 +4,10 @@ title: 'E8 — PO-Feedback R2: Tags-Zeile + Detail-UX-Feinschliff'
 status: in-progress
 type: epic
 priority: high
+tags:
+    - to-review
 created_at: 2026-07-15T20:18:42Z
-updated_at: 2026-07-16T03:39:18Z
+updated_at: 2026-07-16T03:46:20Z
 parent: bt-apmy
 ---
 
@@ -108,3 +110,59 @@ view_browse_backlog.go:307 — nach den T8-Edits liegt der esc-Case heute
 auf Zeile 333 (`keys.Backlog`/`keys.Back`-Case). Alle übrigen vier
 Zeilennummern stimmen exakt mit dem Ist-Code überein (verifiziert
 2026-07-16, bt-6ppq).
+
+
+
+## B06-Sign-off ausstehend (2026-07-16)
+
+Das B06-Teal-Experiment (T2/`bt-czpf`, Commit `f910b78` `feat(tui):
+EXPERIMENT — teal inactive accordion headers (B06)`) braucht den
+PO-Sign-off VOR der Epic-Freigabe. Der Vorher/Nachher-Beleg liegt unter
+**`docs/plans/v1-port/b06-experiment/`** (`README.md` + `before.txt` +
+`after.txt`, ANSI-erhaltende `tmux capture-pane -e`-Captures gegen das
+echte Binary). Kern: geschlossene Section-Header-Titel (BODY/RELATIONS/
+HISTORY) wechseln von Hint-Grau `#7c7c7c` auf Teal `#8bd5ca`
+(`theme.HeaderInactive`); META-Header + Meta-Label-Spalte bleiben grau.
+Objektiver Beleg im Commit-Body: Teal-ANSI-Sequenzen 0→3 (exakt die drei
+geschlossenen Header). Rollback = Ein-Zeilen-Änderung
+(`theme.HeaderInactive` → `theme.Muted`); die D06-Header/Footer-Farben
+hängen NICHT daran (`theme.BindingKey`/`BindingDesc` bewusst eigene
+Tokens — Entkopplung beim Abschluss gegen den Ist-Code gegengeprüft,
+hielt).
+
+
+## E8-Abschluss (2026-07-16, bt-6ppq)
+
+**8 Implementierungs-Tasks** (T1-T8) alle completed, **2 Fix-Runden**
+nach Review (T4/`bt-duz7` R1: clickKey-Aliasing + zeitfensterloser
+Zweitklick, Commit `6e1152e` · T5/`bt-1u0t` R1: Lobby-Exit-Keys
+entkoppelt, Commit `d173927`). **Commit-Spanne:** Epic-/Plan-Kette ab
+`6ea0fa6`, Implementierung `397a70f` (T1) … `6b2daa3` (T8),
+Abschluss-Paket `3c084d2` (I01-Regressionstest) + `7dbab76`
+(validation.md §7 + Review-Nachträge) + `1a6bb4f` (LESSONS-LEARNED).
+
+**Voll-Validierung (2026-07-16):** Build/vet/gofmt clean · volle Suite
+2× frisch grün (internal/tui 137.5s/137.2s, 462 Testfunktionen
+repo-weit) · `-race` grün (140.1s, keine DATA RACE) · Goldens
+`-count=2` byte-stabil, `git status testdata/` leer. Detail: bean
+`bt-6ppq` „Validierungs-Output".
+
+**Doku:** validation.md §7 „E8-Umsetzung" (Status-Tabelle D01-D08 +
+B01-B14 mit Commits, US-08 → PASS pending Sichtprüfung) ·
+docs/LESSONS-LEARNED.md neu (7 Einträge) · esc-Audit oben
+vervollständigt (5 Zusatz-Sites, alle konform).
+
+**Offene PO-Punkte (Epic-Review):**
+1. **B06-Sign-off** — Sektion oben, Beleg `docs/plans/v1-port/b06-experiment/`.
+2. **Q-PO Backlog-Footer:** braucht bei <82 Spalten 3 Zeilen (D06 sagt
+   „darf 2"). Umschlagpunkt exakt 82 Spalten (Klartext 161 Zeichen >
+   2×78). Optionen: (a) 3 Zeilen bei <82 akzeptieren · (b) Sort-Eintrag
+   aus dem Footer streichen (Suchzeilen-Suffix trägt die Info bereits) ·
+   (c) Wortkürzungen freigeben. Bewusst NICHT entschieden.
+3. **US-08-Sichtprüfung** — `bt-gdkx` (Tag `to-review`, Auflösung
+   dokumentiert im bean).
+4. **Epic-Abnahme** — dieses bean steht auf `to-review`, Status-Wechsel
+   nur durch den PO (Review-Flow §5).
+
+Danach (separat, NICHT Teil dieses Eposs): D07/T03 Upstream-Issue-Entwurf
+NACH v1-Abnahme, POST nur mit PO-Freigabe (Repro-Beleg oben).
