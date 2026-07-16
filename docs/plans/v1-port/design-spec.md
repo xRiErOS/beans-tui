@@ -87,7 +87,7 @@ Accordion) · `listState`-Primitiv · Settings zweischichtig (User-YAML + Runtim
 | Subtasks | Markdown-Checkboxen im Body | Anzeige im Detail; Toggle v2 |
 | DoD (Milestone) | Markdown-Checkliste im Body | wie Subtasks |
 | Dependencies | `blocking` / `blocked_by` | 1:1, Picker vorhanden (Upstream-Muster) |
-| Tags | beans-Tags (implizit, ohne Farbregister) | Tag-Picker mit Nutzungszählern; Farbe per Hash aus fester Palette; Tag-Manager-CRUD entfällt (Tags entstehen/sterben implizit) |
+| Tags | beans-Tags (implizit, ohne Farbregister) | Tag-Picker mit Nutzungszählern; Farbe per Hash aus fester Palette; ~~Tag-Manager-CRUD entfällt (Tags entstehen/sterben implizit)~~ **Superseded (E10, §16, 2026-07-16):** Tag-Manager-CRUD existiert jetzt als eigene Page (v1.1, Registry `.beans-tags.yml`); Tags entstehen/sterben weiterhin implizit, die Registry ist eine zusätzliche optionale Definitionsschicht |
 | Status-Lifecycle Issues (new→refined→planned→…) | beans-Status `draft·todo·in-progress·completed·scrapped` | Status-Menü zeigt nur beans-Enum (constrained, „no 422"-Prinzip analog) |
 | Review-Flow (`to_review`, Verdicts) | **Tag-Konvention** (s. § 5) | Kern-Flow bleibt erhalten |
 | User Stories je Issue | `## User Stories`- / `## Akzeptanz`-Checkboxen im Body | Review-Modal rendert Body-Abschnitt |
@@ -196,7 +196,8 @@ Maus (Wheel, Klick-Cursor) · Settings (`~/.config/beans-tui/config.yaml`: repos
 Akzentfarbe, Baumbreite) · ASCII-Icon-Fallback · Archiv-Sicht (completed/scrapped ein-/
 ausblendbar; `.beans/archive/` wird mitgelesen).
 
-**OUT (v1, bewusst):** Tag-Manager-CRUD (Tags implizit) · Memory/Docs/Notes/ToDos-Views
+**OUT (v1, bewusst):** ~~Tag-Manager-CRUD (Tags implizit)~~ **(Superseded E10, §16,
+2026-07-16 — Tag-Management-Page in v1.1 nachgeliefert)** · Memory/Docs/Notes/ToDos-Views
 (Entitäten entfallen) · Tutorial · Release-Notes-Overlay · Subtask-Checkbox-Toggle im
 Detail (v2) · Reorder via fractional index (v2) · GraphQL-Server/Subscriptions ·
 Multi-Select-Bulk-Ops (v2) · Agent-Session-Features des beans-Web-UI (Chat, Worktrees,
@@ -1207,3 +1208,144 @@ Statuszeile) bleibt IDENTISCH zum jeweiligen View (`browseRepoChrome`/
 Vollbreite-Pane statt zwei nebeneinander. Kein neuer `viewID`-Enum-Wert
 (bestätigt gegen `types.go`: `m.view` bleibt `viewBrowseRepo`/`viewBacklog`
 — Vollbild ist orthogonal, s. Zustandsmodell oben).
+
+## 16. Tag-Management (E10) — zentrale Tag-Definition (v1.1, bean `bt-6oyy`, Epic `bt-362n`)
+
+Nachgeliefert 2026-07-16 (Tasks T1-T6, Epic `bt-362n`). Superseded damit §4s
+„Tag-Manager-CRUD entfällt" und §9s „OUT (v1): Tag-Manager-CRUD" (dort
+markiert, nicht gelöscht — PF-14-Muster). Dieser Abschnitt dokumentiert
+AUSSCHLIESSLICH die umgesetzten Entscheide D01-D15 (Epic-Body `bt-362n`)
+plus die dokumentierten Deviations der T-beans (`bt-49hh`/`bt-r92i`/
+`bt-604w`/`bt-1lsu`/`bt-y9my`/`bt-pqq3`) — keine neuen Design-Änderungen.
+
+### Registry (Persistenz)
+
+- **Datei:** `.beans-tags.yml` im Repo-Root (Sibling zu `.beans.yml`, via
+  `client.RepoDir`, keine eigene Discovery). Bewusst NICHT in `.beans/` —
+  komplett entkoppelt von beans' eigenem Scan/Autorität (D01).
+- **Format:** minimal `tags: [<name>, …]`, alphabetisch sortiert
+  gespeichert (deterministische Diffs). Kein Farb-/Beschreibungsfeld —
+  Tag-Farbe bleibt Hash-aus-Name (§4/§8) (D01).
+- **Laden:** tolerant-missing/tolerant-corrupt — fehlende Datei → leere
+  Registry, korrupte YAML → leere Registry, nie crashen; synchroner
+  `os.ReadFile` (mirrort `config.LoadSettings`) (D02).
+- **Liveness:** frisch von Platte bei jedem Page-Open (`openTagManagementPage`)
+  bzw. Picker-Open (`openTagPicker`) — KEINE fsnotify-Erweiterung; externe
+  Änderungen werden erst beim nächsten Open sichtbar (dokumentierter
+  Trade-off, identisch zur Lobby) (D03, D10).
+- **Schreiben:** direktes `os.WriteFile`, NICHT atomar (kein temp+rename) —
+  akzeptierter, dokumentierter Trade-off (mirrort `internal/config`
+  settings/state); D02s tolerant-corrupt-Load degradiert einen Crash
+  mitten im Write zu leerer Registry statt Panic (T1-Review F02).
+- **API:** `internal/data/tagdefs.go` — `Client.LoadTagDefs()`/
+  `Client.SaveTagDefs([]string)` + pure, slice-safe Helfer `AddTagDefName`/
+  `RemoveTagDefName`/`RenameTagDefName` (D04). Namens-Validierung
+  (`data.ValidTagName`) liegt bewusst an der EINGABEGRENZE, nicht in der
+  Persistenzschicht (T1-F04-Merkposten, Epic-Body).
+
+### Page (`viewTagManagement`)
+
+- **Einstieg:** ausschließlich Command-Center „go to tags" (mirrort „go to
+  settings" — keine eigene globale Taste, Tastenraum knapp) (D05).
+- **Capture:** FULL-CAPTURE wie die Lobby, geprüft an derselben
+  `handleKey`-Stelle (früh, vor `ctrl+k`/`?`/`p`) — globale
+  Node-Action-Tasten können nie gegen ein stale Bean feuern; `esc` ist der
+  Rückweg (D06).
+- **Chrome:** `Chrome()`/`renderPane()`-Einzel-Listen-Pane (Backlog-Stil,
+  nicht Lobbys Banner-Zentrierung); `GlobalHint` bewusst LEER — keine der
+  globalen Tasten funktioniert unter Capture, sie anzuzeigen wäre ein
+  nicht-funktionales Versprechen (D07). Footer-Zone-3: `↑/↓ · n · d · e ·
+  esc`.
+- **Layout:** Einzel-Pane-Liste, KEIN Master-Detail-Drilldown; `enter` ist
+  dokumentierter handled No-Op, reserviert für den Fast-Follow „Beans zu
+  diesem Tag" (`idx.WithTag` existiert bereits) (D08).
+- **Zeilenmodell:** UNION aus (a) definierten Tags (Registry, auch Count 0)
+  und (b) freien (unregistrierten) Tags in Verwendung. Sortierung:
+  Definiert alphabetisch zuerst, dann Frei count-absteigend. Jede Zeile
+  trägt `defined bool`; definierte Zeilen tragen Marker `✓` (Green) in
+  einer IMMER reservierten Marker-Spalte (PF-12) (D09). Glyph `✓` ist
+  Implementer-Entscheid T2 — der ursprüngliche Plan-Text nannte `●`
+  (T6-Review F02, dokumentierte Abweichung).
+- **Stale-Grenze:** `applyLoaded` baut `tagMgmtRows` nicht reaktiv neu —
+  eine bereits OFFENE Page zeigt nach Rename/externem Reload alte Counts
+  bis zum nächsten Page-Open (kein Bug: D03 deckt nur „frisch bei jedem
+  Open"; dokumentierter Fast-Follow-Kandidat, T5-Deviations `bt-y9my`).
+
+### Create (`n`)
+
+- Page-lokaler Freitext-Input-Submodus (`tagMgmtInputActive`/
+  `tagMgmtInputMode` „create"|„rename", EIN dauerhaftes `textinput.Model`,
+  mirrort den Tag-Picker-Input); `esc` verwirft NUR den Submodus (D14).
+- Validierung `data.ValidTagName` wörtlich an der Eingabegrenze; Dedupe
+  gegen ALLE Zeilennamen (definierte UND freie — T3-Deviation `bt-604w`:
+  dem literaleren Bean-Wortlaut gefolgt statt D11s engerem
+  „Registry-Einträge"); Fehlertext neutral `name already in use: X`
+  (T5-F01). Ein Fehler lässt den Submodus für Retry offen.
+- Eine neue Definition BERÜHRT KEIN Bean (kein Bean bekommt den Tag
+  automatisch) — reiner Registry-Akt, ab sofort im Picker
+  sichtbar/priorisiert (D11).
+- Submit dispatcht `saveTagDefsCmd` mit EXPLIZITEM `refindName` (jede
+  Dispatch-Site benennt ihr Cursor-Ziel selbst, nie impliziter
+  Input-Feld-Read — T4-Fix-Runde B01, `bt-1lsu`); der Submodus schließt
+  erst nach BESTÄTIGTEM Write (`applyTagDefsSaved`).
+
+### Delete (`d`)
+
+- REGISTRY-ONLY (D12): Beans, die den Tag tragen, BEHALTEN ihn — er wird
+  wieder ein freier Tag, im Suggest-Mode weiter erlaubt, nur unpriorisiert.
+  Kein destruktiver Strip-Modus (→ Q01).
+- Page-lokales Bool+Ziel-Paar `tagMgmtDeleteConfirm`/`tagMgmtDeleteTarget`,
+  KEIN neuer `overlayID`-Case (mirrort `confirmQuit`) (D15).
+- Confirm zeigt den LIVE-Verwendungszähler (render-zeitige Auflösung aus
+  `tagMgmtRows`, kein drittes Feld — T4-Deviation), Singular/Plural
+  korrekt („Still used by 1 bean"). `d` auf freier Zeile = No-Op.
+- Cursor nach Delete: `refindName` = gelöschtes Ziel — der Cursor FOLGT
+  einem noch benutzten Tag in die Frei-Gruppe; ein unbenutzter Tag
+  verschwindet, der Cursor bleibt stehen (T4-Fix-Runde B01).
+
+### Rename (`e`, Propagation über alle Beans)
+
+- NEUES Binding `keys.RenameTag` auf `e` — kollisionsfrei zum globalen
+  `keys.Editor` (disjunkter Full-Capture-Kontext, Backlog-`S`-Präzedenz).
+  Nur auf definierten Zeilen (No-Op auf freien — erst per `n` definieren).
+- Nutzt DENSELBEN Input-Submodus, vorbefüllt mit dem alten Namen; der
+  Dedupe-Check exkludiert den eigenen alten Namen (`tagMgmtInputTarget`) —
+  Re-Confirm des unveränderten Namens wird nie als Selbst-Duplikat
+  abgelehnt (D13, D14).
+- **Registry-Rename ZUERST** (lokaler Datei-Op), UNABHÄNGIG vom Ausgang
+  des Bean-Sweeps. **Sweep:** async `renameTagCmd`, best-effort
+  CONTINUE-ON-ERROR über `idx.WithTag(alt)` — je betroffenem Bean EIN
+  `SetTags(id, add=[neu], remove=[alt], etag)`-CLI-Aufruf (bestehende
+  Methode; die beans-CLI kennt keinen Bulk-/Rename-Verb und keine
+  Cross-Bean-Transaktion — ein stales ETag auf Bean K bricht K+1..N nicht
+  ab). Ergebnis (renamed/failed, erste Fehlermeldung) als EIN Toast;
+  danach `m.idx`-Reload (D13).
+- **Same-Name-Guard** (T5-Deviation `bt-y9my`, Datenverlust-Schutz):
+  `alt == neu` → No-Op OHNE jeden `SetTags`-Aufruf (dessen dokumentierter
+  „remove gewinnt"-Resolver hätte den Tag sonst still von JEDEM
+  betroffenen Bean entfernt). Zusätzlich `idx == nil`-Guard.
+- Rename AUF den Namen eines existierenden freien Tags wird per Dedupe
+  abgelehnt (= Merge-Semantik, bewusst nicht in v1.1 → Q04).
+
+### Tag-Picker Suggest-Mode (`t`)
+
+- `collectTagCounts` erweitert um `defined map[string]bool`; Sortierung:
+  „defined" als neuer PRIMÄRER Schlüssel (definierte Tags zuerst), der
+  bestehende Count-desc/alpha-Tie-Break bleibt SEKUNDÄR je Gruppe.
+  Registry frisch bei `openTagPicker()` (D10).
+- Marker-Spalte IMMER reserviert (PF-12): definiert `✓` (geteilte
+  Konstante `tagManagementMarkerGlyph` aus der Page), frei gleich breiter
+  Leerraum — Breiten-Stabilität über `lipgloss.Width` getestet, nicht über
+  Byte-Offsets (3-Byte-UTF-8-Glyphs, T6-ERRATUM `bt-pqq3`).
+- Freie Tags bleiben voll erlaubt, toggle- und speicherbar — KEIN strict
+  mode; die bestehende Picker-`n`-Neuanlage (B14/E8) bleibt UNVERÄNDERT
+  (→ Q03).
+
+### Offen (PO) — Q01-Q04, nicht blockierend
+
+| # | Frage | v1.1-Stand |
+|---|---|---|
+| Q01 | Destruktiver Delete-Modus (Tag zusätzlich von jedem Bean strippen, GitHub-Label-Semantik)? | Registry-only (D12) |
+| Q02 | Definierte Tags mit Count 0 als „Aufräum-Kandidat" markieren? | schlichte Count-0-Anzeige (D09) |
+| Q03 | Picker-`n` (B14/E8) soll künftig auch die Registry befüllen? | B14 unverändert (T6) |
+| Q04 | Rename auf existierenden freien Namen = Merge erlauben? | per Dedupe abgelehnt; `data.RenameTagDefName` ließe es datenseitig zu |
