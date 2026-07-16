@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-16T20:20:40Z
-updated_at: 2026-07-16T20:47:11Z
+updated_at: 2026-07-16T20:59:50Z
 parent: bt-tct9
 ---
 
@@ -55,3 +55,24 @@ Vollbild-Modus auftritt).
 **Offene Frage an PO** (siehe Planner-Abschlussbericht): war der beobachtete
 Effekt "Meta bleibt zusätzlich offen" (PF-1, by-design) oder "zwei
 NICHT-Meta-Sektionen gleichzeitig offen" (echte Regression)?
+
+
+## PO-Antwort Q1 → Task-Neudefinition (2026-07-16, PF-18)
+
+Repro-Frage beantwortet: Beobachtet war der PF-1-by-design-Effekt (META bleibt
+zusätzlich offen). PO revidiert das Design (PF-18, siehe Epic bt-tct9): META
+default GESCHLOSSEN — relevante Infos sitzen im Meta-Strip; META öffnet erst bei
+aktiver Auswahl im Detail-Pane.
+
+Kein Live-Repro mehr nötig. Neue Aufgabe: PF-1-Sonderfall entfernen —
+`accordion.go:82` `isOpen := n == open || n == 1` → `isOpen := n == open`; alle
+Stellen prüfen, die PF-1 kommentieren/annehmen (accordion.go Doc, update.go-Setter,
+Goldens, Drift-Guard-Tests, design-spec §15 PF-18-Nachtrag).
+
+Akzeptanz (ersetzt Repro-Akzeptanz):
+- [ ] META beim Öffnen des Detail-Pane geschlossen, solange andere Sektion aktiv
+- [ ] META öffnet bei Auswahl (Tastatur UND Maus), schließt beim Wechsel weg
+- [ ] Meta-Strip unverändert (Informationsträger im Default)
+- [ ] Goldens bewusst regeneriert, Diff je Snapshot beschrieben
+- [ ] design-spec §15: PF-18-Nachtrag (PF-1 revidiert, nie stilles Umschreiben)
+- [ ] tmux-Smoke: Sektionswechsel Tastatur+Maus, Tree+Backlog+Vollbild

@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T20:27:41Z
+updated_at: 2026-07-16T20:59:50Z
 parent: bt-apmy
 ---
 
@@ -198,3 +198,18 @@ ein anderer Eintrag weichen, PO-Wahl welcher)? Bis zur Antwort gilt Help-only.
 
 - US-14 (Blocking/Parent-Picker breiter): accepted
 - US-15 (Backlog-Footer ohne S-Sort-Eintrag, Help-only): accepted
+
+
+## PF-18 — META-Accordion default geschlossen (PO, 2026-07-16)
+
+PO verbatim (Antwort auf Q1/bt-98cb): "Meta kann geschlossen sein als default, da
+die relevanten Informationen im meta-strip sitzen. Erst wenn ich in das detail-pane
+gehe und meta wähle, klappt es auf."
+
+Interpretation: REVIDIERT PF-1 (design-spec §15, "META Sektion 1 immer offen",
+accordion.go:82 `isOpen := n == open || n == 1`). Neu: META verhält sich wie jede
+andere Sektion — exklusives Accordion, offen NUR wenn aktiv gewählt. Der
+ursprüngliche bt-98cb-Befund ("voriges Segment kollabiert nicht") war genau der
+PF-1-Effekt — kein Regression-Bug, sondern Design-Änderungswunsch. Umsetzung in
+bt-98cb (aus Repro-first wird Design-Change-Task). Spec-§15-Nachtrag PF-18 erfolgt
+im Zuge der Umsetzung.

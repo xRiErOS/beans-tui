@@ -5,7 +5,7 @@ status: in-progress
 type: bug
 priority: high
 created_at: 2026-07-16T20:20:40Z
-updated_at: 2026-07-16T20:57:19Z
+updated_at: 2026-07-16T20:59:50Z
 parent: bt-tct9
 ---
 
@@ -136,3 +136,14 @@ versteckt — Show archived togglen"). (1) ist die konsistentere Lösung
 (Marker lügt sonst weiterhin), (2) ist PO-freundlicher (erklärt WARUM). Sollte
 diskutiert und in einem eigenen bean (Parent `bt-tct9`, wie die anderen
 E11-Items) angelegt werden — nicht Teil dieses Investigator-Auftrags.
+
+
+## PO-Antwort Q2 + Bestätigung (2026-07-16)
+
+PO: "ich habe nur die automatische id angegeben, kein screenshot. Das war das bean,
+welches ich zum testen verwendete." Aufgelöst: "a2ca" = `lean-stack-a2ca` — Epic im
+lean-stack-Repo (PO-Demo lief per Commit b1212e0 gegen
+~/Obsidian/tools/lean-stack). Dessen 4 Children sind ALLE completed → deckt sich
+exakt mit dem Investigation-Root-Cause (alle Direkt-Children archiviert +
+showArchived=false-Default ⇒ Marker ▾, keine Kind-Zeilen). Investigation damit
+doppelt bestätigt (generisches Repro-Repo + Original-Fall).
