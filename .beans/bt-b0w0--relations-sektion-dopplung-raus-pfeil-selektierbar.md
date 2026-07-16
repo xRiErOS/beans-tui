@@ -1,11 +1,11 @@
 ---
 # bt-b0w0
 title: 'RELATIONS-Sektion: Dopplung raus, Pfeil-selektierbar, hängender Einzug (B04)'
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:47Z
-updated_at: 2026-07-16T11:04:44Z
+updated_at: 2026-07-16T11:23:57Z
 parent: bt-tct9
 ---
 
@@ -306,3 +306,20 @@ belegt, nicht nur behauptet. Ansonsten keine Abweichung von Architektur-Vorgabe/
   unresolved-Zweig) — bewusst NICHT entfernt (out of scope, würde `resolveSorted`/`beanListRow`s
   Rückgabe-Contract unnötig aufbrechen), aber ein Kandidat für eine spätere Aufräum-Runde (I-Code,
   kein Bug).
+
+
+## Review-Findings (2026-07-16, Reviewer-Verdict CHANGES_REQUIRED)
+
+| Fxx | Schwere | Fundort | Beschreibung |
+|---|---|---|---|
+| F01 | medium (blockierend) | view_detail_bean.go::hangingIndentWrap | Kein ansi.Hardwrap-Pass nach ansi.Wordwrap (anders als wrapText, view.go). Einzelnes Token ohne Leerzeichen länger als contW überläuft die Zielbreite unbegrenzt (repro: 103-Zeichen-Wort bei w=30 → eine 104-breite Zeile). Regression ggü. Vor-B04 (blanket wrapText brach hart). T5 erbt den Helfer. |
+| F02 | low | view_detail_bean_test.go | CJK/Emoji-Breiten (double-width) funktional korrekt (Sandbox-verifiziert), aber kein shipped Test. |
+| F03 | low/medium | view_detail_bean_test.go | Kein Test forciert TrueColor — ansi-aware Indent-Berechnung bei real gestyltem relationRow-Präfix ist unbelegt (alle Tests laufen im Ascii-Ambient-Default). Funktional korrekt (Sandbox-verifiziert). |
+| F04 | low | mouse_test.go | Kombination "RELATIONS aktiv+offen × mehrzeilig umbrechender Eintrag" ungetestet (einziger Regressionstest nutzt kurze Fixture). Verhalten korrekt (Sandbox: Klick auf Wrap-Folgezeile → Section-Hit; keine Verschiebung nachfolgender Sektionen). |
+
+**Fix-Rezept (Reviewer):**
+1. F01: `wrapped := ansi.Hardwrap(ansi.Wordwrap(text, contW, ""), contW, true)` — mirrort wrapText (view.go:63-68) exakt. Neuer Test: spaceless Long-Token, Assertion lipgloss.Width jeder Zeile ≤ w.
+2. F02: Regressionstest CJK-Titel/Emoji, Breite via lipgloss.Width.
+3. F03: Test mit lipgloss.SetColorProfile(termenv.TrueColor) + defer-Restore, Indent gegen ECHTEN relationRow-Präfix.
+4. F04: Regressionstest langer Parent-Titel: Klick auf Wrap-Folgezeile → Section-Hit; Klick auf Sektion NACH mehrzeiligem RELATIONS → kein Shift.
+Alle vier in dieser Fix-Runde (F02-F04 sichern die adversarial geprüften Pfade dauerhaft).
