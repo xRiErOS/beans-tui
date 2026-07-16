@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:30Z
-updated_at: 2026-07-16T18:40:00Z
+updated_at: 2026-07-16T17:47:14Z
 parent: bt-362n
 blocked_by:
     - bt-r92i
@@ -293,3 +293,7 @@ Sonst keine Abweichungen vom Bean-Body.
 - **`definedTagNames(m.tagMgmtRows)`** ist der einzige Weg, an die aktuelle Registry-Teilmenge zu kommen (kein separates `m.tagMgmtDefs`-Feld existiert) — T4 (Delete) sollte denselben Helfer für `RemoveTagDefName` wiederverwenden statt eine eigene Filter-Schleife zu bauen.
 - **T4 (Delete, PARALLEL zu T3 laut Epic-Tabelle) ist NICHT von diesem Task betroffen** — disjunkter Verhaltens-Scope (Confirm-Dialog, `tagMgmtDeleteConfirm`/`tagMgmtDeleteTarget`, D15), aber gleiche Datei (`view_tag_management.go`) — bei einem Merge-Konflikt: `tagManagementLocalBindings` wird von BEIDEN Tasks erweitert (T3 fügt `keys.NewTag` VOR `Back` ein, T4 vermutlich `keys.Delete` an ähnlicher Stelle) — manuell zusammenführen, nicht einfach überschreiben.
 - **`saveTagDefsCmd`/`tagDefsSavedMsg` sind bereits generisch genug für T4/T5** (nehmen nur `[]string defs` entgegen) — kein Task-3-spezifisches Detail muss dafür angepasst werden, nur der jeweilige Aufrufer (`RemoveTagDefName`/`RenameTagDefName` statt `AddTagDefName`).
+
+## Review-Nachtrag (2026-07-16, T3-Review APPROVED)
+
+F01 (low, informational, view_tag_management.go:398-403): Dedupe prüft gegen den in-memory Snapshot, nicht gegen frische Disk-Lektüre im Submit-Moment — theoretische Lücke nur bei externem Parallel-Schreiber; SaveTagDefs' sortDedupTagNames verhindert echte Duplikate/Korruption ohnehin. Keine Aktion; nur relevant falls je ein Multi-Prozess-Anwendungsfall entsteht.

@@ -1,11 +1,11 @@
 ---
 # bt-1lsu
 title: T4 — Tag-Definition entfernen (Delete)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:30Z
-updated_at: 2026-07-16T15:44:30Z
+updated_at: 2026-07-16T17:47:14Z
 parent: bt-362n
 blocked_by:
     - bt-r92i
