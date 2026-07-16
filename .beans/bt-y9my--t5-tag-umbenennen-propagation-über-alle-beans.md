@@ -1,11 +1,11 @@
 ---
 # bt-y9my
 title: T5 — Tag umbenennen + Propagation über alle Beans
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:35Z
-updated_at: 2026-07-16T15:44:35Z
+updated_at: 2026-07-16T18:35:14Z
 parent: bt-362n
 blocked_by:
     - bt-604w
