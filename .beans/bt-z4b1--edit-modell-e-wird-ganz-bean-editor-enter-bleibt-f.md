@@ -1,10 +1,11 @@
 ---
 # bt-z4b1
 title: 'Edit-Modell: ''e'' wird Ganz-Bean-$EDITOR, ''enter'' bleibt Feld-Kaskade (D01)'
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:42Z
-updated_at: 2026-07-16T06:45:42Z
+updated_at: 2026-07-16T08:03:55Z
 parent: bt-tct9
 ---
 

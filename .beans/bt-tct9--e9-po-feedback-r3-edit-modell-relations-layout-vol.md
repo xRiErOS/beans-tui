@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T06:33:34Z
+updated_at: 2026-07-16T08:03:55Z
 parent: bt-apmy
 ---
 
@@ -108,3 +108,17 @@ B04.3-Mockup (Meta-Spalten nie unterwandern). Höhe unverändert.
 PO verbatim: "Retest gemacht: New Tag funktioniert jetzt mit frischem Binary."
 Ursache war stale Binary (Investigator-Hypothese a bestätigt). Kein Code-Task.
 Gegenmittel etabliert: zsh-Aliase bt-tui / bt-tui-build (Build zeigt Commit an).
+
+
+## Review-Finding T1/F01 (2026-07-16, Reviewer bt-mtig) — offene PO-Frage Q02
+
+B05 umgesetzt und APPROVED, aber Breiten-Nachrechnung des Reviewers: bei ~100 Spalten
+Gesamtbreite (Split-View, accW≈61) belegt die Kopfblock-Zeile ohne Tag-Inhalt bereits 59
+von 61 Zeichen — die neue Spalte zeigt dort nur `tags: …` ohne Klartext. Erst ab deutlich
+breiteren Terminals (~160) erscheint das PO-Mockup-Bild vollständig. Mechanik konsistent
+(bestehendes truncate), getestet, kein Bug — aber PO-Ziel "Tags sehen" bei Normalbreite
+nur teilweise erfüllt (Label ja, Wert meist nicht).
+
+**Q02 (PO):** Akzeptierte Grenze — oder Nacharbeit gewünscht (Optionen: Tags-Vorrang vor
+Ellipse auf der Zeile, zweizeiliger Umbruch statt Hart-Truncate)? Bis zur Antwort keine
+Nacharbeit; Task bt-mtig bleibt completed/APPROVED.
