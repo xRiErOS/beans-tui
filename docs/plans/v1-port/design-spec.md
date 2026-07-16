@@ -874,7 +874,17 @@ damit `keyForm`s eigene Tastatur-Semantik die einzige bleibt. `.Lines(3)`
 ist eine Planner-Schätzung (PO nannte keine Zeilenzahl) — 3 Zeilen decken
 die längsten bislang beobachteten Bean-Titel ab, ohne das Formular-Modal
 unnötig zu strecken (`formInnerHeight`, `forms_shared.go`, deckelt ohnehin).
-`nonEmpty`-Validator bleibt unverändert.
+`nonEmpty`-Validator bleibt unverändert. **Ergänzung (Supervisor-Entscheid,
+T3-Review Fix-Runde 1, bean `bt-2v38`, F02):** `huh.Text` bringt (anders als
+das vorherige `huh.Input`) einen eigenen NewLine-Tastenweg
+(`alt+enter`/`ctrl+j`) mit, über den ein echter `\n` in den Titel gelangen
+kann — strukturell unmöglich mit `huh.Input`, also eine ECHTE neue
+Verhaltensfläche durch B03s Feldtyp-Wechsel, vom ursprünglichen Planner-Text
+hier nicht antizipiert. Gefixt über einen erweiterten `singleLineTitle`-
+Validator (`nonEmpty` PLUS `strings.Contains(s, "\n")` → Ablehnung "title
+must be single-line", keine stille Normalisierung) statt einer strukturellen
+Verhinderung — bewusst auf dieses eine Formular gescoped, das Create-Form
+bleibt `huh.Input` und damit weiterhin strukturell `\n`-frei.
 
 **B04 — RELATIONS-Sektion: Dopplung raus, Pfeil-selektierbar, hängender
 Einzug (drei Punkte, EINE zusammenhängende Änderung an
@@ -1084,14 +1094,21 @@ GENAU SO VIELE Ebenen bei, wie es Rasten hat:
 | Zustand | `esc` |
 |---|---|
 | `fullscreenDetail`, `detailLevel==1` (Feld-Ebene) | → `detailLevel=0` (Sektions-Ebene) — bestehende D03-Rast, unverändert |
-| `fullscreenDetail`, `detailLevel==0` (Sektions-Ebene) | → Vollbild verlassen: `m.cursorID = m.fullscreenBeanID` (Tree) BZW. `m.backlogList`-Cursor auf `m.fullscreenBeanID` gesetzt (Backlog, je nach `m.view`) + `m.fullscreen = fullscreenNone` + `m.detailFocus = true` (Split-Detail bleibt fokussiert, PO: „mit dem AKTUELLEN Bean selektiert" impliziert die Detailansicht bleibt sichtbar, nicht Rücksprung auf den Tree-Fokus) |
+| `fullscreenDetail`, `detailLevel==0` (Sektions-Ebene) | → Vollbild verlassen: `m.cursorID = m.fullscreenBeanID` (Tree) BZW. `m.backlogList`-Cursor auf `m.fullscreenBeanID` gesetzt (Backlog, je nach `m.view`) + `m.fullscreen = fullscreenNone` + `m.detailFocus = true` (Split-Detail bleibt fokussiert, PO: „mit dem AKTUELLEN Bean selektiert" impliziert die Detailansicht bleibt sichtbar, nicht Rücksprung auf den Tree-Fokus) — **Ausnahme (Supervisor-Entscheid, T7-Review Fix-Runde 1, bean `bt-13l7`, F02):** ist `m.view == viewBacklog` UND das zuletzt gezeigte Bean NICHT `backlogVisible()` (z. B. weil es einen Parent hat oder Status weder `todo` noch `draft`), wechselt der Exit stattdessen auf `m.view = viewBrowseRepo` + `expandAncestorsOf(...)` + `m.cursorID = m.fullscreenBeanID` (Tree kann JEDES Bean zeigen, Backlog nicht) — erfüllt „mit dem AKTUELLEN Bean selektiert" maximal statt den Backlog-Cursor still auf ein anderes Bean stehen zu lassen. Nur im backlogVisible-Fall bleibt der oben beschriebene reine Backlog-Sync. |
+| `fullscreenDetail`, `m.fullscreenBeanID` zeigt auf ein extern verschwundenes Bean (Watch-Reload/Repo-Wechsel/Delete) | → **Ergänzung (T7-Review Fix-Runde 1, bean `bt-13l7`, F01):** der bestehende `b==nil`-Guard in `keyDetailFocus` setzt zusätzlich `m.fullscreen = fullscreenNone`, statt nur `m.detailFocus = false` — ohne diesen Zusatz wäre das Vollbild sonst eine Sackgasse (jede Detail-Taste bliebe wirkungslos, einziger Ausweg wäre Quit). Vom ursprünglichen Planner-Text nicht antizipierter Randfall, keine Änderung der drei Haupt-Zeilen dieser Tabelle. |
 | `fullscreenList` | → Vollbild verlassen: `m.fullscreen = fullscreenNone` (Cursor war nie entkoppelt, keine Sync nötig — Split-Ansicht zeigt exakt denselben Stand) |
 
-`navBack`/`navForward` werden beim Verlassen NICHT geleert (ein erneutes
-`v` auf demselben Bean kann die History sinnvoll fortsetzen) — nur beim
-nächsten NEUEN Sprung-Pfad-Start (frisches `v` auf ein ANDERES Bean bzw.
-`enter` aus Listen-Vollbild auf ein anderes Ziel) wird unten (History-Stack)
-präzisiert, wann sie zurückgesetzt werden.
+**Revidiert (Supervisor-Entscheid, E9 Task 8, bean `bt-1vbp`, 2026-07-16):**
+entgegen dem ursprünglichen Planner-Text hier („NICHT geleert", s. History
+darunter) werden `navBack`/`navForward` bei JEDEM Vollbild-Exit GELEERT —
+an allen drei Choke-Points (`keyDetailFocus`s `b==nil`-Guard, `keyDetailFocus`s
+Back-Case beim Sektions-Ebenen-Exit aus `fullscreenDetail`, `keyFullscreen`s
+`fullscreenList`-Exit, jeweils `update.go`/`view_fullscreen.go`). Grund:
+History-Leak-Vermeidung zwischen unabhängigen Vollbild-Sessions — ein
+erneutes `v` (auf demselben ODER einem anderen Bean) darf keine STALE
+History aus einer bereits verlassenen Session mitschleppen. Innerhalb EINER
+laufenden `fullscreenDetail`-Session bleibt die unten beschriebene Push-/
+Kappungs-Semantik (frischer Sprung kappt `navForward`) unverändert gültig.
 
 ### History-Stack (`ctrl+links`/`ctrl+rechts`, Fallback `[`/`]`)
 
@@ -1121,6 +1138,14 @@ Repräsentation selbst, nicht nur den angezeigten Bean).
   `fullscreenList`/Split-Modus sind sie unbelegte No-Ops (keine Kollision,
   `ctrl+links`/`ctrl+rechts` sind heute nirgends gebunden, verifiziert
   gegen `keymap.go`).
+- **Ergänzung (Supervisor-Entscheid, E9 Task 8, bean `bt-1vbp`, D02 — Lücke
+  weder im Bean noch ursprünglich hier spezifiziert):** ein per `navBack`/
+  `navForward` referenziertes Bean kann extern verschwinden (Watch-Reload,
+  Repo-Wechsel, paralleler Agent-Delete — dieselbe Trigger-Klasse wie der
+  `b==nil`-Guard oben). Back/Forward LOOPEN über solche toten Einträge
+  hinweg (Existenz-Check je Pop gegen `idx.ByID`) statt darauf zu landen —
+  ein leerer ODER vollständig toter Stack ist ein sauberer No-Op, kein
+  Trap (dieselbe „No-Op mit sauberem Zustand"-Linie wie der `b==nil`-Guard).
 
 **Terminal-Verfügbarkeit (PO-Implementierungshinweis, geprüft):**
 `bubbletea` v1.3.10 dekodiert `ctrl+left`/`ctrl+right` bereits nativ
