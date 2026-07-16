@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T06:21:08Z
+updated_at: 2026-07-16T06:22:49Z
 parent: bt-apmy
 ---
 
@@ -51,3 +51,16 @@ PO-Feedback-Runde 3 (2026-07-16, nach Live-Test von v1.0/E8). Nummerierung R3-lo
 ## Prozess
 
 Muster E8: Planner → Task-beans → sequentielle Implementer→Review-Kette. Reihenfolge-Empfehlung: Ursachen-Klärung B02/B05 zuerst (Investigator-Findings einarbeiten), dann D01-Edit-Umbau, B03, B04, D02-Footer, F01 zuletzt (größtes Stück, setzt B04.2 voraus).
+
+
+## B05 REDEFINIERT (2026-07-16, PO-Klarstellung im Chat)
+
+Kein Bug — US-08/D01 funktioniert (PO verbatim: "Ich sehe die Tags unter '1 META' aber
+nicht im Meta-Strip"). Neue Anforderung: Tags ZUSÄTZLICH im Kopfblock-Meta-Strip
+(Zeile unter dem Titel) anzeigen:
+
+    type: epic  status: in-progress  prio: !  tags: to-review
+
+Fix-Ort: detailHeaderBlock (view_detail_bean.go, E8-B02-Padding beachten — tags als
+letzte Spalte, variable Breite unkritisch da Zeilenende; tagsInline wiederverwenden).
+Investigator-Auftrag auf B02 reduziert.

@@ -7,7 +7,7 @@ priority: normal
 tags:
     - rejected
 created_at: 2026-07-15T19:21:19Z
-updated_at: 2026-07-16T06:21:24Z
+updated_at: 2026-07-16T06:22:49Z
 parent: bt-tct9
 ---
 
@@ -90,3 +90,10 @@ Status bleibt bewusst UNVERÄNDERT (PO-Gate, Review-Flow §5) — Tag
 PO-Sichtprüfung: "Kein tag sichtbar -> Nacharbeit erforderlich." Widerspricht dem
 E8-Abschluss-Smoke (live verifiziert '▷ tags: ● to-review'). Ursachen-Analyse läuft
 (Investigator). Reopened als E9-B05, umgehängt unter bt-tct9.
+
+
+## Klarstellung (2026-07-16, PO)
+
+US-08 im Kern ERFÜLLT — PO sieht Tags in [1] META. Die Rejection bezog sich auf den
+fehlenden tags-Eintrag im Kopfblock-Meta-Strip → getrackt als E9-B05 (bt-tct9).
+Dieses bean wird mit E9-B05 gemeinsam geschlossen.
