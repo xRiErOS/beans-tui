@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:47Z
-updated_at: 2026-07-16T21:51:13Z
+updated_at: 2026-07-16T22:10:06Z
 parent: bt-tct9
 ---
 
@@ -440,3 +440,113 @@ Cursor-Parameter mitschleppen).
    nicht nach einem Fokus-Zyklus. Vorbestehendes, gewolltes Verhalten — einen
    Satz beim PF-18-Nachtrag ergänzen.
 Quelle: Reviewer bt-98cb, APPROVED-Run.
+
+
+## NB-2-Abschluss (2026-07-17, Reopen bt-b0w0, US-05-Wiedervorlage)
+
+**Scope-Bestätigung:** NUR NB-2 (RELATIONS-Accordion scrollt nicht) — US-06/US-07
+unangetastet, kein Code-Berührungspunkt (`metaFields`/`accordion.go`s `isOpen`-Formel
+selbst nicht verändert).
+
+## Summary
+
+Root Cause bestätigt: `renderAccordionPane` (`view_browse_repo.go:548`) übergab den
+gesamten `renderAccordion`-Output an `renderPane` (`render_shared.go`), dessen
+Zeilen-Cap stumpf abschnitt. Fix: neuer Helfer `windowRelationsSection`
+(`view_browse_repo.go:612`, direkt hinter `renderAccordionPane`) windowt AUSSCHLIESSLICH
+die RELATIONS-Sektion (Gate `open == relationsSectionIdx+1`), Meta/Body/History
+unverändert. Implementer-Wahl (Planner bot beide an): `windowStart` (cursor-zentriert,
+dieselbe Konvention wie `treeRows`) bestimmt den Offset, `scrollView`
+(Chrome/Lobby/Help-Konvention) liefert Fenster+Indikator in einem Aufruf — reine
+Komposition zweier bestehender Bausteine, kein neuer Windowing-Algorithmus.
+`activeRelationLine` (Zeile 640) findet die Cursor-Zeile über `relationRowMarker`s
+eigenes `▶`-Glyph (einzige Stelle, an der es je auftritt — Continuation-Zeilen tragen
+nur Padding); kein aktiver Marker (RELATIONS offen, aber Fokus woanders, PF-18-
+Persistenz) → deterministischer Default oben (Zeile 0).
+
+Höhen-Budget: `avail := h - 5 - beanSectionCount` (5 = `detailHeaderBlock`, konstant;
+`beanSectionCount` = 1 Header-Zeile je Sektion, exklusiv-offen). Passt exakt: bei
+Windowing füllt `windowRelationsSection` genau `avail` Zeilen (Fenster + 1
+Indikator-Zeile), `renderPane` muss nie mehr auffüllen/kappen für diesen Fall.
+
+Da `renderFullscreenBody` (`view_fullscreen.go`) dieselbe `renderAccordionPane`
+aufruft (kein eigener Pfad), profitiert Vollbild automatisch — per Smoke UND
+dediziertem Unit-Test (`TestRenderFullscreenBodyRelationsWindowsSameAsSplitPane`)
+bestätigt, keine Drift.
+
+## Test-Output
+
+RED (vor Implementierung, `command go test ./internal/tui/ -run "WindowRelationsSection|RenderAccordionPaneRelations|RenderFullscreenBodyRelations"`):
+
+```
+internal/tui/view_browse_repo_test.go:235:12: undefined: windowRelationsSection
+internal/tui/view_browse_repo_test.go:258:9: undefined: windowRelationsSection
+internal/tui/view_browse_repo_test.go:283:9: undefined: windowRelationsSection
+FAIL	beans-tui/internal/tui [build failed]
+```
+
+GREEN (nach Implementierung, gleicher Filter, 8 Subtests):
+`TestWindowRelationsSectionNoopWhenBodyFitsBudget`,
+`TestWindowRelationsSectionWindowsAroundActiveMarkerLine`,
+`TestWindowRelationsSectionDefaultsTopWhenNoActiveMarker`,
+`TestRenderAccordionPaneRelationsKeepsSelectedChildVisibleAcrossAllPositions`
+(alle 12 fieldCursor-Positionen 0..11 einzeln geprüft),
+`TestRenderAccordionPaneRelationsShowsMoreEntriesIndicatorWhenOverflowing`,
+`TestRenderAccordionPaneRelationsFewEntriesUnchangedByWindowing`,
+`TestRenderFullscreenBodyRelationsWindowsSameAsSplitPane` — alle PASS.
+
+Golden-Gegenbeleg (`command go test ./internal/tui/ -run "TestTreeGolden|TestBacklogGolden|TestChromeGolden" -update` gefolgt von `git diff --stat internal/tui/testdata/`):
+KEINE Datei geändert (leerer Diff) — RELATIONS ist in allen Default-Goldens
+geschlossen (Browse-Default `accOpen==0`, PF-18), Windowing greift dort nie.
+
+Commit-Gate: `command go test ./...` → alle Packages ok (`internal/tui` 142.664s,
+zweiter Lauf gecached) · `command go test ./internal/tui/ -race` → ok (145.405s) ·
+`gofmt -l .` → leer · `command go vet ./...` → leer ·
+`command go test ./... -short` 2x → ok/cached.
+
+## Smoke
+
+tmux, `bin/bt`, Bean `bt-apmy` (Milestone, 11 Children — mehrere Titel mehrzeilig
+umbrechend, daher 18-28 RELATIONS-Zeilen je nach Panebreite statt 11).
+
+- **100×30, Tree, Split:** `3` öffnet RELATIONS, `l`+`k` navigiert Feld-Cursor durch
+  alle Einträge — Fenster folgt sichtbar (`L 1–10/18 ↓` → `↑ L 3–12/18 ↓` →
+  `↑ L 9–18/18` am Ende, `▶` bleibt immer sichtbar). Kein `Fields:` mehr.
+- **Vollbild (100×24 nach Resize, um Overflow zu erzwingen):** identisches Verhalten
+  über `renderFullscreenBody` — `↑ L 6–10/10`, `▶` auf letztem Child sichtbar. Bei
+  voller 100×30-Höhe passen alle 11 Children ohne Windowing (breitere Pane → kürzere
+  Zeilen) — korrektes No-Op, kein Bug.
+- **Backlog:** einziger Backlog-sichtbarer Bean in diesem Repo-Stand ist `bt-l8e7`
+  (0 Relations) — `(no relations)`-Fall korrekt, kein `Fields:`. Kein Backlog-
+  sichtbarer Bean mit genug Relations für einen LIVE-Overflow-Beleg vorhanden;
+  abgedeckt stattdessen durch Code-Identität (`renderBacklogDetailPane` ruft
+  dieselbe `renderBeanAccordionPane`/`renderAccordionPane` wie Tree, `view_browse_
+  backlog.go:213`, unverändert) + die Unit-Tests, die den Caller nicht
+  unterscheiden.
+- **80 Spalten (Tree):** `L 19–28/28` am Ende (`▶` bt-heg9 sichtbar), `L 1–10/28 ↓`
+  am Anfang (Indikator flippt korrekt) — hängender Einzug bleibt unter
+  Zeilenumbruch-Stress konsistent (B04, unverändert).
+- **120 Spalten (Tree):** `↑ L 3–12/15 ↓` mittig im Fenster, `▶` bt-ntoz sichtbar,
+  beide Pfeile korrekt (mehr oben UND unten).
+
+## Deviations/ERRATA
+
+Keine Abweichung von der Planner-Konkretisierung. Zwei dokumentierte Randnotizen:
+
+1. `avail <= 0` (h zu klein selbst für den fixen Chrome, 9 Zeilen) ist ein
+   bewusster No-Op-Fallback (Body unverändert, `renderPane`s alter Cap greift) —
+   vorbestehender Edge-Case, außerhalb NB-2-Scope, im Code-Kommentar
+   (`windowRelationsSection`) explizit benannt, live via extremes Resize (18 Zeilen
+   Fensterhöhe) verifiziert: kein Crash, sauberer alter Abschneide-Effekt.
+2. Backlog-Live-Overflow-Beleg fehlt mangels passendem Fixture-Bean in diesem
+   Repo-Stand (s. Smoke) — durch Code-Identität + Unit-Tests kompensiert, kein
+   ungetesteter Pfad.
+
+## Notes for T(n+1) (bt-39cl, Platzhalter-Zeile in filteredBeanNode)
+
+Dieselbe Datei (`view_browse_repo.go`), aber KEIN Overlap: `flattenTree`/
+`appendBeanNode`/`flattenTreeFiltered` (Zeilen 40-248, `filteredBeanNode`-Umfeld)
+liegen weit vor den NB-2-Änderungen (`renderAccordionPane` jetzt Zeile 548,
+`windowRelationsSection`/`activeRelationLine` Zeilen 612-651, neu ans Dateiende
+zwischen `renderAccordionPane` und `searchShield` eingefügt). Kein gemeinsamer
+Funktionsrumpf, kein Merge-Konflikt-Risiko zu erwarten.
