@@ -1,11 +1,11 @@
 ---
 # bt-b0w0
 title: 'RELATIONS-Sektion: Dopplung raus, Pfeil-selektierbar, hängender Einzug (B04)'
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:47Z
-updated_at: 2026-07-16T11:23:57Z
+updated_at: 2026-07-16T11:32:09Z
 parent: bt-tct9
 ---
 
@@ -323,3 +323,39 @@ belegt, nicht nur behauptet. Ansonsten keine Abweichung von Architektur-Vorgabe/
 3. F03: Test mit lipgloss.SetColorProfile(termenv.TrueColor) + defer-Restore, Indent gegen ECHTEN relationRow-Präfix.
 4. F04: Regressionstest langer Parent-Titel: Klick auf Wrap-Folgezeile → Section-Hit; Klick auf Sektion NACH mehrzeiligem RELATIONS → kein Shift.
 Alle vier in dieser Fix-Runde (F02-F04 sichern die adversarial geprüften Pfade dauerhaft).
+
+
+
+## Fix-Runde 1 (2026-07-16, Commit 91a8c70)
+
+| Fxx | Status | Umsetzung |
+|-----|--------|-----------|
+| F01 | behoben | `hangingIndentWrap`: `wrapped := ansi.Hardwrap(ansi.Wordwrap(text, contW, ""), contW, true)` — exakt das `wrapText`-Muster (view.go:63-68), wie im Fix-Rezept. Neuer Test `TestHangingIndentWrapHardBreaksSpacelessLongToken` (103-Zeichen-spaceless-Token bei w=30, Assertion `lipgloss.Width` jeder Zeile ≤ w). |
+| F02 | behoben (Pin) | Neuer Test `TestHangingIndentWrapCJKDoubleWidthTitleStaysWithinWidth`: CJK-Titel + Emoji (double-width, spaceless), Breiten-Assertion via `lipgloss.Width` je Zeile ≤ w + Continuation-Indent-Check. War vor dem F01-Fix EBENFALLS rot (spaceless CJK ist die Doppelbreiten-Arm desselben Overflow-Bugs) — belegt beide Findings mit einem Fix. |
+| F03 | behoben (Pin) | Neuer Test `TestHangingIndentWrapIndentMatchesStyledPrefixUnderTrueColor`: `lipgloss.SetColorProfile(termenv.TrueColor)` + defer-Restore auf Ascii (Ambient-Default der Suite), render-grounded durch `relationRow` selbst (echte Produktions-Präfix-Konstruktion mit ANSI-Bytes, `strings.Contains(out, "\x1b[")`-Setup-Assertion), Continuation-Indent gegen die Titel-Start-Spalte der ANSI-gestrippten ersten Zeile. GRÜN gegen den Ist-Code (Verhalten war korrekt, wie Reviewer sandbox-verifiziert). |
+| F04 | behoben (Pin) | Neuer Test `TestDetailClickRowWrapContinuationLineResolvesToRelationsSectionHit` (mouse_test.go): RELATIONS aktiv+offen, Parent-Titel (ep-1) mit `WRAPTOKEN` auf der Wrap-Folgezeile (Setup-Assertion: Token-Zeile trägt NICHT den `ep-1`-Präfix). Klick auf die Folgezeile → `secIdx=relationsSectionIdx, fieldIdx=-1`; Klick auf `[4]` HISTORY danach → `secIdx=historySectionIdx` (kein Shift). GRÜN gegen den Ist-Code. |
+
+### RED-Belege
+
+F01 + F02 (vor dem Fix, `command go test ./internal/tui/ -run "TestHangingIndentWrap..." -v`):
+
+```
+=== RUN   TestHangingIndentWrapHardBreaksSpacelessLongToken
+    view_detail_bean_test.go:694: expected the 103-char spaceless token to hard-break into >=2 lines at w=30, got 1 line (110 cells wide)
+--- FAIL: TestHangingIndentWrapHardBreaksSpacelessLongToken (0.00s)
+=== RUN   TestHangingIndentWrapCJKDoubleWidthTitleStaysWithinWidth
+    view_detail_bean_test.go:717: expected the double-width title to wrap into >=2 lines at w=30, got 1 line (77 cells wide)
+--- FAIL: TestHangingIndentWrapCJKDoubleWidthTitleStaysWithinWidth (0.00s)
+```
+
+F03/F04: GRÜN gegen den Ist-Code (erwartungsgemäß — Reviewer hatte das Verhalten sandbox-verifiziert, die Tests sind die dauerhaften Pins, kein Produktionscode-Fix nötig).
+
+### GREEN-Belege
+
+Alle 15 Subtests der betroffenen Stränge (`-run "HangingIndent|RelationsSectionBody|TestDetailClickRow"`) PASS, darunter alle 4 neuen.
+
+Commit-Gate: `command go test ./...` → alle Packages `ok` (`internal/tui` 138.028s) · `command go test ./internal/tui/ -race` → `ok` (141.276s) · `gofmt -l .` → leer · `command go vet ./...` → leer · `command go test ./... -short` 2x → `ok`/cached · Goldens-Gegenbeleg ohne `-update`: alle 5 Subtests PASS, kein Golden geändert (kein Fixture-Titel spaceless-lang — der Hardwrap-Pass ändert den sichtbaren Output der bestehenden Fixtures nicht).
+
+### Notes for T5 — AKTUALISIERT (supersedet den ersten Spiegelstrich oben)
+
+`hangingIndentWrap` ist jetzt hardwrap-gesichert: Zwei-Pass `ansi.Hardwrap(ansi.Wordwrap(text, contW, ""), contW, true)` — spaceless Long-Tokens (URLs, Komposita, lange IDs, CJK) brechen hart an der Zellgrenze statt überzulaufen, double-width (CJK/Emoji) wird je ZELLE budgetiert. Signatur/Ablageort unverändert (`func hangingIndentWrap(prefix, text string, w int) string`, `internal/tui/view_detail_bean.go` neben `relationRow`). T5/bt-4mo9 kann den Helfer ohne eigene Wrap-Härtung übernehmen; weiterhin gilt: echte Picker-Breite (`wideModalWidth(...)`) durchreichen, NICHT `relationRowNoWrap`.
