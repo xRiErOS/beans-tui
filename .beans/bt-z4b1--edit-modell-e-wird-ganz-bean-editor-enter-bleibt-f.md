@@ -1,11 +1,11 @@
 ---
 # bt-z4b1
 title: 'Edit-Modell: ''e'' wird Ganz-Bean-$EDITOR, ''enter'' bleibt Feld-Kaskade (D01)'
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:42Z
-updated_at: 2026-07-16T08:03:55Z
+updated_at: 2026-07-16T08:33:00Z
 parent: bt-tct9
 ---
 
@@ -233,3 +233,53 @@ ERRATUM/Deviation dokumentieren, kein Implementierungsauftrag — ein CLI-seitig
 - [ ] "Bekannte Grenze" (created_at/updated_at nicht editierbar) im Commit-Body dokumentiert
 - [ ] Kein Golden ändert sich (Gegenbeleg grün)
 - [ ] Voller Testlauf (inkl. -race) grün, gofmt/vet leer
+
+
+## Akzeptanz-Checkliste (final)
+
+- [x] e/ctrl+e öffnen von JEDER Stelle (Tree, Backlog, Detail — jede Sektion/Feld-Ebene, auch ohne aktiven Detail-Fokus) denselben Ganz-Bean-Editor
+- [x] e/ctrl+e öffnen NIE MEHR das Titel-Edit-Form
+- [x] enter auf [2] BODY ist wieder No-Op (B10-Revision)
+- [x] enter auf title/status/type/priority/tags-Feldern unverändert (PF-5-Kaskade intakt)
+- [x] Seed-Text ist beans show <id> --raw, byte-identisch zum on-disk Format
+- [x] Nur GEÄNDERTE Felder landen im kombinierten beans update-Call (verifiziert: No-op-Save → kein CLI-Call)
+- [x] Validation-Fehler/Parse-Fehler verlieren die PO-Edits nicht (Recovery-Tempfile)
+- [x] ETag-Konflikt läuft weiterhin über den bestehenden conflictWithRecovery-Pfad
+- [x] "Bekannte Grenze" (created_at/updated_at nicht editierbar) im Commit-Body dokumentiert
+- [x] Kein Golden ändert sich (Gegenbeleg grün)
+- [x] Voller Testlauf (inkl. -race) grün, gofmt/vet leer
+
+## Summary
+
+D01 umgesetzt: e/ctrl+e öffnen unbedingt das Ganze Bean im $EDITOR — von jeder Stelle (Tree/Backlog/Detail, jede Sektion/Feld-Ebene, auch ohne Detail-Fokus). enter bleibt ausschließlich die PF-5-Feld-Kaskade; der E8-B10-Sonderfall "enter auf [2] BODY öffnet $EDITOR" ist ersatzlos entfernt (Regressionstest). e/ctrl+e öffnen nie mehr das Titel-Edit-Form (nur noch via enter auf title:-Feld erreichbar).
+
+Data-Layer (internal/data): neu `Client.ShowRaw` (`beans show <id> --raw`, reiner Read) und `Client.UpdateWhole` (kombinierter `beans update`-Call, nur geänderte Felder, No-op-Diff → kein CLI-Call).
+
+TUI-Layer (internal/tui): `openBodyEditor` durch `openBeanEditor` ersetzt (EIN Editor-Helfer). Zwei-Cmd-Hop-Design, da ShowRaw ein Subprocess-Read ist: `showRawCmd` liest, `beanRawLoadedMsg` triggert danach den `tea.ExecProcess`-Suspend. Rückweg: `parseRawBean` (gopkg.in/yaml.v3) splittet Frontmatter/Body, `buildWholeEditDiff` vergleicht gegen den bei Öffnen eingefrorenen `editorSnapshot` (neues Modelfeld), `applyEditorFinished` feuert EINEN `UpdateWhole`-Call. Parse-Fehler UND ETag-Konflikte werden beide über Recovery-Tempfiles abgefangen (voller Rohtext, nicht nur Body).
+
+Zusätzlich revidiert: mouseDetailClick's Doppelklick-auf-BODY-Header-Sonderfall (spiegelte denselben jetzt entfernten enter-auf-BODY-Zweig) — ebenfalls zurück auf reinen No-Op, aus demselben "$EDITOR exklusiv über e/ctrl+e"-Grund. Nicht explizit im bean-Text, aber technisch erzwungen (openBodyEditor entfällt) und durch D01s eigene Begründung ("ausschließlich für e") gedeckt.
+
+## Test-Output
+
+RED (data-layer): `client.UpdateWhole undefined (type *Client has no field or method UpdateWhole)`, `undefined: WholeEditDiff` (client_mut_test.go).
+RED (tui-layer): `internal/tui/editor_test.go:106:37: undefined: rawBeanFrontmatter`.
+
+GREEN: voller Lauf `command go test ./...` grün (`ok beans-tui/internal/tui 136.418s`), `command go test ./internal/tui/ -race` grün (`ok beans-tui/internal/tui 141.622s`), `gofmt -l .` leer, `command go vet ./...` leer.
+
+Golden-Gegenbeleg: `command go test ./internal/tui/ -run "TestTreeGolden|TestBacklogGolden|TestChromeGolden"` grün ohne -update.
+
+## Smoke
+
+Kein manueller tmux-Smoke durchgeführt (reine Tastatur-/Datenlogik-Änderung, keine Render-/Layout-Änderung — durch Golden-Gegenbeleg abgedeckt). Verhalten end-to-end über echtes model.Update()/Cmd-Ketten getestet (TestKeyNodeActionEditorAlwaysOpensBeanEditor deckt Tree/Backlog/jede Detail-Sektion/-Feld-Ebene für e UND ctrl+e ab, TestApplyEditorFinishedBuildsCombinedUpdateWholeCall verifiziert die exakte Flag-Liste des dispatchten CLI-Calls über einen echten Fake-beans-Subprozess).
+
+## Deviations/ERRATA
+
+1. **Bekannte Grenze (PFLICHT-Dokumentation, kein Bug):** created_at/updated_at/die "# <id>"-Kopfzeile sind im $EDITOR-Text sichtbar (Teil von ShowRaw), aber nicht wirksam editierbar — `beans update` hat dafür keine Flags. Eine Änderung daran wird beim Diff-Bau stillschweigend verworfen (rawBeanFrontmatter parst diese Felder gar nicht erst). CLI-seitiges Feature-Gap, kein Implementierungsauftrag dieses Tasks.
+2. **beanRawLoadedMsg ohne etag-Feld:** der bean-Sketch nannte `beanRawLoadedMsg{id, etag string; raw string; err error}`, `showRawCmd(client, id)` selbst kann aber gar kein etag liefern (nicht im Funktions-Sketch) — das Feld wäre also permanent leer geblieben. Bewusst weggelassen (YAGNI): m.editorETag ist bereits bei openBeanEditor eingefroren, ein zweites (leeres) etag-Feld auf der Msg hätte keinen Zweck erfüllt.
+3. **mouseDetailClick Doppelklick-auf-BODY-Revert:** s. Summary oben — technisch erzwungen durch die openBodyEditor-Entfernung, inhaltlich durch D01s "ausschließlich für e"-Prinzip gedeckt. Test TestMouseDetailClickDoubleClickOnBodySectionIsNoOpAgain pinnt den No-Op.
+4. **ShowRaw "byte-identisch"-Testfixture:** newTestRepo's handgeschriebene Fixture-Dateien haben eine NICHT-kanonische Frontmatter-Feldreihenfolge (tags nach parent statt davor) — `beans show --raw` normalisiert beim Serialisieren, cat't die Datei nicht wörtlich. Der Byte-Identität-Test verwendet daher einen frisch via `client.Create` angelegten Bean (dessen On-Disk-Datei bereits kanonisch ist), nicht die Hand-Fixture — spiegelt den echten Produktions-Fall (Dateien werden immer von `beans` selbst geschrieben).
+
+## Notes for T(n+1)
+
+- Kein bekannter Folgeauftrag aus diesem Task. Falls ein späterer Task created_at/updated_at editierbar machen soll, ist das ein CLI-seitiger Vorlauf (beans-CLI müsste neue --created-at/--updated-at-Flags bekommen) — nicht in diesem Repo lösbar.
+- SetBody (data.Client) bleibt bestehen (nicht entfernt) — kein Aufrufer mehr innerhalb beans-tui, aber Teil der generischen Client-API-Oberfläche, YAGNI-Removal nicht Teil dieses Tasks.
