@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:35Z
-updated_at: 2026-07-16T18:57:23Z
+updated_at: 2026-07-16T19:23:42Z
 parent: bt-362n
 blocked_by:
     - bt-604w
@@ -466,6 +466,10 @@ echtes Bean berührt). `bin/bt` (git-ignored) ebenfalls entfernt.
   ein erneutes Page-Open (D03) zeigt den frischen Stand. Kein
   Akzeptanzkriterium verlangt einen Live-Refresh der bereits offenen Page;
   dokumentiert für T7/eine mögliche Fast-Follow-Notiz.
+- **Commit-Titel gegenüber dem Checklisten-Wortlaut auf ≤50 Zeichen
+  gekürzt** (T5-F02, nachgetragen in T7/bt-sohl): final
+  `feat(tui): E10 Tag-Definition umbenennen (Rename)` (49 Zeichen) —
+  inhaltlich deckungsgleich, nur Längen-Regel.
 - Sonst keine Abweichungen vom Bean-Body.
 
 ## Notes for T7

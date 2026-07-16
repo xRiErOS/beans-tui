@@ -461,8 +461,12 @@ func TestKeyTagMgmtInputRejectsDuplicateAgainstExistingRows(t *testing.T) {
 	m = nm.(model)
 	m.tagMgmtInput.SetValue("already-there")
 	nm2, _ := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := nm2.(model); !got.tagMgmtInputActive || got.tagMgmtInputErr == "" {
-		t.Fatalf("want rejected duplicate, got %+v", got)
+	// Exact wording pinned by T5-F01 (bean bt-sohl): neutral "name already in
+	// use" -- the dedupe set spans defined AND free rows, so the old "tag
+	// already defined" text was factually wrong for free-row collisions.
+	if got := nm2.(model); !got.tagMgmtInputActive || got.tagMgmtInputErr != "name already in use: already-there" {
+		t.Fatalf("want rejected duplicate with neutral error text, got active=%v err=%q",
+			got.tagMgmtInputActive, got.tagMgmtInputErr)
 	}
 }
 
@@ -483,8 +487,12 @@ func TestKeyTagMgmtInputRejectsDuplicateAgainstFreeRowToo(t *testing.T) {
 	m = nm.(model)
 	m.tagMgmtInput.SetValue("free-tag")
 	nm2, _ := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := nm2.(model); !got.tagMgmtInputActive || got.tagMgmtInputErr == "" {
-		t.Fatalf("want rejected duplicate against a FREE row too, got %+v", got)
+	// T5-F01 (bean bt-sohl): THIS is the case the old "tag already defined:"
+	// text got factually wrong -- "free-tag" is NOT defined, only in use.
+	// Exact neutral wording pinned.
+	if got := nm2.(model); !got.tagMgmtInputActive || got.tagMgmtInputErr != "name already in use: free-tag" {
+		t.Fatalf("want rejected duplicate against a FREE row with neutral error text, got active=%v err=%q",
+			got.tagMgmtInputActive, got.tagMgmtInputErr)
 	}
 }
 
@@ -1591,8 +1599,11 @@ func TestKeyTagMgmtInputRenameRejectsDuplicateAgainstOtherExistingName(t *testin
 
 	nm2, _ := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
 	got := nm2.(model)
-	if !got.tagMgmtInputActive || got.tagMgmtInputErr == "" {
-		t.Fatalf("want rejected duplicate against a DIFFERENT existing name, got %+v", got)
+	// Exact wording pinned by T5-F01 (bean bt-sohl), same neutral text as the
+	// Create-mode dedupe tests above.
+	if !got.tagMgmtInputActive || got.tagMgmtInputErr != "name already in use: bravo" {
+		t.Fatalf("want rejected duplicate against a DIFFERENT existing name with neutral error text, got active=%v err=%q",
+			got.tagMgmtInputActive, got.tagMgmtInputErr)
 	}
 }
 

@@ -406,7 +406,7 @@ func (m model) openTagMgmtInput(mode, prefill string) (tea.Model, tea.Cmd) {
 // own wording). A defined row's name seeds BOTH the input's visible text AND
 // tagMgmtInputTarget in ONE openTagMgmtInput("rename", row.name) call (T3's
 // own "Notes for T5" pointer) -- keyTagMgmtInput's existing dedupe loop
-// already excludes tagMgmtInputTarget from the "already defined" check
+// already excludes tagMgmtInputTarget from the "name already in use" check
 // (T3-introduced `name != m.tagMgmtInputTarget`), so a PO who re-confirms
 // the unchanged old name is never rejected as a duplicate of themselves.
 func (m model) openTagMgmtRename() (tea.Model, tea.Cmd) {
@@ -450,7 +450,13 @@ func (m model) keyTagMgmtInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		for _, r := range m.tagMgmtRows {
 			if r.name == name && name != m.tagMgmtInputTarget {
-				m.tagMgmtInputErr = "tag already defined: " + name
+				// Neutral wording (T5-F01, bean bt-sohl): the dedupe set spans
+				// defined AND free rows alike -- the former "tag already
+				// defined" text was factually wrong when the collision hit a
+				// free/undefined row. The rejection itself is unchanged
+				// (rename-onto-free = merge semantics, PO question Q04 in
+				// epic bt-362n).
+				m.tagMgmtInputErr = "name already in use: " + name
 				return m, nil
 			}
 		}
