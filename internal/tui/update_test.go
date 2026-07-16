@@ -154,9 +154,19 @@ func TestCursorMovesAndExpands(t *testing.T) {
 	}
 }
 
-// TestQuitConfirm guards the quit-confirm modal: q opens it (visible in
-// View()), esc cancels it (gone from View()), enter resolves to tea.Quit.
-func TestQuitConfirm(t *testing.T) {
+// TestQuitConfirmNoReposConfigured guards the quit-confirm modal's
+// open/cancel round trip: q opens it (visible in View()), esc cancels it
+// (gone from View()). Its final enter->tea.Quit assertion is the B08/A2
+// Randfall specifically (bean bt-1u0t, epic-E8-plan.md Task 5) --
+// fixtureModel/newModel never load config.yaml, so m.settings.Repos is nil
+// here, which is exactly the "no repos configured" case that still quits
+// directly. RENAMED from the pre-B08 "TestQuitConfirm" (which read as if
+// q+enter from Browse always quit outright -- true before A2, now only true
+// in this Randfall) to avoid pinning stale behavior by name; the cascade's
+// other two stages (stage 1: repos configured -> Lobby; stage 2: already in
+// the Lobby -> Quit) are covered by box_confirm_quit_test.go's
+// TestKeyConfirmQuitEnter* tests.
+func TestQuitConfirmNoReposConfigured(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.width, m.height = 80, 24
 
