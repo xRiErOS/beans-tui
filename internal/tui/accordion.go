@@ -31,16 +31,19 @@ import (
 
 // relationField is a navigation target inside a section's field list --
 // EITHER a jump target (Relations section, kind == "") OR a Meta field (PF-4,
-// E7 T4, bean bt-kyj5, design-spec.md §15): kind drives T6's future
-// enter-dispatch (status/type/priority open the seeded Value-Menu, title
-// opens the Title-Edit-Form, readonly is a No-Op for created_at/updated_at).
-// beanID == "" marks either an unresolved/dangling relation reference (not
-// jumpable) or any Meta field (Meta fields are never jump targets, beanID is
-// always "" there).
+// E7 T4, bean bt-kyj5, design-spec.md §15): kind drives T6's enter-dispatch
+// (status/type/priority open the seeded Value-Menu, tags opens the
+// Tag-Picker, title opens the Title-Edit-Form). beanID == "" marks either an
+// unresolved/dangling relation reference (not jumpable) or any Meta field
+// (Meta fields are never jump targets, beanID is always "" there). The
+// former "readonly" kind (created_at/updated_at, a No-Op) was REMOVED by
+// bt-lg68 (PO-Nebenbefund, US-Review Runde 3): those two Meta entries
+// doubled up with HISTORY, which is now the sole Created/Updated source --
+// metaFields (view_detail_bean.go) no longer produces "readonly" entries.
 type relationField struct {
 	beanID string // target bean ID; "" for an unresolved/dangling reference (not jumpable) or any Meta field
 	label  string // pre-rendered row text (theme colors already applied)
-	kind   string // "" = jump (Relations, E2 behavior unchanged) | "status"|"type"|"priority" = Value-Menu seeded on group | "tags" = Tag-Picker (PF-15/D01, E8 Task 1, bean bt-e6q9) | "title" = Title-Edit-Form | "readonly" = No-Op (created_at/updated_at)
+	kind   string // "" = jump (Relations, E2 behavior unchanged) | "status"|"type"|"priority" = Value-Menu seeded on group | "tags" = Tag-Picker (PF-15/D01, E8 Task 1, bean bt-e6q9) | "title" = Title-Edit-Form
 }
 
 // accordionSection mirrors devd's shape minus the editor-specific parts.

@@ -6,10 +6,13 @@ package tui
 // is no reason to hide an empty section; digit jump 1..4 stays meaningful for
 // every bean. Section titles are uppercase English (PF-7, E7 T3 deliberately
 // left these 4 to this task -- bt-w9o8 "Notes for T4"). META additionally
-// carries a NEW, non-collapsible (PF-1) 7-entry field list (PF-4 + PF-15/D01)
+// carries a NEW, non-collapsible (PF-1) 5-entry field list (PF-4 + PF-15/D01)
 // instead of its old 4-line status/type/priority/tags summary -- tags
 // rejoined Meta as its own field (E8 Task 1, bean bt-e6q9, directly after
-// priority).
+// priority). Shrunk from 7 to 5 entries by bt-lg68 (PO-Nebenbefund, US-
+// Review Runde 3): created_at/updated_at were doubly rendered in META AND
+// HISTORY -- removed from META, HISTORY (historieSectionBody) stays the
+// sole source.
 
 import (
 	"fmt"
@@ -83,17 +86,34 @@ func beanSections(idx *data.Index, b *data.Bean, bodyW int, focused bool, active
 	return secs
 }
 
-// metaFieldLabels are the 7 fixed row labels of the Meta field list (PF-4 +
-// PF-15/D01, E8 Task 1, bean bt-e6q9), left-padded to a common width (12) so
-// every value column aligns -- exact spacing verified against design-spec.md
-// §15's mockup (every label pads to 12 cells: "title:      ", "created_at: ",
-// etc. -- "created_at: " stays the longest at 12 chars, tags: fits well
-// within the existing padding width unchanged).
-var metaFieldLabels = [...]string{"title:", "status:", "type:", "priority:", "tags:", "created_at:", "updated_at:"}
+// metaFieldLabels are the 5 fixed row labels of the Meta field list (PF-4 +
+// PF-15/D01, E8 Task 1, bean bt-e6q9; shrunk from 7 to 5 by bt-lg68, PO-
+// Nebenbefund US-Review Runde 3: created_at/updated_at were doubly rendered
+// here AND in HISTORY -- removed from META, HISTORY stays the sole source).
+// metaFieldLabelWidth (below) computes the shared padding width FROM this
+// slice, not a hand-typed literal -- bt-lg68's own removal is exactly the
+// case the plan flagged: "created_at:" used to be the longest label (12
+// cells incl. padding), and hard-coding that width would have silently gone
+// stale the moment it was removed.
+var metaFieldLabels = [...]string{"title:", "status:", "type:", "priority:", "tags:"}
 
-// metaFields builds the 7 kind-tagged Meta field entries (PF-4 + PF-15/D01,
-// design-spec.md §15): title / status / type / priority / tags / created_at
-// / updated_at, in that fixed order. status/type/priority reuse T2's
+// metaFieldLabelWidth is metaFieldLabels' common left-pad width: one cell
+// past the longest label ("priority:", 9 chars) -- computed here so a future
+// change to metaFieldLabels can never let a hard-coded width literal drift
+// out of sync again (bt-lg68 ripple-check).
+var metaFieldLabelWidth = func() int {
+	w := 0
+	for _, l := range metaFieldLabels {
+		if len(l) > w {
+			w = len(l)
+		}
+	}
+	return w + 1
+}()
+
+// metaFields builds the 5 kind-tagged Meta field entries (PF-4 + PF-15/D01,
+// design-spec.md §15; shrunk from 7 to 5 by bt-lg68): title / status / type
+// / priority / tags, in that fixed order. status/type/priority reuse T2's
 // GLYPH-producing theme helpers (StatusIcon/TypeIcon/Priority) -- NOT the
 // word, unlike the Kopfblock (detailHeaderBlock, below), which uses the word
 // for type/status. tags (PF-15/D01, E8 Task 1) reuses the previously
@@ -101,8 +121,11 @@ var metaFieldLabels = [...]string{"title:", "status:", "type:", "priority:", "ta
 // "● tag" swatches, or a theme.Dim "(none)" placeholder for an empty Tags
 // slice. beanID is always "" (Meta fields are never Beziehungen-style jump
 // targets); kind drives the enter-dispatch (status/type/priority/tags ->
-// seeded Value-Menu / Tag-Picker, title -> Title-Edit-Form, readonly ->
-// No-Op).
+// seeded Value-Menu / Tag-Picker, title -> Title-Edit-Form). created_at/
+// updated_at (formerly two trailing "readonly" No-Op entries here) are
+// REMOVED by bt-lg68 -- HISTORY (historieSectionBody, below) is now the
+// sole renderer of Created/Updated; fmtTime stays shared between the two so
+// their formatting can never drift apart again.
 func metaFields(b *data.Bean) []relationField {
 	priority := b.Priority
 	if priority == "" {
@@ -118,22 +141,21 @@ func metaFields(b *data.Bean) []relationField {
 		{kind: "type", label: theme.TypeIcon(b.Type)},
 		{kind: "priority", label: theme.Priority(priority)},
 		{kind: "tags", label: tags},
-		{kind: "readonly", label: fmtTime(b.CreatedAt)},
-		{kind: "readonly", label: fmtTime(b.UpdatedAt)},
 	}
 }
 
-// metaSectionBody renders the 7-entry Meta field list (PF-4 + PF-15/D01): a ▷/▶ cursor
-// column (PF-12: ALWAYS one or the other, never omitted -- the gutter is
-// inherently stable by construction here, unlike the two accordion.go call
-// sites PF-12 had to retrofit) followed by the field's label (padded to
-// metaFieldLabels' common width) and its pre-rendered value (metaFields).
-// ▶ (Accent) marks the row only when active is true AND fieldIdx matches
-// that row's index -- mirrors render_shared.go's renderPane list-cursor
-// convention (only the marker glyph is accent-tinted, not the whole row).
-// Wrapped via wrapText like the section body always has been (B01, E2-T1-
-// quality-review, MANDATORY carry-over) -- an overlong title must wrap
-// instead of overflowing the Detail pane's bordered width.
+// metaSectionBody renders the 5-entry Meta field list (PF-4 + PF-15/D01;
+// shrunk from 7 to 5 by bt-lg68): a ▷/▶ cursor column (PF-12: ALWAYS one or
+// the other, never omitted -- the gutter is inherently stable by
+// construction here, unlike the two accordion.go call sites PF-12 had to
+// retrofit) followed by the field's label (padded to metaFieldLabelWidth)
+// and its pre-rendered value (metaFields). ▶ (Accent) marks the row only
+// when active is true AND fieldIdx matches that row's index -- mirrors
+// render_shared.go's renderPane list-cursor convention (only the marker
+// glyph is accent-tinted, not the whole row). Wrapped via wrapText like the
+// section body always has been (B01, E2-T1-quality-review, MANDATORY
+// carry-over) -- an overlong title must wrap instead of overflowing the
+// Detail pane's bordered width.
 func metaSectionBody(b *data.Bean, bodyW int, active bool, fieldIdx int) string {
 	fields := metaFields(b)
 	var lines []string
@@ -142,7 +164,7 @@ func metaSectionBody(b *data.Bean, bodyW int, active bool, fieldIdx int) string 
 		if active && fieldIdx == i {
 			marker = theme.Accent.Render("▶ ")
 		}
-		label := theme.Muted.Render(fmt.Sprintf("%-12s", metaFieldLabels[i]))
+		label := theme.Muted.Render(fmt.Sprintf("%-*s", metaFieldLabelWidth, metaFieldLabels[i]))
 		lines = append(lines, marker+label+f.label)
 	}
 	return wrapText(strings.Join(lines, "\n"), bodyW)

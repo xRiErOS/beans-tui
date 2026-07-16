@@ -1482,8 +1482,8 @@ func TestKeyNodeActionEditorAlwaysOpensBeanEditor(t *testing.T) {
 
 // metaFieldCursorTo steps `down` n times from a just-entered Meta field level
 // (fieldCursor 0, title) to reach the field at index n -- mirrors metaFields'
-// fixed order (title/status/type/priority/tags/created_at/updated_at, PF-15/
-// D01).
+// fixed order (title/status/type/priority/tags, PF-15/D01; shrunk from 7 to
+// 5 by bt-lg68).
 func metaFieldCursorTo(t *testing.T, m model, n int) model {
 	t.Helper()
 	for i := 0; i < n; i++ {
@@ -1587,56 +1587,19 @@ func TestKeyDetailFocusEnterOnTitleFieldOpensEditTitleForm(t *testing.T) {
 	}
 }
 
-// TestKeyDetailFocusEnterOnCreatedAtFieldNoop and ...UpdatedAtField... guard
-// the "readonly" kind: created_at/updated_at (indices 4/5) are cursor-
-// addressable (PF-4 mockup shows ▷ there too) but system-managed -- enter is
-// a no-op, no overlay/form opens, detailFocus/detailLevel/fieldCursor stay
-// exactly where they were.
-func TestKeyDetailFocusEnterOnCreatedAtFieldNoop(t *testing.T) {
-	m := fixtureModel(t, fixtureBeans())
-	m = focusBean(m, "tk-2")
-	m = step(t, m, keyMsg(tea.KeyTab))
-	m = step(t, m, keyMsg(tea.KeyEnter))
-	m = metaFieldCursorTo(t, m, 5) // created_at (PF-15/D01: tags now occupies index 4)
-
-	m = step(t, m, keyMsg(tea.KeyEnter))
-
-	if m.overlay != overlayNone {
-		t.Fatalf("overlay = %v, want overlayNone (readonly field)", m.overlay)
-	}
-	if m.form != nil {
-		t.Fatal("enter on created_at must not open a form")
-	}
-	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 5 {
-		t.Fatalf("enter on created_at must be a pure no-op: detailFocus=%v detailLevel=%d fieldCursor=%d",
-			m.detailFocus, m.detailLevel, m.fieldCursor)
-	}
-}
-
-func TestKeyDetailFocusEnterOnUpdatedAtFieldNoop(t *testing.T) {
-	m := fixtureModel(t, fixtureBeans())
-	m = focusBean(m, "tk-2")
-	m = step(t, m, keyMsg(tea.KeyTab))
-	m = step(t, m, keyMsg(tea.KeyEnter))
-	m = metaFieldCursorTo(t, m, 6) // updated_at (PF-15/D01: tags now occupies index 4)
-
-	m = step(t, m, keyMsg(tea.KeyEnter))
-
-	if m.overlay != overlayNone {
-		t.Fatalf("overlay = %v, want overlayNone (readonly field)", m.overlay)
-	}
-	if m.form != nil {
-		t.Fatal("enter on updated_at must not open a form")
-	}
-	if !m.detailFocus || m.detailLevel != 1 || m.fieldCursor != 6 {
-		t.Fatalf("enter on updated_at must be a pure no-op: detailFocus=%v detailLevel=%d fieldCursor=%d",
-			m.detailFocus, m.detailLevel, m.fieldCursor)
-	}
-}
+// TestKeyDetailFocusEnterOnCreatedAtFieldNoop / ...UpdatedAtField... (the
+// "readonly" kind's Noop guards, indices 5/6) were REMOVED by bt-lg68 (PO-
+// Nebenbefund, US-Review Runde 3): created_at/updated_at no longer exist as
+// Meta fields (doubly rendered vs. HISTORY) -- metaFields shrinks to 5
+// entries (title/status/type/priority/tags), so these two indices are gone
+// and the "readonly" kind can no longer be reached via metaFields/enter-
+// dispatch. activateDetailField's own "readonly" case (update.go) becomes
+// dead code by the same removal (see its doc comment).
 
 // TestKeyDetailFocusEnterOnTagsFieldOpensTagPicker guards D01's Enter-Kaskade
 // dispatch (design-spec.md §15 PF-15, bean bt-e6q9): enter on the tags field
-// (index 4, between priority and created_at) opens the SAME Tag-Picker the
+// (index 4, the last Meta field since bt-lg68 removed created_at/updated_at)
+// opens the SAME Tag-Picker the
 // `t` key opens (m.openTagPicker()) -- and, mirroring status/type/priority,
 // m.detailFocus stays true (the overlay lays on top as its own capture
 // state, D02 "schnell/einfach").
@@ -1767,29 +1730,12 @@ func TestActivateDetailFieldTitleOpensEditTitleForm(t *testing.T) {
 	}
 }
 
-// TestActivateDetailFieldReadonlyIsNoop guards the "readonly" kind
-// (created_at/updated_at): no overlay/form opens, the model comes back
-// otherwise unchanged.
-func TestActivateDetailFieldReadonlyIsNoop(t *testing.T) {
-	m := fixtureModel(t, fixtureBeans())
-	m = focusBean(m, "tk-2")
-	b := m.focusedBean()
-
-	tm, cmd := m.activateDetailField(b, relationField{kind: "readonly"})
-	nm, ok := tm.(model)
-	if !ok {
-		t.Fatalf("activateDetailField did not return a model, got %T", tm)
-	}
-	if nm.overlay != overlayNone {
-		t.Fatalf("overlay = %v, want overlayNone", nm.overlay)
-	}
-	if nm.form != nil {
-		t.Fatal("readonly must not open a form")
-	}
-	if cmd != nil {
-		t.Fatal("activateDetailField(readonly) must not return a Cmd")
-	}
-}
+// TestActivateDetailFieldReadonlyIsNoop (the "readonly" kind guard) was
+// REMOVED by bt-lg68: metaFields no longer produces "readonly" entries
+// (created_at/updated_at removed, HISTORY is the sole source), and
+// activateDetailField's own "readonly" switch case was removed in lockstep
+// as dead code (see its doc comment, update.go) -- there is no longer a
+// production path that constructs relationField{kind: "readonly"}.
 
 // TestActivateDetailFieldJumpMovesCursorAndExitsDetailFocus guards the
 // default ("") Relations-jump kind: unchanged E2 behavior, now reached via

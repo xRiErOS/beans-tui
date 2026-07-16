@@ -1361,9 +1361,14 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // is exactly ONE place that dispatches a field kind onto its overlay/form/
 // jump (bt-duz7 Architektur-Vorgabe #1 + Akzeptanz-Checkliste). status/type/
 // priority open the combined Value-Menu seeded on that group; tags opens the
-// Tag-Picker; title opens the Title-Edit-Form; readonly (created_at/
-// updated_at) is a no-op (system-managed); the default ("") is the Relations
-// section's UNCHANGED E2 jump behavior.
+// Tag-Picker; title opens the Title-Edit-Form; the default ("") is the
+// Relations section's UNCHANGED E2 jump behavior. The former "readonly"
+// case (created_at/updated_at, a no-op) was REMOVED by bt-lg68 (PO-
+// Nebenbefund, US-Review Runde 3): metaFields no longer produces "readonly"
+// entries (HISTORY is now the sole Created/Updated source), so that branch
+// was genuinely dead code -- any (hypothetical) future "readonly" kind would
+// now fall through to default, which is ALSO a no-op for beanID=="" (every
+// Meta field's beanID is always empty), so behavior is unchanged either way.
 func (m model) activateDetailField(b *data.Bean, f relationField) (tea.Model, tea.Cmd) {
 	switch f.kind {
 	case "status", "type", "priority":
@@ -1380,8 +1385,6 @@ func (m model) activateDetailField(b *data.Bean, f relationField) (tea.Model, te
 		return m.openTagPicker(), nil
 	case "title":
 		return m.openEditTitleForm(b)
-	case "readonly":
-		return m, nil // created_at/updated_at -- system-managed, no-op
 	default: // "" -- Relations jump, unchanged E2 behavior
 		if f.beanID == "" {
 			return m, nil // unresolved reference -- nothing to jump to

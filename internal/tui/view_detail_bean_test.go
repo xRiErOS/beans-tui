@@ -51,20 +51,21 @@ func TestBeanSectionsAlwaysFourFixedSections(t *testing.T) {
 	}
 }
 
-// TestMetaFieldsSevenEntriesWithKinds guards metaFields' structural contract
-// (PF-4 + PF-15/D01): exactly 7 kind-tagged entries in a fixed order
-// (title/status/type/priority/tags/created_at/updated_at), every entry's
-// beanID empty (Meta fields are never Beziehungen-style jump targets -- kind
-// drives T6's future enter-dispatch instead). Renamed from
-// TestMetaFieldsSixEntriesWithKinds (PF-15/D01: tags rejoins Meta as its own
-// field, directly after priority).
-func TestMetaFieldsSevenEntriesWithKinds(t *testing.T) {
+// TestMetaFieldsFiveEntriesWithKinds guards metaFields' structural contract
+// (PF-4 + PF-15/D01, shrunk by bt-lg68): exactly 5 kind-tagged entries in a
+// fixed order (title/status/type/priority/tags), every entry's beanID empty
+// (Meta fields are never Beziehungen-style jump targets -- kind drives T6's
+// enter-dispatch instead). Renamed from TestMetaFieldsSevenEntriesWithKinds
+// (bt-lg68, PO-Nebenbefund US-Review Runde 3: created_at/updated_at were
+// doubly rendered in META AND HISTORY -- the two readonly entries are
+// removed here, HISTORY stays the sole source for Created/Updated).
+func TestMetaFieldsFiveEntriesWithKinds(t *testing.T) {
 	b := &data.Bean{ID: "meta-1", Title: "Meta Bean", Status: "in-progress", Type: "bug", Priority: "critical"}
 	fields := metaFields(b)
-	if len(fields) != 7 {
-		t.Fatalf("metaFields returned %d entries, want 7", len(fields))
+	if len(fields) != 5 {
+		t.Fatalf("metaFields returned %d entries, want 5 (bt-lg68: created_at/updated_at removed, HISTORY is now the sole source)", len(fields))
 	}
-	wantKinds := []string{"title", "status", "type", "priority", "tags", "readonly", "readonly"}
+	wantKinds := []string{"title", "status", "type", "priority", "tags"}
 	for i, want := range wantKinds {
 		if fields[i].kind != want {
 			t.Errorf("fields[%d].kind = %q, want %q", i, fields[i].kind, want)
@@ -129,33 +130,19 @@ func TestMetaFieldsPriorityDefaultsToNormalWhenEmpty(t *testing.T) {
 	}
 }
 
-// TestMetaFieldsReadonlyTimestampsUseFmtTime guards created_at/updated_at:
-// nil renders the same muted placeholder historieSectionBody uses (shared
-// fmtTime helper, not a re-implementation), a set timestamp renders
-// formatted.
-func TestMetaFieldsReadonlyTimestampsUseFmtTime(t *testing.T) {
-	created := time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
-	b := &data.Bean{ID: "meta-ts", Title: "T", Status: "todo", Type: "task", Priority: "normal", CreatedAt: &created}
-	fields := metaFields(b)
-	if !strings.Contains(fields[5].label, "2026-01-02") {
-		t.Errorf("fields[5] (created_at) label = %q, want formatted CreatedAt", fields[5].label)
-	}
-	if !strings.Contains(ansi.Strip(fields[6].label), "unknown") {
-		t.Errorf("fields[6] (updated_at) label = %q, want the nil-timestamp placeholder", fields[6].label)
-	}
-}
-
 // TestMetaSectionBodyShowsSelectedFieldMarker guards PF-4's ▷/▶ cursor +
 // PF-12's gutter contract at the same time: exactly one ▶ at the active
-// fieldIdx's row when the Meta section itself is active, ▷ on all 6 rows
-// (never an omitted marker) when it is not.
+// fieldIdx's row when the Meta section itself is active, ▷ on all 4 other
+// rows (never an omitted marker) when it is not. Field count shrunk 7->5 by
+// bt-lg68 (created_at/updated_at removed from META, HISTORY stays sole
+// source).
 func TestMetaSectionBodyShowsSelectedFieldMarker(t *testing.T) {
 	b := &data.Bean{ID: "meta-mark", Title: "Marked", Status: "todo", Type: "task", Priority: "high"}
 
 	active := metaSectionBody(b, 80, true, 2) // type row (index 2)
 	lines := strings.Split(active, "\n")
-	if len(lines) != 7 {
-		t.Fatalf("metaSectionBody active=true has %d lines, want 7 (PF-15/D01: 7 Meta fields)", len(lines))
+	if len(lines) != 5 {
+		t.Fatalf("metaSectionBody active=true has %d lines, want 5 (bt-lg68: 5 Meta fields)", len(lines))
 	}
 	if n := strings.Count(ansi.Strip(active), "▶"); n != 1 {
 		t.Fatalf("active metaSectionBody has %d ▶ markers, want exactly 1", n)
@@ -163,30 +150,29 @@ func TestMetaSectionBodyShowsSelectedFieldMarker(t *testing.T) {
 	if !strings.Contains(ansi.Strip(lines[2]), "▶") {
 		t.Errorf("▶ marker not on row index 2: %q", ansi.Strip(lines[2]))
 	}
-	if n := strings.Count(ansi.Strip(active), "▷"); n != 6 {
-		t.Errorf("active metaSectionBody has %d ▷ markers, want exactly 6 (the other rows): %q", n, ansi.Strip(active))
+	if n := strings.Count(ansi.Strip(active), "▷"); n != 4 {
+		t.Errorf("active metaSectionBody has %d ▷ markers, want exactly 4 (the other rows): %q", n, ansi.Strip(active))
 	}
 
 	inactive := metaSectionBody(b, 80, false, 2)
 	if strings.Contains(ansi.Strip(inactive), "▶") {
 		t.Error("inactive metaSectionBody must show no ▶ marker anywhere")
 	}
-	if n := strings.Count(ansi.Strip(inactive), "▷"); n != 7 {
-		t.Errorf("inactive metaSectionBody has %d ▷ markers, want exactly 7 (every row): %q", n, ansi.Strip(inactive))
+	if n := strings.Count(ansi.Strip(inactive), "▷"); n != 5 {
+		t.Errorf("inactive metaSectionBody has %d ▷ markers, want exactly 5 (every row): %q", n, ansi.Strip(inactive))
 	}
 }
 
-// TestMetaSectionBodyShowsAllSevenLabelsAndValues guards the row content
+// TestMetaSectionBodyShowsAllFiveLabelsAndValues guards the row content
 // itself (label prefixes + values), not just the marker: PF-15/D01's mockup
-// shows title/status/type/priority/tags/created_at/updated_at in that exact
-// order. Renamed from TestMetaSectionBodyShowsAllSixLabelsAndValues (tags
-// rejoins Meta as its own field).
-func TestMetaSectionBodyShowsAllSevenLabelsAndValues(t *testing.T) {
-	created := time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
-	b := &data.Bean{ID: "meta-full", Title: "Full Bean", Status: "todo", Type: "task", Priority: "normal", CreatedAt: &created}
+// shows title/status/type/priority/tags in that exact order. Renamed from
+// TestMetaSectionBodyShowsAllSevenLabelsAndValues (bt-lg68: created_at/
+// updated_at removed from META, HISTORY stays the sole source).
+func TestMetaSectionBodyShowsAllFiveLabelsAndValues(t *testing.T) {
+	b := &data.Bean{ID: "meta-full", Title: "Full Bean", Status: "todo", Type: "task", Priority: "normal"}
 	body := ansi.Strip(metaSectionBody(b, 80, false, 0))
 
-	wantLabels := []string{"title:", "status:", "type:", "priority:", "tags:", "created_at:", "updated_at:"}
+	wantLabels := []string{"title:", "status:", "type:", "priority:", "tags:"}
 	lastIdx := -1
 	for _, label := range wantLabels {
 		idx := strings.Index(body, label)
@@ -201,8 +187,8 @@ func TestMetaSectionBodyShowsAllSevenLabelsAndValues(t *testing.T) {
 	if !strings.Contains(body, "Full Bean") {
 		t.Errorf("metaSectionBody missing title value: %q", body)
 	}
-	if !strings.Contains(body, "2026-01-02") {
-		t.Errorf("metaSectionBody missing created_at value: %q", body)
+	if strings.Contains(body, "created_at:") || strings.Contains(body, "updated_at:") {
+		t.Errorf("metaSectionBody must NOT show created_at/updated_at (bt-lg68: HISTORY is the sole source): %q", body)
 	}
 }
 

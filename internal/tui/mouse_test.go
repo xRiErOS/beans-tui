@@ -533,16 +533,18 @@ func TestDetailClickRowMapsSectionHeaderClick(t *testing.T) {
 // "tags: " (single space after the colon) ABOVE the Accordion, so a bare
 // "tags:" search finds the Kopfblock first (row < headerBlockLines, never a
 // Section-/Feld-Treffer -- see TestDetailClickRowAccountsForFiveLineHeader
-// Offset). metaFieldLabels' 12-wide padding (metaSectionBody's
-// `fmt.Sprintf("%-12s", ...)`) is unique to the Meta row -- computed here
-// via the SAME formula, not a hand-typed literal that could silently drift
-// from it.
+// Offset). metaFieldLabels' padding width (metaSectionBody's
+// `fmt.Sprintf("%-*s", metaFieldLabelWidth, ...)`) is unique to the Meta
+// row -- computed here via metaFieldLabelWidth itself (bt-lg68: was a
+// hand-typed 12-wide literal, now self-computed from metaFieldLabels so
+// this test can never silently drift from the real padding again).
 func metaTagsFieldSubstr() string {
-	return fmt.Sprintf("%-12s", "tags:")
+	return fmt.Sprintf("%-*s", metaFieldLabelWidth, "tags:")
 }
 
 // TestDetailClickRowMapsMetaFieldClick guards the Meta field-row mapping
-// (T1/bt-e6q9's 7-line field list): a click on the "tags:" row resolves to
+// (T1/bt-e6q9's field list, shrunk from 7 to 5 lines by bt-lg68): a click on
+// the "tags:" row resolves to
 // secIdx=metaSectionIdx, fieldIdx=4 (metaFields' fixed order: title/status/
 // type/priority/tags/created_at/updated_at).
 func TestDetailClickRowMapsMetaFieldClick(t *testing.T) {
@@ -802,9 +804,10 @@ func TestMouseDetailClickDoubleClickOnBodySectionIsNoOpAgain(t *testing.T) {
 
 // TestDetailClickKeyDisjointNumberSpaces pins the extracted detailClickKey
 // helper directly (I01, Fix-Runde 1): every possible Detail-Pane key --
-// section headers (fieldIdx -1) and the 7 Meta fields -- must sit at or
-// above detailClickKeyBase (disjoint from any realistic Tree/Backlog row
-// index) and all 4+7 keys must be pairwise distinct.
+// section headers (fieldIdx -1) and the 5 Meta fields (bt-lg68: shrunk from
+// 7) -- must sit at or above detailClickKeyBase (disjoint from any
+// realistic Tree/Backlog row index) and all 4+5 keys must be pairwise
+// distinct.
 func TestDetailClickKeyDisjointNumberSpaces(t *testing.T) {
 	seen := map[int]string{}
 	check := func(name string, key int) {
@@ -820,7 +823,7 @@ func TestDetailClickKeyDisjointNumberSpaces(t *testing.T) {
 	for sec := 0; sec < beanSectionCount; sec++ {
 		check(fmt.Sprintf("section %d header", sec), detailClickKey(sec, -1))
 	}
-	for fi := 0; fi < 7; fi++ { // metaFields' fixed 7 entries
+	for fi := 0; fi < 5; fi++ { // metaFields' fixed 5 entries (bt-lg68)
 		check(fmt.Sprintf("meta field %d", fi), detailClickKey(metaSectionIdx, fi))
 	}
 }
