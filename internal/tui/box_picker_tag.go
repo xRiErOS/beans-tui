@@ -160,7 +160,7 @@ func (m model) keyTagPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keybind.Matches(msg, keys.Toggle):
 		return m.toggleTagPending(), nil
-	case msg.String() == "n":
+	case keybind.Matches(msg, keys.NewTag):
 		return m.openTagInput()
 	case keybind.Matches(msg, keys.Enter):
 		return m.applyTagPickerDiff()

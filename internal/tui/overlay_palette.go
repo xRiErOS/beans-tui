@@ -2,12 +2,13 @@ package tui
 
 // overlay_palette.go — the Command-Center (`ctrl+k`/`K`, E4 Task 1, bean
 // bt-jpgn, design-spec.md §6 V5): a floating fuzzy-filtered action palette,
-// openable from ANY view. T1 shipped the action half (paletteActions); Task
-// 2 (bean bt-yo60) adds the second candidate pool -- matching beans mixed in
-// BELOW the actions (palFilteredBeans, design decision b), palette-scoped
-// Bleve staleness guard (palBleveIDs/palBleveFor/palBleveLoading, types.go;
-// paletteBleveResultMsg/paletteSearchCmd, messages.go). Task 4 (bean
-// bt-yy6w) had appended a "go to: review cockpit" jump action (devd
+// openable from ANY view. T1 shipped the action half (paletteActions); E4
+// Task 2 (bean bt-yo60) had added a second candidate pool -- matching beans
+// mixed in BELOW the actions, plus a palette-scoped Bleve staleness guard --
+// removed again by B13 (design-spec.md §15 PF-16/"US-04-Revision", bean
+// bt-ntoz, E8 Task 7, bean bt-yqdy): the Command-Center shows ONLY commands
+// now, bean search is exclusively `/`'s job (design-spec §6 V2/V3). Task 4
+// (bean bt-yy6w) had appended a "go to: review cockpit" jump action (devd
 // overlay_palette.go's own "Reviews (T17)/Memory (T18) werden hier ergänzt"
 // precedent) -- removed again by E7 T1 (PF-14, bean bt-wmtb): the
 // Review-Cockpit view no longer exists.
@@ -19,38 +20,32 @@ package tui
 // STRUCTURALLY only -- the concrete action list and every handler body are
 // beans-tui-native (design decision b). paletteBox's "> query" + separator +
 // menuList render mirrors devd overlay_palette.go:192-207 1:1 (modalPanel
-// standing in for devd's inline box chrome); T2's bean rows additionally
-// port box_picker_parent.go's D08 ansi.Strip+Accent-wrap convention (see
-// paletteBox's own doc comment below).
+// standing in for devd's inline box chrome).
 
 import (
 	"strings"
 
-	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 )
 
-// paletteItemKind distinguishes the Command-Center's two candidate pools
-// (design decision b).
+// paletteItemKind distinguishes Command-Center row kinds. B13 (design-spec.md
+// §15 PF-16, bean bt-ntoz, E8 Task 7) removed the palette's former second
+// pool (paletteKindBean) -- paletteKindAction is the only value left, kept as
+// a typed field (rather than collapsed away) so a future genuinely NEW row
+// kind is a pure addition again, not a signature change (same precedent this
+// type originally documented for T2).
 type paletteItemKind int
 
 const (
 	paletteKindAction paletteItemKind = iota
-	paletteKindBean                   // T2 populates this kind; the type exists here upfront
-	// (mirrors E3 Task 1's "declare the full overlayID enum upfront"
-	// precedent, types.go) so T2 is a pure addition, never a signature
-	// change.
 )
 
-// paletteItem is one row of the Command-Center's combined, already-filtered
-// result list.
+// paletteItem is one row of the Command-Center's filtered action list.
 type paletteItem struct {
 	kind     paletteItemKind
-	actionID string     // kind == paletteKindAction
-	bean     *data.Bean // kind == paletteKindBean (T2)
-	label    string     // pre-rendered row text for both kinds
+	actionID string
+	label    string // pre-rendered row text
 }
 
 // paletteActions returns the context-aware action list (design decision b):
@@ -73,6 +68,14 @@ func paletteActions(m model) []paletteItem {
 			paletteItem{kind: paletteKindAction, actionID: "type", label: "set type"},
 			paletteItem{kind: paletteKindAction, actionID: "priority", label: "set priority"},
 			paletteItem{kind: paletteKindAction, actionID: "tags", label: "set tags"},
+			// B14 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean
+			// bt-yqdy): "create tag" is a Palette-only entry point to the SAME
+			// openTagPicker().openTagInput() new-tag sub-mode the Tag-Picker's
+			// own `n` key already opens (box_picker_tag.go) -- grouped
+			// directly after "set tags" (both tag-related). Node action, since
+			// its dispatchPalette handler needs a focused bean's ID as the
+			// mutation target -- see that handler's own guard doc-stamp.
+			paletteItem{kind: paletteKindAction, actionID: "create_tag", label: "create tag"},
 			paletteItem{kind: paletteKindAction, actionID: "parent", label: "set parent"},
 			paletteItem{kind: paletteKindAction, actionID: "blocking", label: "set blocking"},
 			paletteItem{kind: paletteKindAction, actionID: "edit_title", label: "set title"},
@@ -98,10 +101,11 @@ func paletteActions(m model) []paletteItem {
 	return items
 }
 
-// palFiltered combines both candidate pools -- actions (T1) FIRST, then the
-// bean half (T2, palFilteredBeans) -- filtered against m.palQuery
-// (design decision b's ordering: actions always precede beans, no
-// score-based interleaving).
+// palFiltered fuzzy-filters the action pool against m.palQuery. B13
+// (design-spec.md §15 PF-16/"US-04-Revision", bean bt-ntoz, E8 Task 7, bean
+// bt-yqdy) removed the palette's former second pool (matching beans mixed in
+// below the actions, palFilteredBeans) -- the Command-Center shows ONLY
+// commands now, bean search is exclusively `/`'s job.
 func (m model) palFiltered() []paletteItem {
 	var out []paletteItem
 	for _, it := range paletteActions(m) {
@@ -109,55 +113,7 @@ func (m model) palFiltered() []paletteItem {
 			out = append(out, it)
 		}
 	}
-	out = append(out, m.palFilteredBeans()...)
 	return out
-}
-
-// paletteBeanResultCap caps palFilteredBeans' result set (design decision b:
-// prevents a broad query like "e" from flooding the modal).
-const paletteBeanResultCap = 20
-
-// palBeanMatches mirrors beanMatchesSearch's bifurcation (view_browse_repo.go)
-// against the PALETTE's own Bleve fields instead of the Tree/Backlog's, so
-// opening ctrl+k never touches an active `/` search session (design decision
-// b). Below the Bleve threshold (<3 chars), or while a palette-Bleve response
-// for THIS exact query hasn't arrived yet, falls back to an immediate local
-// title+ID substring match; once palBleveFor catches up to m.palQuery, the
-// Bleve result set becomes authoritative -- UNIONed with the local
-// ID-substring match (I01 precedent, beanMatchesSearch's own doc comment):
-// data.Client.Search indexes title+body, not necessarily an arbitrary ID
-// substring.
-func (m model) palBeanMatches(b *data.Bean) bool {
-	q := strings.ToLower(strings.TrimSpace(m.palQuery))
-	if len(q) >= 3 && m.palBleveFor == m.palQuery {
-		return m.palBleveIDs[b.ID] || strings.Contains(strings.ToLower(b.ID), q)
-	}
-	return strings.Contains(strings.ToLower(b.Title), q) || strings.Contains(strings.ToLower(b.ID), q)
-}
-
-// palFilteredBeans returns up to paletteBeanResultCap matching beans,
-// canonically sorted (data.SortBeans, I03) -- an empty (or all-whitespace)
-// query returns nil (design decision b: the palette never dumps the whole
-// repo the way `/`'s already-visible tree filter can).
-func (m model) palFilteredBeans() []paletteItem {
-	if strings.TrimSpace(m.palQuery) == "" || m.idx == nil {
-		return nil
-	}
-	var matched []*data.Bean
-	for _, b := range m.idx.ByID {
-		if m.palBeanMatches(b) {
-			matched = append(matched, b)
-		}
-	}
-	data.SortBeans(matched)
-	if len(matched) > paletteBeanResultCap {
-		matched = matched[:paletteBeanResultCap]
-	}
-	items := make([]paletteItem, len(matched))
-	for i, b := range matched {
-		items[i] = paletteItem{kind: paletteKindBean, bean: b, label: relationRow(b)}
-	}
-	return items
 }
 
 // openPalette opens the Command-Center with an empty filter (design decision
@@ -171,10 +127,13 @@ func (m model) openPalette() (tea.Model, tea.Cmd) {
 }
 
 // keyPalette drives the open Command-Center: every rune/backspace edits
-// palQuery (rebuilding palList's length every keystroke, additionally
-// dispatching a palette-scoped Bleve search via maybePaletteBleveCmd when
-// due, T2); up/down move the cursor; enter dispatches the cursored item;
-// esc closes without side effects.
+// palQuery, rebuilding palList's length every keystroke; up/down move the
+// cursor; enter dispatches the cursored item; esc closes without side
+// effects. B13 (design-spec.md §15 PF-16/"US-04-Revision", bean bt-ntoz,
+// E8 Task 7, bean bt-yqdy) removed the rune/backspace branches' former
+// palette-scoped Bleve dispatch tail (dispatchPaletteBleveIfDue) -- there is
+// no longer a bean-search half to keep fresh, so both branches now just
+// resync palList and return.
 func (m model) keyPalette(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyCtrlC:
@@ -198,27 +157,13 @@ func (m model) keyPalette(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.palQuery = string(r[:len(r)-1])
 			m.palList.setLen(len(m.palFiltered()))
 		}
-		return m.dispatchPaletteBleveIfDue()
+		return m, nil
 	case tea.KeyRunes, tea.KeySpace:
 		m.palQuery += string(msg.Runes)
 		m.palList.setLen(len(m.palFiltered()))
-		return m.dispatchPaletteBleveIfDue()
-	}
-	return m, nil
-}
-
-// dispatchPaletteBleveIfDue is keyPalette's shared Bleve-dispatch tail (E4
-// Task 2, bean bt-yo60) -- unlike update.go's dispatchBleveIfDue, there is no
-// extra Cmd to batch (the Palette manages palQuery as a plain string, no
-// bubbles textinput.Model backing it), so this simply fires
-// maybePaletteBleveCmd() when due, flagging palBleveLoading.
-func (m model) dispatchPaletteBleveIfDue() (tea.Model, tea.Cmd) {
-	cmd := m.maybePaletteBleveCmd()
-	if cmd == nil {
 		return m, nil
 	}
-	m.palBleveLoading = true
-	return m, cmd
+	return m, nil
 }
 
 // dispatchPalette closes the palette and routes the selected item to the
@@ -229,29 +174,6 @@ func (m model) dispatchPaletteBleveIfDue() (tea.Model, tea.Cmd) {
 func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 	m.paletteOpen = false
 	switch it.kind {
-	case paletteKindBean:
-		// E4 Task 2 (bean bt-yo60): jump the tree cursor onto the matched
-		// bean and switch to Browse (even from Backlog) -- expandAncestorsOf
-		// (cycle-guarded, update.go) marks every ancestor expanded so the
-		// jump target is guaranteed visible in the very next
-		// visibleNodes() call, same call shape as keyDetailFocus's own
-		// relation-jump (update.go).
-		m.expanded = expandAncestorsOf(m.idx, m.expanded, it.bean.ID)
-		m.cursorID = it.bean.ID
-		m.view = viewBrowseRepo
-		// B01 (E4 Task 2 review, bean bt-yo60): a bean-jump must leave
-		// Detail-Focus, exactly like keyDetailFocus's own relation-jump
-		// (update.go:702) -- otherwise arrow keys on the NEW bean still
-		// drive the OLD bean's accordion instead of the tree. The
-		// Detail-Accordion focus machine ints get the SAME reset
-		// tab-into-detail-focus uses (handleKey, types.go's "All four
-		// reset on every tab-into-detail-focus transition" doc-stamp),
-		// not just a defensive clamp -- a stale secCursor/fieldCursor
-		// pointing past the NEW bean's section/field shape must never
-		// leak into the next detail-focus visit.
-		m.detailFocus = false
-		m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
-		return m, nil
 	case paletteKindAction:
 		switch it.actionID {
 		case "status":
@@ -262,6 +184,24 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 			return m.openValueMenu("priority"), nil
 		case "tags":
 			return m.openTagPicker(), nil
+		case "create_tag":
+			// B14 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean
+			// bt-yqdy): opens the Tag-Picker AND its free-text new-tag
+			// sub-mode in one step -- m.openTagPicker() (box_picker_tag.go)
+			// is ITSELF already a no-op-safe method (returns m unchanged,
+			// overlay stays overlayNone, when focusedBean()==nil), but
+			// chaining .openTagInput() straight onto that unconditionally
+			// sets m.tagInputActive=true regardless -- a latent, unreachable
+			// state (tagInputActive true while overlay==overlayNone, no
+			// picker actually open). This guard is therefore MANDATORY here
+			// (unlike the plain "tags" case above, which safely no-ops on
+			// its own via openTagPicker's internal guard): it runs BEFORE
+			// the openTagPicker().openTagInput() chain, not relying on the
+			// chain's own internal no-op to cover the .openTagInput() half.
+			if m.focusedBean() == nil {
+				return m, nil
+			}
+			return m.openTagPicker().openTagInput()
 		case "parent":
 			return m.openParentPicker(), nil
 		case "blocking":
@@ -317,16 +257,11 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 
 // paletteBox renders the floating Command-Center -- actions render PLAIN +
 // theme.Header on select (mirrors box_menu_value.go/box_picker_tag.go: their
-// row text carries no per-cell theming of its own); T2's bean rows instead
-// use the D08 ansi.Strip+Accent-wrap convention (mirrors box_picker_parent.go)
-// since relationRow output is ALREADY themed -- same split-styling rationale
-// types.go's "Picker-Stil-Divergenz" doc-stamp already documents for the E3
-// overlays, extended here to a THIRD file for the same reason. The two pools
-// render as two SEPARATE menuList calls (not one over the combined slice) so
-// each can carry its own row style while still sharing ONE cursor index
-// space (m.palList.cursor over m.palFiltered()'s combined order, actions
-// first) -- a theme.Dim separator is inserted between them only when BOTH
-// pools are non-empty (T2).
+// row text carries no per-cell theming of its own). B13 (design-spec.md §15
+// PF-16/"US-04-Revision", bean bt-ntoz, E8 Task 7, bean bt-yqdy) removed the
+// former SECOND menuList call + separator this doc comment used to describe
+// (E4 Task 2's bean-result rows, split/beanItems) -- ONE pool, ONE menuList
+// call, no split needed anymore.
 func (m model) paletteBox() string {
 	items := m.palFiltered()
 	var b strings.Builder
@@ -336,36 +271,13 @@ func (m model) paletteBox() string {
 		b.WriteString(theme.Dim.Render("(no matches)") + "\n")
 	}
 
-	split := len(items) // index of the first paletteKindBean item, if any
-	for i, it := range items {
-		if it.kind == paletteKindBean {
-			split = i
-			break
-		}
-	}
-	actionItems, beanItems := items[:split], items[split:]
-
-	b.WriteString(menuList(len(actionItems), m.palList.cursor, func(i int, sel bool) string {
-		label := actionItems[i].label
+	b.WriteString(menuList(len(items), m.palList.cursor, func(i int, sel bool) string {
+		label := items[i].label
 		if sel {
 			label = theme.Header.Render(label)
 		}
 		return label
 	}))
-
-	if len(actionItems) > 0 && len(beanItems) > 0 {
-		b.WriteString(theme.Dim.Render(strings.Repeat("─", 44)) + "\n")
-	}
-
-	if len(beanItems) > 0 {
-		b.WriteString(menuList(len(beanItems), m.palList.cursor-split, func(i int, sel bool) string {
-			label := beanItems[i].label
-			if sel {
-				return theme.Accent.Render(ansi.Strip(label))
-			}
-			return label
-		}))
-	}
 
 	return modalPanel("Command-Center", b.String(), "type: filter   ↑↓: select   enter: run   esc: close", clampModalWidth(48, m.width), theme.Mauve)
 }

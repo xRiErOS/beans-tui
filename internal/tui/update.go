@@ -62,13 +62,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case searchBleveResultMsg:
 		return m.applyBleveResult(msg)
 
-	case paletteBleveResultMsg:
-		// E4 Task 2 (bean bt-yo60): the Command-Center's OWN Bleve staleness
-		// guard, analog to searchBleveResultMsg above but checked against
-		// m.palQuery instead of m.searchQuery (applyPaletteBleveResult
-		// below) -- design decision b's "never share state with `/`".
-		return m.applyPaletteBleveResult(msg)
-
 	case mutationDoneMsg:
 		// E3 (bean bt-dlgk): every Set*/Add*/Remove*/Delete mutation goes
 		// through this ONE case -- applyMutationResult below is the shared
@@ -645,32 +638,6 @@ func (m model) applyBleveResult(msg searchBleveResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.searchBleveIDs = ids
 	m.searchBleveFor = msg.query
-	return m, nil
-}
-
-// applyPaletteBleveResult mirrors applyBleveResult exactly, scoped to the
-// Command-Center's own palQuery/palBleveIDs/palBleveFor/palBleveLoading
-// (E4 Task 2, bean bt-yo60, design decision b) instead of the Tree/Backlog
-// search's fields -- a result tagged for a query the palette has since moved
-// on from (palQuery edited, or the palette closed and reopened with a new
-// query) is discarded exactly like a stale searchBleveResultMsg.
-func (m model) applyPaletteBleveResult(msg paletteBleveResultMsg) (tea.Model, tea.Cmd) {
-	if msg.query != m.palQuery {
-		return m, nil // stale -- palQuery has moved on since this request was sent
-	}
-	m.palBleveLoading = false
-	if msg.err != nil {
-		m.err = msg.err.Error()
-		var toastCmd tea.Cmd
-		m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
-		return m, toastCmd
-	}
-	ids := make(map[string]bool, len(msg.ids))
-	for _, id := range msg.ids {
-		ids[id] = true
-	}
-	m.palBleveIDs = ids
-	m.palBleveFor = msg.query
 	return m, nil
 }
 
@@ -1279,20 +1246,6 @@ func (m model) maybeBleveCmd() tea.Cmd {
 		return nil
 	}
 	return searchCmd(m.client, q)
-}
-
-// maybePaletteBleveCmd mirrors maybeBleveCmd exactly, scoped to the
-// Command-Center's own palQuery/palBleveFor (E4 Task 2, bean bt-yo60, design
-// decision b) -- called from keyPalette's rune/backspace branches
-// (overlay_palette.go) instead of dispatchBleveIfDue, since the Palette
-// manages palQuery as a plain string (no bubbles textinput.Model to batch an
-// extra Cmd from).
-func (m model) maybePaletteBleveCmd() tea.Cmd {
-	q := m.palQuery
-	if len(q) < 3 || q == m.palBleveFor {
-		return nil
-	}
-	return paletteSearchCmd(m.client, q)
 }
 
 // setExpanded sets n's expand state in m.expanded; a no-op for leaves. I01

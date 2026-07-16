@@ -90,10 +90,11 @@ func homeLogoBlock(width int) []string {
 
 // filteredRepos returns m.settings.Repos narrowed by a case-insensitive
 // substring match against m.repoQuery -- an empty query returns the full
-// list unchanged (mirrors palFilteredBeans' own "empty query" contract,
-// overlay_palette.go, just without ITS additional "empty means no results"
-// twist: the Lobby's whole PURPOSE is showing the configured list, so an
-// empty filter must show everything, not nothing).
+// list unchanged (the Lobby's whole PURPOSE is showing the configured list,
+// so an empty filter must show everything, not nothing -- unlike the
+// Command-Center's own empty-query contract, overlay_palette.go's
+// palFiltered, which returns every ACTION but never dumps a bean list at
+// all, B13).
 func (m model) filteredRepos() []string {
 	q := strings.ToLower(strings.TrimSpace(m.repoQuery))
 	if q == "" {

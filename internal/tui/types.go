@@ -363,25 +363,17 @@ type model struct {
 	// Command-Center (E4 Task 1, bean bt-jpgn, design decisions a/b/h):
 	// paletteOpen is a full-capture floating-overlay state, same precedent
 	// as filterOpen (handleKey capture order, design decision h). palQuery
-	// drives BOTH candidate pools (actions T1, beans T2) -- ONE shared
-	// input, design decision b. palList is the cursor over the COMBINED
-	// already-filtered result list (palFiltered, rebuilt every keystroke).
+	// drives the action candidate pool -- palList is the cursor over the
+	// filtered result list (palFiltered, rebuilt every keystroke). E4 Task 2
+	// (bean bt-yo60) had added a SECOND candidate pool (matching beans mixed
+	// in below the actions, with its own palBleveIDs/palBleveFor/
+	// palBleveLoading Bleve staleness-guard triplet) -- removed again by B13
+	// (design-spec.md §15 PF-16/"US-04-Revision", bean bt-ntoz, E8 Task 7,
+	// bean bt-yqdy): the Command-Center shows ONLY commands now, bean search
+	// is exclusively `/`'s job.
 	paletteOpen bool
 	palQuery    string
 	palList     listState
-
-	// Command-Center bean-search half (E4 Task 2, bean bt-yo60, design
-	// decision b): palette-SCOPED copies of the Bleve staleness-guard
-	// triplet `/`'s own searchBleveIDs/searchBleveFor/searchBleveLoading
-	// already establish above -- kept SEPARATE (own fields, own Msg type
-	// paletteBleveResultMsg, messages.go) so opening ctrl+k can never
-	// clobber an active Tree/Backlog `/` search session, or vice versa.
-	// Same wholesale-replace convention as searchBleveIDs: always REPLACED
-	// with a fresh map on a fresh (non-stale) result, never mutated in
-	// place -- no cloneBoolMap (I01) needed.
-	palBleveIDs     map[string]bool
-	palBleveFor     string
-	palBleveLoading bool
 
 	// Toast (E5 Task 1, bean bt-6dts, epic bt-5h4d, Port devd
 	// overlay_show_toast.go, design decision a): ONE slot (no stack) --

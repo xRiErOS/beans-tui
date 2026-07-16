@@ -299,32 +299,9 @@ func searchCmd(c *data.Client, query string) tea.Cmd {
 	}
 }
 
-// paletteBleveResultMsg carries the result of an async data.Client.Search
-// call dispatched from the Command-Center (E4 Task 2, bean bt-yo60),
-// structurally IDENTICAL to searchBleveResultMsg above but kept as its OWN
-// type -- applyPaletteBleveResult's staleness guard (update.go) checks
-// m.palQuery, never m.searchQuery, so the Palette's Bleve half can never
-// cross-talk with an active Tree/Backlog `/` search session (design decision
-// b).
-type paletteBleveResultMsg struct {
-	query string
-	ids   []string
-	err   error
-}
-
-// paletteSearchCmd mirrors searchCmd exactly (data.Client.Search, ID-only
-// result kept -- palFilteredBeans, overlay_palette.go, only ever needs ID
-// membership), tagged as paletteBleveResultMsg instead.
-func paletteSearchCmd(c *data.Client, query string) tea.Cmd {
-	return func() tea.Msg {
-		beans, err := c.Search(query)
-		if err != nil {
-			return paletteBleveResultMsg{query: query, err: err}
-		}
-		ids := make([]string, len(beans))
-		for i, b := range beans {
-			ids[i] = b.ID
-		}
-		return paletteBleveResultMsg{query: query, ids: ids}
-	}
-}
+// paletteBleveResultMsg/paletteSearchCmd (E4 Task 2, bean bt-yo60) -- the
+// Command-Center's own Bleve staleness-guard for its former bean-search half
+// -- were removed by B13 (design-spec.md §15 PF-16/"US-04-Revision", bean
+// bt-ntoz, E8 Task 7, bean bt-yqdy): the Command-Center shows ONLY commands
+// now, bean search is exclusively `/`'s job (searchBleveResultMsg/searchCmd
+// above, UNTOUCHED).

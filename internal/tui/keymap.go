@@ -64,6 +64,15 @@ type keyMap struct {
 	Delete    keybind.Binding // d — delete (confirm, no cascade -- E3 Task 6, bean bt-ppzb)
 	TagAssign keybind.Binding // t — tag picker
 	Editor    keybind.Binding // e / ctrl+e — edit body in $EDITOR
+
+	// NewTag (B14, design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean
+	// bt-yqdy) is a Tag-Picker-LOCAL sub-mode binding, not a global
+	// checkpoint key like the ones above -- keyTagPicker (box_picker_tag.go)
+	// already wired the raw key ("n") correctly; this typed Binding exists
+	// SOLELY so renderBindings() (view.go) can display it in the outer
+	// Footer Zone 3 (tagPickerLocalBindings, footer_context.go) -- a raw
+	// msg.String() comparison cannot be rendered.
+	NewTag keybind.Binding // n — new tag (Tag-Picker free-text sub-mode)
 }
 
 // newKeyMap returns the currently active keybinding set. The direction cross
@@ -106,6 +115,8 @@ func newKeyMap() keyMap {
 		Delete:    keybind.NewBinding(keybind.WithKeys("d"), keybind.WithHelp("d", "Delete")),
 		TagAssign: keybind.NewBinding(keybind.WithKeys("t"), keybind.WithHelp("t", "Assign tags")),
 		Editor:    keybind.NewBinding(keybind.WithKeys("e", "ctrl+e"), keybind.WithHelp("e", "Edit in $EDITOR")),
+
+		NewTag: keybind.NewBinding(keybind.WithKeys("n"), keybind.WithHelp("n", "New tag")),
 	}
 }
 
@@ -126,7 +137,7 @@ func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
-		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort}},
+		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort, k.NewTag}},
 	}
 }
 

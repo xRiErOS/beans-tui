@@ -68,6 +68,37 @@ func TestContextualLocalHintOverlayTagPickerShowsToggle(t *testing.T) {
 	}
 }
 
+// TestTagPickerLocalBindingsIncludesNewTag guards B14 (design-spec.md §15
+// PF-16, bean bt-ntoz, E8 Task 7, bean bt-yqdy): the Tag-Picker's free-text
+// new-tag sub-mode (`n`, box_picker_tag.go's keyTagPicker) was NOT broken --
+// only undiscoverable, since the OUTER Footer Zone 3 (this file) never
+// listed it, even though the picker's OWN inline hint line already did
+// (tagPickerBox's doc comment). tagPickerLocalBindings() must now include
+// keys.NewTag alongside its existing Up/Down/Toggle/Enter/Back set.
+func TestTagPickerLocalBindingsIncludesNewTag(t *testing.T) {
+	found := false
+	for _, b := range tagPickerLocalBindings() {
+		if strings.Join(b.Keys(), ",") == strings.Join(keys.NewTag.Keys(), ",") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("tagPickerLocalBindings() = %v, want it to include keys.NewTag %v", tagPickerLocalBindings(), keys.NewTag.Keys())
+	}
+}
+
+// TestContextualLocalHintOverlayTagPickerShowsNewTag is the same guard at
+// the Footer Zone 3 rendering layer (contextualLocalHint) -- the PO-facing
+// surface B14 actually fixes ("n" was invisible in the outer footer while
+// the Tag-Picker was open).
+func TestContextualLocalHintOverlayTagPickerShowsNewTag(t *testing.T) {
+	m := model{overlay: overlayTagPicker}
+	got := m.contextualLocalHint(viewLocalStub())
+	if !strings.Contains(got, "n:New tag") {
+		t.Errorf("overlayTagPicker: contextualLocalHint = %q, want the New-Tag hint (%q)", got, "n:New tag")
+	}
+}
+
 func TestContextualLocalHintOverlayParentPickerOmitsToggle(t *testing.T) {
 	m := model{overlay: overlayParentPicker}
 	got := m.contextualLocalHint(viewLocalStub())

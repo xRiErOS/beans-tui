@@ -76,6 +76,22 @@ func TestFocusInFocusOutKeysBound(t *testing.T) {
 	}
 }
 
+// TestNewTagKeyBound guards B14 (design-spec.md §15 PF-16, bean bt-ntoz, E8
+// Task 7, bean bt-yqdy): keys.NewTag is a real, typed keybind.Binding for the
+// Tag-Picker's free-text new-tag sub-mode (box_picker_tag.go's `n`) -- a raw
+// msg.String()=="n" comparison can drive keyTagPicker, but cannot be
+// rendered by renderBindings() (view.go), which is what the Footer-Hint fix
+// needs. Pins both the key AND the Help() text the footer will display.
+func TestNewTagKeyBound(t *testing.T) {
+	k := newKeyMap()
+	if !bindHas(k.NewTag, "n") {
+		t.Errorf("NewTag.Keys() = %v, want to contain %q", k.NewTag.Keys(), "n")
+	}
+	if got := k.NewTag.Help().Desc; got != "New tag" {
+		t.Errorf("NewTag.Help().Desc = %q, want %q", got, "New tag")
+	}
+}
+
 // TestGlobalBindingsExactSet guards PF-11 (design-spec.md §15, E7 T7, bean
 // bt-m6at): globalBindings() is Header Zone 1's single source -- exactly the
 // 7 header-global bindings, in the exact display order design-spec §15

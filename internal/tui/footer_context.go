@@ -52,8 +52,15 @@ func valueMenuLocalBindings() []keybind.Binding {
 // wording ("wenn ein Form/Overlay aktiv ist ... inkl. 'space:
 // select/toggle'") only half addressed -- Q04's PO example (the Filter-Menu)
 // was illustrative, not exhaustive. See this task's Deviations section.
+//
+// keys.NewTag (B14, design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean
+// bt-yqdy) closes a SEPARATE gap: the Tag-Picker's free-text new-tag
+// sub-mode (`n`) was never broken -- keyTagPicker already handled it, and
+// tagPickerBox's OWN inline hint line already showed it -- but THIS outer
+// Footer Zone 3 set never listed it, so a PO scanning the (more prominent)
+// outer footer never discovered the mode existed at all.
 func tagPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.Enter, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.NewTag, keys.Enter, keys.Back}
 }
 
 // parentPickerLocalBindings is the Parent-Picker overlay's own footer set
