@@ -1,11 +1,11 @@
 ---
 # bt-z4b1
 title: 'Edit-Modell: ''e'' wird Ganz-Bean-$EDITOR, ''enter'' bleibt Feld-Kaskade (D01)'
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:42Z
-updated_at: 2026-07-16T08:33:00Z
+updated_at: 2026-07-16T08:51:00Z
 parent: bt-tct9
 ---
 
@@ -283,3 +283,14 @@ Kein manueller tmux-Smoke durchgeführt (reine Tastatur-/Datenlogik-Änderung, k
 
 - Kein bekannter Folgeauftrag aus diesem Task. Falls ein späterer Task created_at/updated_at editierbar machen soll, ist das ein CLI-seitiger Vorlauf (beans-CLI müsste neue --created-at/--updated-at-Flags bekommen) — nicht in diesem Repo lösbar.
 - SetBody (data.Client) bleibt bestehen (nicht entfernt) — kein Aufrufer mehr innerhalb beans-tui, aber Teil der generischen Client-API-Oberfläche, YAGNI-Removal nicht Teil dieses Tasks.
+
+
+## Review-Findings (2026-07-16, Reviewer-Verdict CHANGES_REQUIRED)
+
+| Fxx | Schwere | Fundort | Beschreibung |
+|---|---|---|---|
+| F01 | critical | update.go applyEditorFinished mutateCmd-Closure (~508-517) | CLI-VALIDATION_ERROR von UpdateWhole (z.B. status: banana, gelöschte title:-Zeile) wird NICHT recoverable gemacht — Closure prüft nur errors.Is(err, data.ErrConflict). Voller $EDITOR-Rohtext geht verloren (live reproduziert). Widerspricht design-spec §15 PF-17 ("Parse-Fehler ODER CLI-VALIDATION_ERROR ... mirrort writeConflictTempFile"); Akzeptanz-Item war fälschlich abgehakt. |
+| F02 | medium | editor_test.go:718 TestApplyEditorFinishedRecoversTempfileOnValidationError | Name suggeriert CLI-VALIDATION_ERROR-Abdeckung, testet nur parseRawBean-Fehler (vor CLI-Call) — False-Confidence-Quelle für F01. |
+| F03 | low | editor_test.go parseRawBean-Tests | Kein Regressionstest für Body mit eingebetteten `---`-Zeilen (Logik korrekt, Sandbox-verifiziert, aber ungesichert gegen Refactor). |
+
+**Fix-Rezept (Reviewer):** (1) mutateCmd-Closure: JEDEN UpdateWhole-Fehler über writeConflictTempFile(content) recoverable machen (ErrConflict-Sonderfall kann entfallen — conflictWithRecovery reicht ErrConflict via Unwrap() durch); applyMutationResult generischer else-Zweig muss conflictWithRecovery via errors.As prüfen + Pfad im Statustext anhängen. (2) Test umbenennen zu ...OnParseError + neuen TestApplyEditorFinishedRecoversTempfileOnCLIValidationError (Fake-CLI code VALIDATION_ERROR, kein CONFLICT; Tempfile-Existenz UND -Inhalt gegen vollen Rohtext prüfen). (3) TestParseRawBeanRoundTrip-Variante mit ---im Body. Danach volles Gate + Checklisten-Item erst dann wieder abhaken.
