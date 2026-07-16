@@ -1,11 +1,11 @@
 ---
 # bt-9ipw
 title: Tag-Picker Typeahead — Fuzzy-Suggest + Auto-Create bei No-Match
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-07-16T20:13:14Z
-updated_at: 2026-07-16T20:47:11Z
+updated_at: 2026-07-16T21:19:56Z
 parent: bt-362n
 ---
 
@@ -101,3 +101,126 @@ Kein Datei-Konflikt mit bt-ct3k/bt-idm1 (andere Datei) — unabhängig
 bearbeitbar, aus Kontext-Kontinuität aber sinnvoll NACH der
 Tag-Management-Nacharbeit eingeplant (dieselbe Feature-Familie, geteilte
 Konventionen wie `collectTagCounts`/`tagManagementMarkerGlyph`).
+
+
+## Summary (Implementer, 2026-07-16)
+
+Drei-Schritt-Zerlegung (Filter/Navigation/Enter-Dispatch+Rendering) in EINER Session
+umgesetzt, ausschließlich `box_picker_tag.go` (+ `types.go` Feld-Deklarationen,
++ `box_picker_tag_test.go`). `view_tag_management.go` unangetastet.
+
+- Neue Felder: `tagInputFiltered []tagCount`, `tagInputSuggestCursor int` (types.go).
+- Neue Funktion `filterTagItems(items []tagCount, query string) []tagCount` —
+  case-insensitive `strings.Contains`, kein Fuzzy (YAGNI). Leerer Query matcht alles
+  (mirrort `filteredRepos()`s Kontrakt, view_lobby.go).
+- `openTagInput` seedet `tagInputFiltered` sofort mit der vollen `tagItems`-Liste
+  (Query "") statt einer leeren Vorschlagsliste beim Öffnen.
+- `keyTagInput`: `tea.KeyUp`/`tea.KeyDown` (RAW KeyType, NICHT `navKey`s
+  Buchstaben-Alias-Tabelle — `keys.Up`/`keys.Down` binden zusätzlich "i"/"k", das
+  hätte im Freitext-Feld getippte "i"/"k" verschluckt) bewegen den Cursor, geklemmt
+  auf `[0, len(tagInputFiltered)-1]`. `enter` verzweigt: nicht-leeres
+  `tagInputFiltered` → existierenden Tag am Cursor übernehmen (Copy-on-Write wie
+  `toggleTagPending`, KEIN Registry-Write, KEINE neue `tagItems`-Zeile); leeres
+  `tagInputFiltered` → heutiger Neuanlage-Pfad UNVERÄNDERT (D11). Jede andere Taste
+  geht an `m.tagInput.Update`, `tagInputFiltered`/`tagInputSuggestCursor` werden NUR
+  neu berechnet, wenn sich der Input-Wert dadurch TATSÄCHLICH geändert hat (mirrort
+  `keyLobby`s prev/current-Guard, view_lobby.go) — eine wertneutrale Taste (z. B.
+  Cursor-Bewegung im Textfeld) reißt die gerade navigierte Vorschlags-Cursor-Position
+  nicht zurück auf 0.
+- `tagInputBox`: Hinweiszeile ist jetzt dynamisch ("up/down:navigate enter:select
+  esc:cancel" bei Treffern, sonst unverändert "enter:create esc:cancel"), darunter
+  die gefilterte Vorschlagsliste mit `▸`-Cursor + Marker-Spalte (mirrort
+  `tagPickerBox`s Zeilenformat 1:1).
+
+## Test-Output (RED→GREEN je Schritt)
+
+RED (vor Implementierung, `go test ./internal/tui/... -run TestTagInput -v`):
+```
+=== RUN   TestTagInputOpensWithFilteredSeededFromFullTagList
+    tagInputFiltered len = 0, want 3 (full tagItems on empty query)
+--- FAIL
+=== RUN   TestTagInputFiltersLiveBySubstringCaseInsensitive
+    tagInputFiltered = [], want exactly [urgent]
+--- FAIL
+=== RUN   TestTagInputNavigationMovesCursorClampedToFilteredBounds
+    cursor after two downs = 0, want 2
+--- FAIL
+=== RUN   TestTagInputEnterOnSuggestionAssignsExistingTagNoDuplicateNoRegistryWrite
+    setup: tagInputFiltered = [], want exactly [backend]
+--- FAIL
+=== RUN   TestTagInputBoxRendersFilteredSuggestionsWithCursorMarker
+    want all 3 suggestion rows rendered
+--- FAIL
+FAIL
+```
+(`TestTagInputArrowKeysDoNotLeakIntoTypedText` und
+`TestTagInputEnterWithNoMatchStillFallsBackToUnchangedCreatePath` waren bereits vor
+der Implementierung GREEN — reine Regressions-/Kollisions-Guards gegen bestehendes
+Verhalten, kein neuer Code nötig für ihr Bestehen.)
+
+GREEN (nach Implementierung, gleicher Testlauf, 8 neue + 20 bestehende Tests im File):
+```
+--- PASS: TestTagInputOpensWithFilteredSeededFromFullTagList (0.00s)
+--- PASS: TestTagInputFiltersLiveBySubstringCaseInsensitive (0.00s)
+--- PASS: TestTagInputNavigationMovesCursorClampedToFilteredBounds (0.00s)
+--- PASS: TestTagInputArrowKeysDoNotLeakIntoTypedText (0.00s)
+--- PASS: TestTagInputEnterOnSuggestionAssignsExistingTagNoDuplicateNoRegistryWrite (0.00s)
+--- PASS: TestTagInputEnterWithNoMatchStillFallsBackToUnchangedCreatePath (0.00s)
+--- PASS: TestTagInputBoxRendersFilteredSuggestionsWithCursorMarker (0.00s)
+PASS
+ok  	beans-tui/internal/tui	0.522s
+```
+
+Voller Lauf (`go test ./...`, KEIN `-short`) zweimal in Folge grün, keine Golden-Diffs:
+```
+ok  	beans-tui/cmd	0.687s
+ok  	beans-tui/internal/config	1.202s
+ok  	beans-tui/internal/data	3.089s
+ok  	beans-tui/internal/theme	0.332s
+ok  	beans-tui/internal/tui	139.105s
+```
+(Lauf 2: identisch, exit 0.) `gofmt -l` leer, `go vet ./...` sauber.
+
+## Smoke (echt gesmoked via tmux, bin/bt, worktree feat-typeahead)
+
+1. Bean `bt-6oyy` fokussiert, `t` → Tag-Picker öffnet mit `to-review (11)`,
+   `rejected (1)`, `smoke (1)`.
+2. `n` → New-Tag-Overlay öffnet mit ALLEN 3 Tags als Vorschläge (Cursor auf
+   `to-review`), Hint "up/down:navigate enter:select esc:cancel".
+3. Tippen `re` → Liste filtert sichtbar auf `to-review (11)` + `rejected (1)`
+   (`smoke` verschwindet) — Case-insensitive Substring bestätigt.
+4. `↓` → Cursor bewegt sich sichtbar auf `rejected`.
+5. `enter` → Overlay schließt zurück in den Tag-Picker, `rejected` jetzt `[x]`
+   angehakt, Zeilenzahl weiterhin 3 (KEIN Duplikat).
+6. `n` erneut, Tippen `smoke-brandnew` (kein Treffer) → Vorschlagsliste leer,
+   Hint fällt zurück auf "enter:create esc:cancel".
+7. `enter` → Tag-Picker zeigt neue Zeile `smoke-brandnew (0)`, sofort `[x]`
+   angehakt — heutiger Neuanlage-Pfad unverändert bestätigt.
+8. `esc` verwirft alle Pending-Changes (kein Save), `q` → Quit-Confirm-Dialog
+   erscheint korrekt.
+9. `git status --short .beans/` vor UND nach dem Smoke: leer — keine
+   dauerhaften Test-Mutationen.
+
+Ein Zwischenfall während des ERSTEN Smoke-Versuchs: eine generische
+tmux-Session namens `btsmoke` wurde von einem PARALLEL laufenden Agent (dasselbe
+beans-tui-Projekt, vermutlich Default-`main-direkt`-Konvention gegen
+`beans-tui-repository`) unter demselben Namen neu angelegt und hat meine
+Folge-Keystrokes abgefangen (sichtbar am Repo-Titel-Wechsel auf
+"beans-tui-repository" und späterem Prozessende). Kein Bug im eigenen Code — die
+ERSTEN beiden Captures (Tag-Picker offen, New-Tag-Overlay mit korrekter
+Vorschlagsliste) bewiesen die eigene Implementierung bereits vor dem Zwischenfall.
+Wiederholt mit kollisionssicherem Sessionnamen (`bt9ipw$$`), vollständig grün, siehe
+oben.
+
+## Deviations/ERRATA
+
+Keine Zeilenreferenz-Abweichungen vom Plan (`keyTagInput` Z.270-310,
+`tagInputBox` Z.397-405 stimmten exakt). Eine bewusste Design-Entscheidung über
+den Plan-Wortlaut hinaus: Cursor-Navigation nutzt den RAW `tea.KeyUp`/
+`tea.KeyDown`-KeyType statt `navKey()` (das im übrigen Code Buchstaben-Aliase wie
+"i"/"k" für hoch/runter bindet) — im Freitext-Erfassungsfeld müssen "i"/"k" als
+literale, tippbare Zeichen erhalten bleiben (z. B. Tag-Name "risk"). Eigens per Test
+abgesichert (`TestTagInputArrowKeysDoNotLeakIntoTypedText`). Dynamische Hint-Zeile
+in `tagInputBox` ("enter:select" vs. "enter:create") war nicht explizit gefordert,
+aber direkte Konsequenz aus dem verzweigten enter-Verhalten — ohne sie wäre der Hint
+irreführend.
