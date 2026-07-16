@@ -1,11 +1,11 @@
 ---
 # bt-2v38
 title: Titel-Edit-Form wird multi-line (B03)
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:45Z
-updated_at: 2026-07-16T09:47:18Z
+updated_at: 2026-07-16T10:10:58Z
 parent: bt-tct9
 ---
 
@@ -185,3 +185,17 @@ Design-Lücke, keine Abweichung von den TDD-Schritten.
   Konvention ist der `strings.Contains(err, "beans update")`-Dispatch-Beweis gegen einen
   nicht-existenten `RepoDir`. Für künftige Tasks, die exakte CLI-Argumente prüfen wollen, wäre
   ein PATH-Stub ein separates, größeres Infra-Stück (hier bewusst nicht gebaut, außerhalb B03-Scope).
+
+
+## Review-Findings (2026-07-16, Reviewer-Verdict CHANGES_REQUIRED)
+
+| Fxx | Schwere | Fundort | Beschreibung |
+|---|---|---|---|
+| F01 | high | form_edit_title.go:37-38 + huh field_text.go:249-252/group.go:390 | .ExternalEditor(false) deaktiviert huhs ctrl+e-Editor-Suspend NICHT direkt — die Deaktivierung passiert nur zufällig, weil styleForms WithHeight() VOR WithShowHelp(false) läuft und dabei akzidentell Footer()→KeyBinds() triggert. Beweis: .ExternalEditor(false) entfernt → GESAMTE Suite bleibt grün; styleForm-Reihenfolge vertauscht → huh-Editor feuert (tea.execMsg). Fragil gegen Umsortierung und huh-Upgrades. |
+| F02 | medium | form_edit_title.go (Input→Text-Swap) | PO kann via alt+enter/ctrl+j echten \n in den Titel einfügen; überlebt bis GetString→SetTitle→beans update --title (empirisch: "Original Title\nSECOND"). Undefiniert für YAML-Single-Line-Feld, kein Test, keine Validierung. Mit huh.Input strukturell unmöglich — echte Verhaltensänderung durch B03. |
+| F03 | low | form_edit_title_test.go:90-121 | Testname behauptet Lines(3)-Pin, prüft nur Text>Input-Höhe — entferntes .Lines(3) fällt nicht auf (huh-Default-Höhe 6). Doku nachschärfen oder Assertion fixieren. |
+
+**Fix-Rezept (Reviewer + Supervisor-Entscheid):**
+1. F01: Behavioral-Test, der bei OFFENEM Titel-Formular ein echtes ctrl+e-KeyMsg durch model.Update schickt und beweist, dass KEIN huh-eigener Editor-Cmd (tea.execMsg) resultiert. Zusätzlich Robustheit: nicht auf Aufruf-Reihenfolge verlassen — field.KeyBinds() nach dem Bauen explizit aufrufen ODER per WithKeyMap das Editor-Binding hart disablen (key.WithDisabled()).
+2. F02 — SUPERVISOR-ENTSCHEID: Validator-Weg. nonEmpty-Validator erweitern: Titel mit "\n" wird ABGELEHNT (klare Fehlermeldung, z.B. "title must be single-line"), keine stille Normalisierung. Regressionstests für beide Fälle (mit \n → Validierungsfehler; ohne \n → Submit unverändert).
+3. F03: Doc-Kommentar präzisieren (prüft Feldtyp + Mindesthöhe, nicht exakten Lines-Wert) — Lines(3) bleibt Planner-Schätzung, kein harter Pin nötig.
