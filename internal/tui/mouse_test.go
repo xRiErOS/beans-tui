@@ -731,3 +731,98 @@ func TestMouseDetailClickReachableFromBacklogView(t *testing.T) {
 		t.Fatalf("detailFocus=%v secCursor=%d, want true/%d (Backlog view Detail-Pane click)", nm.detailFocus, nm.secCursor, relationsSectionIdx)
 	}
 }
+
+// TestDetailClickBacklogThreeLineFooterAt80Cols pins clickPaneGeometry's
+// dynamic footH (lipgloss.Height(localKeys)+2, mouse.go) against the ONE
+// real situation where it differs between the two chromes: the Backlog view
+// at 80 columns, whose Q06 footer list + Sort wraps to THREE lines while the
+// Browse footer stays at two (bt-d8kc Deviations, "Backlog-Footer 3 Zeilen
+// bei 80 Spalten"). Every other clickPaneGeometry/detail-click test runs at
+// Width 100, where both footers are 2 lines -- a detailClickRow that picked
+// the WRONG chrome (browseRepoChrome instead of backlogChrome) or hardcoded
+// a 2-line footer would have passed all of them (E8-T8-Review I01, bean
+// bt-6ppq). The pin is the click/render boundary pair: the LAST real body
+// row must hit, the pane's bottom-border row (one below) must not -- off by
+// one in footH breaks exactly one of the two.
+func TestDetailClickBacklogThreeLineFooterAt80Cols(t *testing.T) {
+	m := fixtureModel(t, backlogBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 30})
+	m.view = viewBacklog
+	vis := m.backlogVisible()
+	if len(vis) == 0 {
+		t.Fatal("setup: need at least 1 backlog-visible bean")
+	}
+	m.backlogList.setLen(len(vis))
+	m.backlogList.cursor = 0
+	// Long body (30 paragraphs — glamour preserves paragraph breaks, so the
+	// section body is guaranteed taller than the pane) + BODY section open:
+	// the accordion content extends past the pane bottom, so a click below
+	// the last body row has real content to (wrongly) resolve to if footH
+	// under-counts the 3-line footer.
+	vis[0].Body = strings.Repeat("body filler line\n\n", 30)
+	m.accOpen = bodySectionIdx + 1
+
+	// Preconditions (fixture reality, not the behavior under test): the
+	// Backlog footer at 80 cols spans 3 lines, the Browse footer only 2 --
+	// exactly the divergence that gives this test its discriminating power.
+	// If a future footer respec changes either height, update the fixture
+	// (e.g. a narrower width) so the 3-vs-2 divergence is preserved.
+	head, localKeys := m.backlogChrome(m.width - 2)
+	if got := lipgloss.Height(localKeys); got != 3 {
+		t.Fatalf("precondition: backlog footer at 80 cols = %d lines, want 3", got)
+	}
+	if _, browseKeys := m.browseRepoChrome(m.width - 2); lipgloss.Height(browseKeys) != 2 {
+		t.Fatalf("precondition: browse footer at 80 cols = %d lines, want 2 (divergence vs backlog is what this test exercises)", lipgloss.Height(browseKeys))
+	}
+
+	bodyH, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
+
+	// Render-grounded anchor: locate the footer's first line (Q06 order
+	// starts with "tab focus in"; renderBindings glues key/desc with NBSP)
+	// in the REAL View() and assert the geometry accounts for all three
+	// footer lines: pane bottom border + divider sit between the last body
+	// row and the footer (the status line renders BELOW the footer), so
+	// footerY == originY + bodyH + 2.
+	lines := screenLines(m)
+	footerY := -1
+	for y, l := range lines {
+		if strings.Contains(strings.ReplaceAll(l, nbsp, " "), "focus in") {
+			footerY = y
+			break
+		}
+	}
+	if footerY < 0 {
+		t.Fatal("footer first line (\"focus in\") not found in the rendered View()")
+	}
+	if want := originY + bodyH + 2; footerY != want {
+		t.Fatalf("footH dynamic broken: footer first line at row %d, want originY+bodyH+2 = %d", footerY, want)
+	}
+	borderY := footerY - 2 // pane bottom border (footer -1 divider, -2 border)
+	if !strings.Contains(lines[borderY], "╰") {
+		t.Fatalf("row %d (footerY-3) is not the pane bottom border: %q", borderY, lines[borderY])
+	}
+
+	x := originX + lw + 2 // inside the right Detail pane
+
+	// Last real body row (borderY-1) must resolve: BODY section body hit ->
+	// single click activates the section (detailFocus true, secCursor BODY).
+	click := tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: x, Y: borderY - 1}
+	tm, _ := m.handleMouse(click)
+	nm := tm.(model)
+	if !nm.detailFocus || nm.secCursor != bodySectionIdx {
+		t.Fatalf("click on the LAST body row (Y=%d): detailFocus=%v secCursor=%d, want true/%d (footH over-counts the 3-line footer?)", borderY-1, nm.detailFocus, nm.secCursor, bodySectionIdx)
+	}
+
+	// The pane's bottom-border row and the footer row itself must NOT
+	// resolve to any Detail hit (clickRow >= bodyH) -- with a 2-line footH
+	// assumption the border row falls back INSIDE bodyH and lands in the
+	// open BODY body (the bug class this test pins).
+	for _, y := range []int{borderY, footerY} {
+		click := tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: x, Y: y}
+		tm, _ := m.handleMouse(click)
+		nm := tm.(model)
+		if nm.detailFocus {
+			t.Fatalf("click below the pane (Y=%d) must not resolve to a Detail hit (footH under-counts the 3-line footer)", y)
+		}
+	}
+}
