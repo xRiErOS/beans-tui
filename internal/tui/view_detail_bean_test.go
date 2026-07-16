@@ -676,6 +676,91 @@ func TestHangingIndentWrapNeverCollapsesBelowMinimumContinuationWidth(t *testing
 	}
 }
 
+// TestHangingIndentWrapHardBreaksSpacelessLongToken guards F01 (bt-b0w0
+// Review-Findings, Fix-Runde 1, medium/blockierend): a single token with NO
+// whitespace (URL, German compound, long ID) longer than the continuation
+// width must be HARD-broken at the width boundary -- ansi.Wordwrap alone
+// only breaks at whitespace and lets such a token overflow the target width
+// unbounded (reviewer repro: a 103-char word at w=30 produced one 104-cell
+// line). The fix mirrors wrapText's (view.go) exact two-pass pattern:
+// ansi.Hardwrap(ansi.Wordwrap(text, contW, ""), contW, true).
+func TestHangingIndentWrapHardBreaksSpacelessLongToken(t *testing.T) {
+	prefix := "t bt-1 "
+	const w = 30
+	got := hangingIndentWrap(prefix, strings.Repeat("x", 103), w)
+
+	lines := strings.Split(got, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected the 103-char spaceless token to hard-break into >=2 lines at w=%d, got 1 line (%d cells wide)", w, lipgloss.Width(got))
+	}
+	for i, line := range lines {
+		if lw := lipgloss.Width(line); lw > w {
+			t.Errorf("line %d is %d cells wide, want <= %d (spaceless token must hard-break, F01): %q", i, lw, w, line)
+		}
+	}
+}
+
+// TestHangingIndentWrapCJKDoubleWidthTitleStaysWithinWidth guards F02
+// (bt-b0w0 Review-Findings, Fix-Runde 1): CJK/Emoji titles are double-width
+// per CELL, not per rune -- the wrap math must budget by lipgloss.Width
+// (terminal cells), so no rendered line may exceed w even though the RUNE
+// count per line is roughly half a Latin title's. CJK prose also carries no
+// spaces, so this doubles as the double-width arm of F01's hard-break pin.
+func TestHangingIndentWrapCJKDoubleWidthTitleStaysWithinWidth(t *testing.T) {
+	prefix := "t bt-1 "
+	const w = 30
+	title := "漢字のタイトルが長くて折り返しが必要になるほど長い場合の確認テスト🎉🚀"
+	got := hangingIndentWrap(prefix, title, w)
+
+	lines := strings.Split(got, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected the double-width title to wrap into >=2 lines at w=%d, got 1 line (%d cells wide)", w, lipgloss.Width(got))
+	}
+	indentW := lipgloss.Width(prefix)
+	for i, line := range lines {
+		if lw := lipgloss.Width(line); lw > w {
+			t.Errorf("line %d is %d cells wide, want <= %d (double-width cells must be budgeted per CELL, F02): %q", i, lw, w, line)
+		}
+		if i > 0 {
+			if gotIndent := len(line) - len(strings.TrimLeft(line, " ")); gotIndent != indentW {
+				t.Errorf("continuation line %d indent = %d spaces, want %d (prefix width)", i, gotIndent, indentW)
+			}
+		}
+	}
+}
+
+// TestHangingIndentWrapIndentMatchesStyledPrefixUnderTrueColor guards F03
+// (bt-b0w0 Review-Findings, Fix-Runde 1): the indent computation
+// (lipgloss.Width(ansi.Strip(prefix))) must count VISIBLE cells of a REAL,
+// ANSI-styled relationRow prefix -- every other hangingIndentWrap test runs
+// under the Ascii ambient default (zero ANSI bytes in the prefix), so a
+// regression that counted raw bytes instead of stripped cells would slip
+// through them. Render-grounded through relationRow itself (the actual
+// production prefix construction), under a forced TrueColor profile.
+func TestHangingIndentWrapIndentMatchesStyledPrefixUnderTrueColor(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	rel := &data.Bean{ID: "tc-1", Title: "Hier steht ein langer Titel eines beans der so umbricht dass die Uebersicht gewahrt ist", Status: "todo", Type: "task", Priority: "normal"}
+	out := relationRow(rel, relationRowMarker(false, 0, 1), 40)
+
+	if !strings.Contains(out, "\x1b[") {
+		t.Fatal("setup: TrueColor relationRow output must contain ANSI escapes (the styled-prefix premise of this test)")
+	}
+	stripped := ansi.Strip(out)
+	lines := strings.Split(stripped, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("setup: expected the long title to wrap into >=2 lines, got 1: %q", stripped)
+	}
+	titleCol := cellCol(t, lines[0], "Hier")
+	for i, line := range lines[1:] {
+		gotIndent := len(line) - len(strings.TrimLeft(line, " "))
+		if gotIndent != titleCol {
+			t.Errorf("continuation line %d indent = %d, want %d (title-start column of the STYLED prefix, F03): %q", i+1, gotIndent, titleCol, line)
+		}
+	}
+}
+
 // --- relationsSectionBody cursor markers + fieldStrip removal (B04,
 // design-spec.md §15 PF-17, bean bt-b0w0) ---
 

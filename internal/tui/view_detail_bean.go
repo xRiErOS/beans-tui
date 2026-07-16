@@ -228,7 +228,13 @@ func hangingIndentWrap(prefix, text string, w int) string {
 	if contW < 8 {
 		contW = 8 // never collapse to nothing on narrow terminals
 	}
-	wrapped := ansi.Wordwrap(text, contW, "")
+	// Two-pass wrap, mirrors wrapText (view.go) exactly (F01, bt-b0w0
+	// Fix-Runde 1): Wordwrap alone only breaks at whitespace -- a single
+	// spaceless token (URL, German compound, long ID, CJK prose) longer
+	// than contW would overflow the target width unbounded. Hardwrap
+	// force-breaks such over-long tokens at the cell boundary (true =
+	// preserve ANSI sequences), same as the pre-B04 blanket wrapText did.
+	wrapped := ansi.Hardwrap(ansi.Wordwrap(text, contW, ""), contW, true)
 	lines := strings.Split(wrapped, "\n")
 	var b strings.Builder
 	for i, line := range lines {

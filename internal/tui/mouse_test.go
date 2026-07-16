@@ -484,6 +484,79 @@ func TestDetailClickRowNoOffByOneWhenRelationsSectionActiveWithFields(t *testing
 	}
 }
 
+// TestDetailClickRowWrapContinuationLineResolvesToRelationsSectionHit
+// guards F04 (bt-b0w0 Review-Findings, Fix-Runde 1): the combination
+// "RELATIONS active+open x multi-line wrapping entry" -- B04.3's
+// hangingIndentWrap makes a single Relations entry occupy SEVERAL rendered
+// rows, and detailClickRow counts section-body height via lipgloss.Height
+// (s.body), so both halves must hold: (a) a click on a wrap CONTINUATION
+// line inside the Relations body resolves to the section-level hit
+// (secIdx=relationsSectionIdx, fieldIdx=-1 -- v1: Relations rows are not
+// individually clickable), and (b) the section AFTER the multi-line
+// RELATIONS body (HISTORY) resolves without any row shift. The existing
+// off-by-one regression test above runs a short, non-wrapping fixture and
+// cannot see a wrap-height miscount.
+func TestDetailClickRowWrapContinuationLineResolvesToRelationsSectionHit(t *testing.T) {
+	beans := fixtureBeans()
+	for i := range beans {
+		if beans[i].ID == "ep-1" {
+			// tk-2's Parent row must wrap: unique WRAPTOKEN lands on a
+			// continuation line (render-grounded lookup below fails loudly
+			// if it does not render at all).
+			beans[i].Title = "Epic One with an intentionally very long title that must wrap across the detail pane WRAPTOKEN end"
+		}
+	}
+	m := fixtureModel(t, beans)
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = focusBean(m, "tk-2")
+	m.detailFocus = true
+	m.secCursor = relationsSectionIdx
+	m.accOpen = relationsSectionIdx + 1
+	b := m.focusedBean()
+
+	// Setup sanity: WRAPTOKEN must sit on a CONTINUATION line, not the
+	// row's FIRST line -- otherwise this test silently stops covering the
+	// wrap-continuation click path. A continuation line carries only
+	// hanging indent + title words; the row's Meta prefix (glyphs + the
+	// "ep-1" ID) lives exclusively on the first line, so the token's line
+	// must NOT contain the ID. ANSI-stripped first (screenLines returns
+	// styled lines).
+	var onContinuation bool
+	for _, raw := range screenLines(m) {
+		l := ansi.Strip(raw)
+		if strings.Contains(l, "WRAPTOKEN") && !strings.Contains(l, "ep-1") {
+			onContinuation = true
+		}
+	}
+	if !onContinuation {
+		t.Fatal("setup: WRAPTOKEN must render on a wrap continuation line (a line without the row's own ep-1 ID prefix)")
+	}
+
+	msg := detailClickAt(t, m, "WRAPTOKEN")
+	secIdx, fieldIdx, ok := detailClickRow(m, b, msg)
+	if !ok {
+		t.Fatal("click on a Relations wrap continuation line must resolve")
+	}
+	if secIdx != relationsSectionIdx {
+		t.Fatalf("secIdx = %d, want %d (relationsSectionIdx)", secIdx, relationsSectionIdx)
+	}
+	if fieldIdx != -1 {
+		t.Fatalf("fieldIdx = %d, want -1 (v1: section-level hit, Relations rows not individually clickable)", fieldIdx)
+	}
+
+	msg2 := detailClickAt(t, m, "[4]") // "> [4] HISTORY" header AFTER the multi-line Relations body
+	secIdx2, fieldIdx2, ok2 := detailClickRow(m, b, msg2)
+	if !ok2 {
+		t.Fatal("click on the HISTORY header below a multi-line RELATIONS body must resolve")
+	}
+	if secIdx2 != historySectionIdx {
+		t.Fatalf("secIdx = %d, want %d (historySectionIdx -- no row shift from the wrapped Relations rows)", secIdx2, historySectionIdx)
+	}
+	if fieldIdx2 != -1 {
+		t.Fatalf("fieldIdx = %d, want -1 (Section-Header hit)", fieldIdx2)
+	}
+}
+
 // TestMouseDetailClickSectionHeaderActivatesAndExpands guards Fall a (PO-
 // Wortlaut, bean bt-duz7): a click on a Section-Header activates AND
 // expands that section -- m.detailFocus=true, m.secCursor/m.accOpen set,
