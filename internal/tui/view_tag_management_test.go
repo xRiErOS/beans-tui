@@ -596,6 +596,39 @@ func TestKeyTagManagementNewTagOnDefinedRowStillOpensBlankCreate(t *testing.T) {
 	}
 }
 
+// TestKeyTagManagementNewTagOnFreeRowInvalidNameWarnsNoSave guards Adopt's
+// defensive ValidTagName gate (Review-Finding, Fix-Runde zu bt-idm1): a free
+// row's name comes from a bean's ACTUAL tags on disk -- a hand-edited bean
+// file can carry a name the tag grammar rejects (uppercase, underscore, ...).
+// Adopting it must mirror the Create path's own pre-dispatch validation
+// (keyTagMgmtInput's data.ValidTagName check): warn Toast, NO Registry write,
+// and NO fallback to the Blank-Create input either (the PO pressed n ON this
+// row -- silently opening an empty input would misread the intent).
+func TestKeyTagManagementNewTagOnFreeRowInvalidNameWarnsNoSave(t *testing.T) {
+	dir := t.TempDir()
+	m := newModel(&data.Client{RepoDir: dir}, dir)
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "Bad_Tag", defined: false, count: 1}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	mm := nm.(model)
+	if mm.tagMgmtInputActive {
+		t.Fatal("an invalid free name must NOT fall back to the Blank-Create input")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast for an invalid free name, got %+v", mm.toast)
+	}
+	if cmd != nil {
+		if _, isSave := cmd().(tagDefsSavedMsg); isSave {
+			t.Fatal("an invalid free name must never dispatch saveTagDefsCmd (no Registry write)")
+		}
+	}
+	if got, _ := (&data.Client{RepoDir: dir}).LoadTagDefs(); len(got) != 0 {
+		t.Fatalf("on-disk registry must stay empty, got %v", got)
+	}
+}
+
 // TestKeyTagMgmtInputEscDiscardsOnlySubmode guards D14/D06: esc while the
 // input is active closes ONLY the input sub-mode -- the Page itself
 // (m.view) and its row list stay completely untouched, mirrors keyTagInput's

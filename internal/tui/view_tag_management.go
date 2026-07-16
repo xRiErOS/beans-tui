@@ -454,6 +454,16 @@ func (m model) openTagMgmtRename() (tea.Model, tea.Cmd) {
 // free (mirrors Delete/Rename's own refindName convention), no separate
 // handling needed here.
 func (m model) openTagMgmtAdopt(row tagRegistryRow) (tea.Model, tea.Cmd) {
+	// Defensive ValidTagName gate (Review-Finding, Fix-Runde): a free row's
+	// name comes from a bean's ACTUAL on-disk tags -- a hand-edited bean file
+	// can carry a name the tag grammar rejects. Mirror the Create path's own
+	// pre-dispatch validation (keyTagMgmtInput, one function down): warn
+	// Toast, NO Registry write -- and deliberately NO fallback to the
+	// Blank-Create input either (the PO pressed n ON this row; silently
+	// opening an empty input would misread that intent).
+	if !data.ValidTagName(row.name) {
+		return m.showToast(toastWarn, "invalid tag name (a-z0-9, hyphen-separated, lowercase)", "", nil, false)
+	}
 	defs := definedTagNames(m.tagMgmtRows)
 	return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, row.name), row.name,
 		fmt.Sprintf("tag '%s' registered", row.name))

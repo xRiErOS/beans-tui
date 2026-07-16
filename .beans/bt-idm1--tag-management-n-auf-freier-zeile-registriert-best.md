@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-07-16T20:35:29Z
-updated_at: 2026-07-16T21:26:54Z
+updated_at: 2026-07-16T21:44:21Z
 parent: bt-362n
 blocked_by:
     - bt-ct3k
@@ -132,3 +132,16 @@ Registry-only).
   in `applyTagDefsSaved` am bestätigten Write — bean sah "Erfolgs-Toast in applyTagDefsSaved
   anhängen" vor, ließ den Transportweg offen; refindName-B01-Konvention (jede Dispatch-Site
   benennt explizit) wurde gespiegelt.
+
+
+## Fix-Runde (Review-Finding, 2026-07-16)
+
+Non-blocking Review-Finding umgesetzt: `openTagMgmtAdopt` validiert `row.name` jetzt defensiv
+gegen `data.ValidTagName` VOR dem Registry-Write (Spiegelung des Create-Pfads) — ungültiger
+Name (hand-editierte Bean-Datei kann Grammatik-verletzende Tags tragen) → toastWarn
+"invalid tag name (a-z0-9, hyphen-separated, lowercase)", KEIN Registry-Write, bewusst KEIN
+Fallback auf Blank-Create (n wurde AUF dieser Zeile gedrückt).
+
+RED: `TestKeyTagManagementNewTagOnFreeRowInvalidNameWarnsNoSave` —
+"want a toastWarn Toast for an invalid free name, got <nil>" → GREEN nach Gate.
+Gates: `-short`-Lauf + voller Lauf (internal/tui 142.0s) grün, vet/gofmt clean.
