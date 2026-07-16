@@ -453,6 +453,37 @@ func TestDetailClickRowMapsMetaFieldClick(t *testing.T) {
 	}
 }
 
+// TestDetailClickRowNoOffByOneWhenRelationsSectionActiveWithFields guards a
+// coupling this file's own detailClickRow doc comment (above) flags: B04
+// (design-spec.md §15 PF-17, bean bt-b0w0) removes fieldStrip's row from
+// renderAccordion's ACTUAL output for the RELATIONS section (its only
+// remaining caller) -- detailClickRow's row-counting walk must drop the
+// matching skip-row block too, or every section rendered AFTER an
+// active+open RELATIONS section (here: HISTORY) resolves one row too low
+// and silently returns ok=false. tk-2 (detailFocusModel) has Parent=ep-1,
+// so RELATIONS carries >=1 field -- exactly the precondition the old
+// fieldStrip-row skip block required (activeSec && i != 0 && len(s.fields)
+// > 0).
+func TestDetailClickRowNoOffByOneWhenRelationsSectionActiveWithFields(t *testing.T) {
+	m := detailFocusModel(t)
+	m.detailFocus = true
+	m.secCursor = relationsSectionIdx
+	m.accOpen = relationsSectionIdx + 1 // opens RELATIONS (PF-1 keeps Meta open too)
+
+	b := m.focusedBean()
+	msg := detailClickAt(t, m, "[4]") // "> [4] HISTORY" header marker
+	secIdx, fieldIdx, ok := detailClickRow(m, b, msg)
+	if !ok {
+		t.Fatal("click on the HISTORY header must resolve (row-count off-by-one regression, B04)")
+	}
+	if secIdx != historySectionIdx {
+		t.Fatalf("secIdx = %d, want %d (historySectionIdx)", secIdx, historySectionIdx)
+	}
+	if fieldIdx != -1 {
+		t.Fatalf("fieldIdx = %d, want -1 (Section-Header hit)", fieldIdx)
+	}
+}
+
 // TestMouseDetailClickSectionHeaderActivatesAndExpands guards Fall a (PO-
 // Wortlaut, bean bt-duz7): a click on a Section-Header activates AND
 // expands that section -- m.detailFocus=true, m.secCursor/m.accOpen set,

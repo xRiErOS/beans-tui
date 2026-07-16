@@ -571,3 +571,211 @@ func TestBeanSectionsHistorieWrapsLongETagToBodyWidth(t *testing.T) {
 		}
 	}
 }
+
+// --- hangingIndentWrap (B04.3, design-spec.md §15 PF-17, bean bt-b0w0) ---
+//
+// hangingIndentWrap wraps text to width w, with the FIRST line prefixed by
+// prefix (already-styled) and every CONTINUATION line left-padded to match
+// the prefix's own VISIBLE width instead of falling back to column 0 -- the
+// actual PO-Mockup bug: relationsSectionBody's old blanket wrapText() over
+// the whole joined block re-wrapped already-composed rows with no notion of
+// their own per-row prefix width, so a long title's continuation wrapped
+// back to column 0 and "unterwanderte" the following row's Meta-Spalten
+// (glyph/status/ID). Reused verbatim by Task 5/bt-4mo9's Relations-Picker
+// (same row shape) -- kept as an independent, well-tested helper per that
+// task's own Notes-for-T5 requirement.
+
+// TestHangingIndentWrapShortTitleNoWrap guards the trivial no-wrap path: a
+// title that fits on the first line renders as prefix+text, single line, no
+// continuation indent logic engaged at all.
+func TestHangingIndentWrapShortTitleNoWrap(t *testing.T) {
+	got := hangingIndentWrap("t bt-1 ", "Short title", 40)
+	want := "t bt-1 Short title"
+	if got != want {
+		t.Errorf("hangingIndentWrap = %q, want %q", got, want)
+	}
+}
+
+// TestHangingIndentWrapLongTitleAlignsContinuationUnderPrefixEnd guards the
+// actual fix: a title long enough to wrap must have its continuation
+// line(s) left-padded with exactly indentW spaces (indentW == the prefix's
+// own visible width via lipgloss.Width), never column 0.
+func TestHangingIndentWrapLongTitleAlignsContinuationUnderPrefixEnd(t *testing.T) {
+	prefix := "t bt-apmy "
+	indentW := lipgloss.Width(prefix)
+	got := hangingIndentWrap(prefix, "Hier steht ein langer Titel eines beans der so umbricht dass die Uebersicht gewahrt ist", 40)
+
+	lines := strings.Split(got, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected the long title to wrap into >=2 lines, got %d: %q", len(lines), got)
+	}
+	if !strings.HasPrefix(lines[0], prefix) {
+		t.Errorf("first line must start with the prefix, got: %q", lines[0])
+	}
+	for i, line := range lines[1:] {
+		gotIndent := len(line) - len(strings.TrimLeft(line, " "))
+		if gotIndent != indentW {
+			t.Errorf("continuation line %d indent = %d spaces, want %d (prefix width): %q", i+1, gotIndent, indentW, line)
+		}
+	}
+}
+
+// TestHangingIndentWrapVaryingPrefixWidths guards the "PRO ZEILE
+// individuell" requirement (design-spec.md §15 PF-17 B04.3): the indent is
+// NOT a shared table column across rows -- bean IDs vary in length
+// ("<prefix>-<n-chars>"), so a short-ID prefix and a long-ID prefix must
+// each produce a continuation indent matching THEIR OWN prefix width.
+func TestHangingIndentWrapVaryingPrefixWidths(t *testing.T) {
+	shortPrefix := "t bt-1 "
+	longPrefix := "t bt-abcdef12 "
+	longTitle := "This title is intentionally long enough that it must wrap across more than one line for sure"
+
+	shortOut := hangingIndentWrap(shortPrefix, longTitle, 30)
+	longOut := hangingIndentWrap(longPrefix, longTitle, 30)
+
+	shortLines := strings.Split(shortOut, "\n")
+	longLines := strings.Split(longOut, "\n")
+	if len(shortLines) < 2 || len(longLines) < 2 {
+		t.Fatalf("setup: both outputs must wrap, got %d/%d lines", len(shortLines), len(longLines))
+	}
+	shortIndent := len(shortLines[1]) - len(strings.TrimLeft(shortLines[1], " "))
+	longIndent := len(longLines[1]) - len(strings.TrimLeft(longLines[1], " "))
+	if shortIndent != lipgloss.Width(shortPrefix) {
+		t.Errorf("short-prefix continuation indent = %d, want %d", shortIndent, lipgloss.Width(shortPrefix))
+	}
+	if longIndent != lipgloss.Width(longPrefix) {
+		t.Errorf("long-prefix continuation indent = %d, want %d", longIndent, lipgloss.Width(longPrefix))
+	}
+	if shortIndent == longIndent {
+		t.Errorf("short and long prefix indents must differ (per-row, not a shared column): both = %d", shortIndent)
+	}
+}
+
+// TestHangingIndentWrapNeverCollapsesBelowMinimumContinuationWidth guards
+// the narrow-terminal floor (code sketch, bean bt-b0w0): when w is small
+// enough that w-indentW would go below 8, the continuation width floors at
+// 8 instead of collapsing to zero/negative -- indent itself still reflects
+// the REAL (unclamped) prefix width, only the wrap width is floored.
+func TestHangingIndentWrapNeverCollapsesBelowMinimumContinuationWidth(t *testing.T) {
+	prefix := "t bt-averylongid1234 " // wider than w below
+	indentW := lipgloss.Width(prefix)
+	got := hangingIndentWrap(prefix, "some continuation text that needs room to wrap across lines", 10)
+
+	if strings.TrimSpace(got) == "" {
+		t.Fatal("hangingIndentWrap must not collapse to empty output on a narrow width")
+	}
+	lines := strings.Split(got, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected wrapping to still occur at the floored width, got 1 line: %q", got)
+	}
+	for i, line := range lines[1:] {
+		gotIndent := len(line) - len(strings.TrimLeft(line, " "))
+		if gotIndent != indentW {
+			t.Errorf("continuation line %d indent = %d, want %d (unclamped prefix width)", i+1, gotIndent, indentW)
+		}
+	}
+}
+
+// --- relationsSectionBody cursor markers + fieldStrip removal (B04,
+// design-spec.md §15 PF-17, bean bt-b0w0) ---
+
+// TestRelationsSectionBodyShowsCursorMarkerOnActiveRow guards B04.2: with
+// active=true and fieldIdx=1, exactly the row at GLOBAL index 1 (the Child,
+// row order Parent=0/Children=1) carries ▶ -- every other row carries ▷.
+// Mirrors TestMetaSectionBodyShowsSelectedFieldMarker's own contract for
+// Meta (PF-4).
+func TestRelationsSectionBodyShowsCursorMarkerOnActiveRow(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "rsb-parent", Title: "Parent Bean", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: "rsb-main", Title: "Main Bean", Status: "todo", Type: "task", Priority: "normal", Parent: "rsb-parent"},
+		{ID: "rsb-child", Title: "Child Bean", Status: "todo", Type: "task", Priority: "normal", Parent: "rsb-main"},
+	}
+	idx := data.NewIndex(beans)
+	main := idx.ByID["rsb-main"]
+
+	body, fields := relationsSectionBody(idx, main, 60, true, 1) // fieldIdx 1 -> the Child row
+	if len(fields) != 2 {
+		t.Fatalf("setup: expected 2 relationFields (Parent + Child), got %d", len(fields))
+	}
+	stripped := ansi.Strip(body)
+	if n := strings.Count(stripped, "▶"); n != 1 {
+		t.Fatalf("active relationsSectionBody has %d ▶ markers, want exactly 1: %q", n, stripped)
+	}
+	if n := strings.Count(stripped, "▷"); n != 1 {
+		t.Fatalf("active relationsSectionBody has %d ▷ markers, want exactly 1 (the other row): %q", n, stripped)
+	}
+	var childLine string
+	for _, l := range strings.Split(stripped, "\n") {
+		if strings.Contains(l, "Child Bean") {
+			childLine = l
+		}
+	}
+	if !strings.Contains(childLine, "▶") {
+		t.Errorf("▶ marker not on the Child row: %q", childLine)
+	}
+
+	inactive, _ := relationsSectionBody(idx, main, 60, false, 1)
+	if strings.Contains(ansi.Strip(inactive), "▶") {
+		t.Error("inactive relationsSectionBody must show no ▶ marker anywhere")
+	}
+}
+
+// TestRelationsSectionBodyNoLongerRendersFieldsStripLine is the B04.1
+// regression pin: the separate "Fields:" strip line is gone -- neither the
+// active nor the inactive render path may ever emit that substring again.
+func TestRelationsSectionBodyNoLongerRendersFieldsStripLine(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "nofs-parent", Title: "Parent Bean", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: "nofs-main", Title: "Main Bean", Status: "todo", Type: "task", Priority: "normal", Parent: "nofs-parent"},
+	}
+	idx := data.NewIndex(beans)
+	main := idx.ByID["nofs-main"]
+
+	for _, active := range []bool{true, false} {
+		body, _ := relationsSectionBody(idx, main, 60, active, 0)
+		if strings.Contains(body, "Fields:") {
+			t.Errorf("active=%v: relationsSectionBody must never render a 'Fields:' strip line (B04, removed): %q", active, body)
+		}
+	}
+}
+
+// TestRelationsSectionBodyLongTitleAlignsContinuationUnderTitleStartNotColumnZero
+// guards B04.3, the actual PO-Mockup bug: a Children-row title long enough
+// to wrap must have its continuation line(s) start under the TITLE's own
+// column (not column 0, and not the whole-row indent) -- design-spec.md §15
+// PF-17's literal mockup ("t M bt-apmy Hier steht ein langer Titel... / der
+// so umbricht, dass die Uebersicht gewahrt ist").
+func TestRelationsSectionBodyLongTitleAlignsContinuationUnderTitleStartNotColumnZero(t *testing.T) {
+	longTitle := "Hier steht ein langer Titel eines beans der so umbricht dass die Uebersicht gewahrt ist"
+	beans := []data.Bean{
+		{ID: "wrp-parent", Title: "Parent Bean", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: "wrp-main", Title: "Main Bean", Status: "todo", Type: "task", Priority: "normal", Parent: "wrp-parent"},
+		{ID: "wrp-child", Title: longTitle, Status: "todo", Type: "task", Priority: "normal", Parent: "wrp-main"},
+	}
+	idx := data.NewIndex(beans)
+	main := idx.ByID["wrp-main"]
+
+	const bodyW = 40
+	body, _ := relationsSectionBody(idx, main, bodyW, false, 0)
+	stripped := ansi.Strip(body)
+
+	groups := strings.Split(stripped, "\n\n")
+	children := groups[len(groups)-1]
+	lines := strings.Split(children, "\n")
+	if lines[0] != "Children" {
+		t.Fatalf("setup: last group must be Children, got %q", lines[0])
+	}
+	if len(lines) < 3 {
+		t.Fatalf("expected the long child title to wrap into >=1 continuation line at bodyW=%d, got %d lines: %q", bodyW, len(lines), children)
+	}
+	titleCol := cellCol(t, lines[1], "Hier")
+	for i, cl := range lines[2:] {
+		indent := len(cl) - len(strings.TrimLeft(cl, " "))
+		if indent == 0 {
+			t.Errorf("continuation line %d fell back to column 0 (PO-Mockup B04.3 bug): %q", i, cl)
+		}
+		if indent != titleCol {
+			t.Errorf("continuation line %d indent = %d, want %d (aligned under the title's own start)", i, indent, titleCol)
+		}
+	}
+}

@@ -2,13 +2,21 @@ package tui
 
 // accordion.go — exclusive-open, digit-addressed detail sections (design-spec
 // §6 V4). Port of devd accordion.go's render algebra (renderAccordion,
-// fieldStrip), stripped of every edit-field/detailField-editor concept (E3
-// scope) -- E2's "fields" are pure navigation targets inside the
-// Beziehungen section (relationField), never edit targets.
+// originally also fieldStrip), stripped of every edit-field/detailField-
+// editor concept (E3 scope) -- E2's "fields" are pure navigation targets
+// inside the Beziehungen section (relationField), never edit targets.
+//
+// fieldStrip (a separate "Fields: ..." row shown above an active section's
+// body) was REMOVED entirely by B04 (design-spec.md §15 PF-17, bean
+// bt-b0w0, 2026-07-16): RELATIONS was its only remaining caller by then
+// (Meta's own field cursor already lived inline via metaSectionBody's ▷/▶
+// per-row markers, PF-4) -- relationsSectionBody (view_detail_bean.go) now
+// renders that SAME cursor convention per-row instead, so every section's
+// field cursor lives inline in its own body, never in a second strip.
 //
 // Port references (~/Obsidian/tools/DeveloperDashboard/apps/cli-go/internal/
-// tui/): accordion.go:309-355 (renderAccordion), accordion.go:360-373
-// (fieldStrip), editor.go:102-126 (glowRender).
+// tui/): accordion.go:309-355 (renderAccordion), editor.go:102-126
+// (glowRender).
 
 import (
 	"fmt"
@@ -49,10 +57,15 @@ type accordionSection struct {
 // (port devd accordion.go:309-355). active/activeIdx/fieldIdx replace devd's
 // detailFocusView{sec,field}. PF-1 (design-spec.md §15, E7 T4, bean bt-kyj5):
 // section 1 (Meta) is never collapsible -- its body renders regardless of
-// `open`, sections 2-4 stay exclusive-open. fieldStrip renders for ANY
-// active section carrying fields EXCEPT Meta itself (`i != 0`): Meta's own
-// ▷/▶ field cursor lives INSIDE metaSectionBody's per-row markers (PF-4), a
-// second "Fields: ..." strip above it would be a duplicate cursor.
+// `open`, sections 2-4 stay exclusive-open.
+//
+// fieldIdx is UNUSED inside this function since B04 removed fieldStrip (its
+// only reader here) -- kept in the signature anyway (not worth rippling a
+// removal through every call site, view_browse_repo.go/mouse.go/tests, for
+// a parameter Go happily allows unused): every section's field cursor now
+// renders INSIDE its own body string (metaSectionBody's ▷/▶ markers, PF-4;
+// relationsSectionBody's own, B04), built by beanSections BEFORE
+// renderAccordion ever sees s.body.
 func renderAccordion(secs []accordionSection, open, w int, active bool, activeIdx, fieldIdx int) string {
 	if len(secs) == 0 {
 		return theme.Dim.Render("(no detail fields)")
@@ -98,39 +111,19 @@ func renderAccordion(secs []accordionSection, open, w int, active bool, activeId
 		}
 		b.WriteString(headerStyle.Render(header) + "\n")
 		if isOpen {
-			// Field-level focus shows the field strip (which field a jump
-			// would target) before the body -- skipped for Meta (i == 0):
-			// its field cursor renders per-row inside the body itself
-			// (metaSectionBody's ▷/▶ markers, PF-4), not as a strip above.
-			if activeSec && i != 0 && len(s.fields) > 0 {
-				b.WriteString(fieldStrip(s.fields, fieldIdx, w) + "\n")
-			}
+			// B04 (design-spec.md §15 PF-17, bean bt-b0w0): the former
+			// fieldStrip row (a separate "Fields: ..." line shown above an
+			// active section's body) is REMOVED -- RELATIONS was its only
+			// remaining caller (Meta's own field cursor already lived
+			// inline via metaSectionBody's ▷/▶ per-row markers, PF-4;
+			// Body/History carry no .fields at all). relationsSectionBody
+			// now renders that SAME ▷/▶ cursor convention per-row, inline
+			// in s.body itself -- there is no longer a second, separate
+			// representation of the field cursor for ANY section.
 			b.WriteString(boxStyle.Render(s.body) + "\n")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
-}
-
-// fieldStrip rendert die Beziehungen-Felder einer Section als kompakte Zeile
-// mit dem aktiven Feld (D08-Balken + Accent), die übrigen muted (port devd
-// accordion.go:360-373, detailField.label -> relationField.label). PF-12
-// (design-spec.md §15, E7 T4): the inactive branch now reserves the same 1
-// gutter column (" " prefix) the active branch's "▌" occupies -- previously
-// bare (no prefix), so a field's own label shifted 1 column depending on
-// whether IT ITSELF was active.
-func fieldStrip(fields []relationField, active, w int) string {
-	if len(fields) == 0 {
-		return theme.Muted.Render("Fields: (none)")
-	}
-	parts := make([]string, len(fields))
-	for i, f := range fields {
-		if i == active {
-			parts[i] = theme.Accent.Render("▌" + f.label)
-		} else {
-			parts[i] = " " + theme.Muted.Render(f.label)
-		}
-	}
-	return truncate(theme.Muted.Render("Fields: ")+strings.Join(parts, "  "), w)
 }
 
 // glowRender rendert Markdown für die Body-Section via glamour. Fällt auf den

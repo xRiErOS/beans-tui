@@ -1500,6 +1500,52 @@ func TestKeyDetailFocusEnterOnRelationFieldStillJumps(t *testing.T) {
 	}
 }
 
+// markerOnLineContaining is a small render-grounded assertion helper: true
+// if some line of s contains BOTH substr and marker.
+func markerOnLineContaining(s, substr, marker string) bool {
+	for _, l := range strings.Split(s, "\n") {
+		if strings.Contains(l, substr) && strings.Contains(l, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestKeyDetailFocusArrowNavigatesRelationsRows guards B04.2 (design-spec.md
+// §15 PF-17, bean bt-b0w0): keyDetailFocus's EXISTING up/down field-cursor
+// logic (secs[m.secCursor].fields -- UNCHANGED by this task) now visibly
+// selects the REAL Relations rows (Parent/Blocking/...) instead of the
+// removed fieldStrip. Render-grounded (LESSONS-LEARNED #4/#6: state-only
+// fieldCursor assertions -- already covered by
+// TestKeyDetailFocusEnterOnRelationFieldStillJumps above -- would miss a
+// render-side regression, e.g. the marker staying stuck on row 0).
+func TestKeyDetailFocusArrowNavigatesRelationsRows(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.width, m.height = 100, 30
+	m.expanded["ms-1"] = true
+	m.expanded["ep-1"] = true
+	m.cursorID = "bean-a" // Parent=ep-1, Blocking=[bean-b] -- 2 Relations fields
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, runeMsg('3')) // Relations
+	m = step(t, m, keyMsg(tea.KeyRight))
+
+	// fieldCursor 0 -> Parent (ep-1) row carries ▶.
+	rendered0 := ansi.Strip(m.renderBeanAccordionPane(m.focusedBean(), 60, 30, true))
+	if !markerOnLineContaining(rendered0, "ep-1", "▶") {
+		t.Fatalf("fieldCursor=0: expected ▶ on the Parent (ep-1) row, got:\n%s", rendered0)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyDown)) // fieldCursor 0 -> 1 (Blocking bean-b)
+	rendered1 := ansi.Strip(m.renderBeanAccordionPane(m.focusedBean(), 60, 30, true))
+	if !markerOnLineContaining(rendered1, "bean-b", "▶") {
+		t.Fatalf("fieldCursor=1: expected ▶ on the Blocking (bean-b) row, got:\n%s", rendered1)
+	}
+	if markerOnLineContaining(rendered1, "ep-1", "▶") {
+		t.Fatalf("fieldCursor=1: the Parent (ep-1) row must no longer carry ▶, got:\n%s", rendered1)
+	}
+}
+
 // TestKeyDetailFocusDigitJumpUsesBeanSectionCount guards PF-2's robustness
 // fix: the digit-jump range check now compares against beanSectionCount (4)
 // instead of a hardcoded '4' literal -- digit 5 (out of range) must stay a

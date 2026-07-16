@@ -50,7 +50,7 @@ const parentPickerRowBudget = 14
 func buildParentItems(idx *data.Index, b *data.Bean) []pickerItem {
 	items := []pickerItem{{id: "", label: "(No parent)"}}
 	for _, cand := range data.EligibleParents(idx, b) {
-		items = append(items, pickerItem{id: cand.ID, label: relationRow(cand)})
+		items = append(items, pickerItem{id: cand.ID, label: relationRow(cand, "", relationRowNoWrap)})
 	}
 	return items
 }

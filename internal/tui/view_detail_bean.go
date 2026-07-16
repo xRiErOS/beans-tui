@@ -18,6 +18,8 @@ import (
 
 	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // beanSectionCount is the Single Source for the fixed section count (T6,
@@ -65,7 +67,17 @@ func beanSections(idx *data.Index, b *data.Bean, bodyW int, focused bool, active
 		fields: metaFields(b),
 	})
 	secs = append(secs, accordionSection{title: sectionTitleBody, body: bodySectionBody(b, bodyW)})
-	rel, fields := relationsSectionBody(idx, b, bodyW)
+	// B04 (design-spec.md §15 PF-17, bean bt-b0w0): relationsSectionBody
+	// grows the SAME (active, fieldIdx) pair metaSectionBody's own call
+	// above takes -- mirrors accordion.go's own activeSec gate (`active &&
+	// activeIdx == i`) verbatim, deliberately WITHOUT a detailLevel gate
+	// (unlike Meta's `&& detailLevel == 1`): the removed fieldStrip showed
+	// its active field as soon as the SECTION itself was active, regardless
+	// of detailLevel -- this preserves that exact visibility timing, only
+	// relocating WHERE the marker renders (per-row instead of a separate
+	// strip), per this task's own "Pfeiltasten-Navigation ändert KEINEN
+	// Code, nur die Visualisierung wechselt" scope.
+	rel, fields := relationsSectionBody(idx, b, bodyW, focused && activeIdx == relationsSectionIdx, fieldIdx)
 	secs = append(secs, accordionSection{title: sectionTitleRelations, body: rel, fields: fields})
 	secs = append(secs, accordionSection{title: sectionTitleHistory, body: historieSectionBody(b, bodyW)})
 	return secs
@@ -196,10 +208,71 @@ func bodySectionBody(b *data.Bean, bodyW int) string {
 	return glowRender(b.Body, bodyW)
 }
 
-// relationRow renders one resolved relation as a status-icon+type-icon+ID+
-// title row (mirrors treeRowText's glyph order, view_browse_repo.go).
-func relationRow(rel *data.Bean) string {
-	return theme.StatusIcon(rel.Status) + " " + theme.TypeIcon(rel.Type) + " " + theme.Key.Render(rel.ID) + " " + rel.Title
+// hangingIndentWrap wraps text to width w, with the FIRST line prefixed by
+// prefix (already-styled; its VISIBLE width via lipgloss.Width(ansi.Strip(
+// prefix)) becomes the indent) and every CONTINUATION line left-padded with
+// that many spaces instead of the wrap restarting at column 0 (B04.3,
+// design-spec.md §15 PF-17) -- indent is computed PER ROW (not a shared
+// table column across all rows: bean IDs have variable prefix length,
+// "<prefix>-<n-chars>"). Fixes the actual PO-Mockup bug: relationRow's
+// former caller wrapped the ENTIRE joined Relations block with one blanket
+// wrapText() call, so a long title's continuation line had no notion of its
+// own row's prefix and fell back to column 0, "unterwandering" the
+// following row's Meta-Spalten (glyph/status/ID). Reused verbatim by Task 5/
+// bt-4mo9's Relations-Picker (structurally identical glyph+ID+title row) --
+// kept as an independent, unit-tested helper (view_detail_bean_test.go) for
+// that reason, not folded into relationRow's own body.
+func hangingIndentWrap(prefix, text string, w int) string {
+	indentW := lipgloss.Width(ansi.Strip(prefix))
+	contW := w - indentW
+	if contW < 8 {
+		contW = 8 // never collapse to nothing on narrow terminals
+	}
+	wrapped := ansi.Wordwrap(text, contW, "")
+	lines := strings.Split(wrapped, "\n")
+	var b strings.Builder
+	for i, line := range lines {
+		if i == 0 {
+			b.WriteString(prefix + line)
+		} else {
+			b.WriteString("\n" + strings.Repeat(" ", indentW) + line)
+		}
+	}
+	return b.String()
+}
+
+// relationRowMarker renders a row's ▷/▶ cursor prefix (B04, design-spec.md
+// §15 PF-17): mirrors metaSectionBody's own per-row convention (PF-4) --
+// ▶ (Accent) only when active is true AND fieldIdx equals this row's
+// position in the GLOBAL field order relationsSectionBody accumulates
+// (Parent=0, Children=1..n, Blocking=n+1..m, Blocked By=m+1..k, the SAME
+// order fields[] already carried before this task), ▷ (Muted) otherwise.
+func relationRowMarker(active bool, fieldIdx, rowIdx int) string {
+	if active && fieldIdx == rowIdx {
+		return theme.Accent.Render("▶ ")
+	}
+	return theme.Muted.Render("▷ ")
+}
+
+// relationRowNoWrap is a large sentinel width for relationRow callers that
+// pre-date hangingIndentWrap and intentionally keep a single, un-wrapped
+// line (the Parent-/Blocking-Picker, box_picker_parent.go/box_picker_
+// blocking.go): B04/bt-b0w0's scope is the RELATIONS section only -- T5/
+// bt-4mo9 (blocked_by this task, epic-E9-plan.md) widens those two pickers
+// and switches them onto REAL hangingIndentWrap wrapping. No realistic
+// title's first "word" (Wordwrap only breaks on whitespace) reaches this
+// width, so these callers render byte-identically to the pre-B04 bare
+// concatenation (marker "" adds nothing visible either).
+const relationRowNoWrap = 1 << 20
+
+// relationRow renders one resolved relation as a marker-prefixed status-
+// icon+type-icon+ID+title row (mirrors treeRowText's glyph order, view_
+// browse_repo.go), wrapped via hangingIndentWrap (B04.3) so a long title's
+// continuation lines align under the title's own start on THIS row instead
+// of falling back to column 0.
+func relationRow(rel *data.Bean, marker string, w int) string {
+	prefix := marker + theme.StatusIcon(rel.Status) + " " + theme.TypeIcon(rel.Type) + " " + theme.Key.Render(rel.ID) + " "
+	return hangingIndentWrap(prefix, rel.Title, w)
 }
 
 // resolveSorted resolves a slice of bean IDs against idx.ByID, canonically
@@ -207,7 +280,13 @@ func relationRow(rel *data.Bean) string {
 // IDs (dangling references, beans-legal) as their own relationField with
 // beanID == "" (not jumpable). Returns the rendered body lines plus the
 // relationFields in the same order (parallel to the rendered rows).
-func resolveSorted(idx *data.Index, ids []string) (lines []string, fields []relationField) {
+// startIdx/active/fieldIdx (B04, design-spec.md §15 PF-17) thread the ONE
+// GLOBAL cursor position (relationsSectionBody's running row counter) through
+// this group's rows, mirrored into relationRowMarker per row; w is the body
+// width handed to relationRow's hangingIndentWrap. nextIdx is startIdx plus
+// the number of rows this call renders, letting the caller chain it into the
+// NEXT group's startIdx.
+func resolveSorted(idx *data.Index, ids []string, startIdx int, active bool, fieldIdx, w int) (lines []string, fields []relationField, nextIdx int) {
 	var resolved []*data.Bean
 	var unresolved []string
 	for _, id := range ids {
@@ -218,27 +297,41 @@ func resolveSorted(idx *data.Index, ids []string) (lines []string, fields []rela
 		}
 	}
 	data.SortBeans(resolved)
+	rowIdx := startIdx
 	for _, rel := range resolved {
-		lines = append(lines, relationRow(rel))
+		lines = append(lines, relationRow(rel, relationRowMarker(active, fieldIdx, rowIdx), w))
 		fields = append(fields, relationField{beanID: rel.ID, label: theme.Key.Render(rel.ID) + " " + rel.Title})
+		rowIdx++
 	}
 	for _, id := range unresolved {
-		label := theme.Dim.Render("(unresolved: " + id + ")")
-		lines = append(lines, label)
-		fields = append(fields, relationField{beanID: "", label: label})
+		// text (unlike relationRow's resolved rows above) carries no
+		// hangingIndentWrap of its own -- unresolved rows are a short fixed
+		// "(unresolved: <id>)" string, never realistically long enough to
+		// wrap, mirrors the pre-B04 behavior verbatim. The marker is
+		// prefixed onto the RENDERED line only, never onto fields[].label
+		// (label stays marker-free -- unused since fieldStrip's removal, but
+		// kept byte-identical to its pre-B04 contract for any future reader/
+		// reuse, e.g. TestBeanSectionsRelationsDanglingReferenceShowsUnresolvedNotJumpable).
+		text := theme.Dim.Render("(unresolved: " + id + ")")
+		lines = append(lines, relationRowMarker(active, fieldIdx, rowIdx)+text)
+		fields = append(fields, relationField{beanID: "", label: text})
+		rowIdx++
 	}
-	return lines, fields
+	return lines, fields, rowIdx
 }
 
 // beanListRow renders an already-resolved bean list (e.g. idx.Children,
 // pre-sorted -- no dangling references possible there) the same way
-// resolveSorted renders its resolved half.
-func beanListRow(beans []*data.Bean) (lines []string, fields []relationField) {
+// resolveSorted renders its resolved half. startIdx/active/fieldIdx/w mirror
+// resolveSorted's own B04 parameters.
+func beanListRow(beans []*data.Bean, startIdx int, active bool, fieldIdx, w int) (lines []string, fields []relationField, nextIdx int) {
+	rowIdx := startIdx
 	for _, rel := range beans {
-		lines = append(lines, relationRow(rel))
+		lines = append(lines, relationRow(rel, relationRowMarker(active, fieldIdx, rowIdx), w))
 		fields = append(fields, relationField{beanID: rel.ID, label: theme.Key.Render(rel.ID) + " " + rel.Title})
+		rowIdx++
 	}
-	return lines, fields
+	return lines, fields, rowIdx
 }
 
 // relationsSectionBody builds the Beziehungen section body + its jump-only
@@ -246,9 +339,30 @@ func beanListRow(beans []*data.Bean) (lines []string, fields []relationField) {
 // already sorted) / Blocking / Blocked By (each resolved via idx.ByID, then
 // data.SortBeans -- I03), grouped under muted sub-headers. Groups with no
 // entries are omitted entirely.
-func relationsSectionBody(idx *data.Index, b *data.Bean, bodyW int) (string, []relationField) {
+//
+// active/fieldIdx (B04, design-spec.md §15 PF-17, bean bt-b0w0) mirror
+// metaSectionBody's own (active bool, fieldIdx int) signature (PF-4): every
+// rendered row now carries its own ▷/▶ cursor marker (relationRowMarker)
+// instead of the removed fieldStrip. gi is the ONE running row counter
+// threaded across ALL four groups (Parent=0, Children=1..n, Blocking=
+// n+1..m, Blocked By=m+1..k) -- the SAME order fields[] already accumulated
+// in before this task (appendGroup hangs lines/fields on in lockstep,
+// UNCHANGED), so a row's position in the returned fields slice and its
+// on-screen ▶ marker always agree (keyDetailFocus's existing fieldCursor
+// navigation, update.go, is not touched by this task).
+//
+// Each row is wrapped via hangingIndentWrap (B04.3) BEFORE the groups are
+// joined -- the former blanket wrapText(strings.Join(groups, "\n\n"), bodyW)
+// at the very end is GONE: that call was the actual B04.3 bug (a long title
+// wrapped back to column 0, "unterwandering" the Meta-Spalten of whatever
+// followed) since it re-wrapped already-composed rows with no notion of
+// their own per-row prefix width. wrapText is no longer needed for the
+// short, fixed subheader strings either (Parent/Children/Blocking/Blocked
+// By never realistically overflow bodyW).
+func relationsSectionBody(idx *data.Index, b *data.Bean, bodyW int, active bool, fieldIdx int) (string, []relationField) {
 	var groups []string
 	var fields []relationField
+	gi := 0
 
 	appendGroup := func(title string, lines []string, fs []relationField) {
 		if len(lines) == 0 {
@@ -260,32 +374,37 @@ func relationsSectionBody(idx *data.Index, b *data.Bean, bodyW int) (string, []r
 
 	if b.Parent != "" {
 		if parent, ok := idx.ByID[b.Parent]; ok {
-			appendGroup("Parent", []string{relationRow(parent)}, []relationField{{beanID: parent.ID, label: theme.Key.Render(parent.ID) + " " + parent.Title}})
+			line := relationRow(parent, relationRowMarker(active, fieldIdx, gi), bodyW)
+			appendGroup("Parent", []string{line}, []relationField{{beanID: parent.ID, label: theme.Key.Render(parent.ID) + " " + parent.Title}})
 		} else {
-			label := theme.Dim.Render("(unresolved: " + b.Parent + ")")
-			appendGroup("Parent", []string{label}, []relationField{{beanID: "", label: label}})
+			text := theme.Dim.Render("(unresolved: " + b.Parent + ")")
+			appendGroup("Parent", []string{relationRowMarker(active, fieldIdx, gi) + text}, []relationField{{beanID: "", label: text}})
 		}
+		gi++
 	}
 
 	if children := idx.Children[b.ID]; len(children) > 0 {
-		lines, fs := beanListRow(children)
+		lines, fs, next := beanListRow(children, gi, active, fieldIdx, bodyW)
 		appendGroup("Children", lines, fs)
+		gi = next
 	}
 
 	if len(b.Blocking) > 0 {
-		lines, fs := resolveSorted(idx, b.Blocking)
+		lines, fs, next := resolveSorted(idx, b.Blocking, gi, active, fieldIdx, bodyW)
 		appendGroup("Blocking", lines, fs)
+		gi = next
 	}
 
 	if len(b.BlockedBy) > 0 {
-		lines, fs := resolveSorted(idx, b.BlockedBy)
+		lines, fs, next := resolveSorted(idx, b.BlockedBy, gi, active, fieldIdx, bodyW)
 		appendGroup("Blocked By", lines, fs)
+		gi = next
 	}
 
 	if len(groups) == 0 {
 		return theme.Dim.Render("(no relations)"), nil
 	}
-	return wrapText(strings.Join(groups, "\n\n"), bodyW), fields
+	return strings.Join(groups, "\n\n"), fields
 }
 
 // fmtTime formats a nullable timestamp for display: a muted placeholder for

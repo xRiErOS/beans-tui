@@ -264,24 +264,31 @@ func (m model) mouseBacklogClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // the EXACT SAME state (m.detailFocus/m.secCursor/m.accOpen/m.fieldCursor/
 // m.detailLevel) and the EXACT SAME beanSections() call renderAccordionPane
 // itself makes (view_browse_repo.go), then walks secs with the IDENTICAL
-// isOpen/activeSec/fieldStrip-shown conditionals renderAccordion (accordion.
-// go) uses to build its own line-by-line output. Section-body line counts
-// are measured via lipgloss.Height on the SAME s.body string renderAccordion
-// hands to boxStyle.Render -- PaddingLeft alone never changes a line count,
-// so this is byte-equivalent without reconstructing boxStyle's own
-// Width/Padding here. A change to either function's algorithm is caught by
-// the render-grounded tests in mouse_test.go, which locate click coordinates
-// by searching the REAL m.View() output (mirrors treeClickAt/
-// leftPaneClickAt's own pattern) -- never by hand-deriving a row number (the
-// "selbst-referenzielle Geometrie-Test" trap E7 already hit once, this
-// task's own Architektur-Vorgabe #2 warns against repeating it).
+// isOpen/activeSec conditionals renderAccordion (accordion.go) uses to
+// build its own line-by-line output (B04, design-spec.md §15 PF-17, bean
+// bt-b0w0: the former fieldStrip-shown conditional this walk used to mirror
+// is GONE on both sides -- removed here in lockstep with accordion.go's own
+// removal, see the row++ block's own comment below). Section-body line
+// counts are measured via lipgloss.Height on the SAME s.body string
+// renderAccordion hands to boxStyle.Render -- PaddingLeft alone never
+// changes a line count, so this is byte-equivalent without reconstructing
+// boxStyle's own Width/Padding here. A change to either function's
+// algorithm is caught by the render-grounded tests in mouse_test.go, which
+// locate click coordinates by searching the REAL m.View() output (mirrors
+// treeClickAt/leftPaneClickAt's own pattern) -- never by hand-deriving a row
+// number (the "selbst-referenzielle Geometrie-Test" trap E7 already hit
+// once, this task's own Architektur-Vorgabe #2 warns against repeating it).
 //
 // v1 simplification (bean bt-duz7 Architektur-Vorgabe #2, no PO-Wortlaut
 // requires more): ONLY Meta (metaSectionIdx) has a fixed, direct
 // Zeile->Feldindex mapping (Zeile 0 = title ... Zeile 6 = updated_at, per
 // metaFields' fixed order) -- a click landing inside an OPEN Body/Relations/
-// History section's body (or Relations' own fieldStrip row) resolves to
-// that section's OWN header hit (fieldIdx == -1), never a field index.
+// History section's body resolves to that section's OWN header hit
+// (fieldIdx == -1), never a field index. Relations rows carry their own
+// ▷/▶ cursor marker now too (B04, relationsSectionBody) but are NOT yet
+// individually mouse-clickable -- that stays v1 scope, unchanged by this
+// task (no PO-Wortlaut requires it; B04's own scope is keyboard navigation
+// + render, mirrors "Pfeiltasten-Navigation ändert KEINEN Code").
 func detailClickRow(m model, b *data.Bean, msg tea.MouseMsg) (secIdx, fieldIdx int, ok bool) {
 	w, h := m.width, m.height
 	if w <= 0 {
@@ -338,13 +345,16 @@ func detailClickRow(m model, b *data.Bean, msg tea.MouseMsg) (secIdx, fieldIdx i
 		if !isOpen {
 			continue
 		}
-		activeSec := m.detailFocus && m.secCursor == i
-		if activeSec && i != 0 && len(s.fields) > 0 {
-			if accordionRow == row {
-				return i, -1, true // fieldStrip row -- v1: section-level hit
-			}
-			row++
-		}
+		// B04 (design-spec.md §15 PF-17, bean bt-b0w0): the former
+		// fieldStrip-row skip (an extra row this walk used to add for an
+		// active section carrying fields, mirroring renderAccordion's own
+		// removed fieldStrip branch) is GONE -- RELATIONS was its only
+		// remaining caller, and RELATIONS' rows now carry their own ▷/▶
+		// markers INLINE in s.body (relationsSectionBody), not in a
+		// separate strip. Keeping this skip after B04 would silently
+		// shift every row-count past an active+open RELATIONS section by
+		// one (TestDetailClickRowNoOffByOneWhenRelationsSectionActiveWithFields,
+		// mouse_test.go, catches the regression).
 		bodyLines := lipgloss.Height(s.body)
 		if accordionRow >= row && accordionRow < row+bodyLines {
 			if i == metaSectionIdx {

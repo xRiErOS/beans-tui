@@ -5,10 +5,12 @@ package tui
 // (port of devd accordion.go:309-373, minus the edit-field concept) and
 // glowRender (port of devd editor.go:102-126). E7 Task 4 (bean bt-kyj5,
 // PF-1/PF-12) adds: section 1 (Meta) always renders its body regardless of
-// `open` (PF-1, "nicht kollabierbar"), and both renderAccordion's header
-// styling AND fieldStrip reserve a stable 1-column gutter for their
-// active/inactive marker (PF-12) instead of conditionally prefixing it only
-// when active.
+// `open` (PF-1, "nicht kollabierbar"), and renderAccordion's header styling
+// reserves a stable 1-column gutter for its active/inactive marker (PF-12)
+// instead of conditionally prefixing it only when active (fieldStrip ALSO
+// carried this same PF-12 fix once, but fieldStrip itself was removed
+// wholesale by B04, design-spec.md §15 PF-17, bean bt-b0w0 -- see
+// TestRenderAccordionOmitsFieldStripForRelations, below).
 
 import (
 	"strings"
@@ -153,22 +155,31 @@ func cellCol(t *testing.T, s, substr string) int {
 	return lipgloss.Width(s[:idx])
 }
 
-// TestFieldStripGutterWidthStable guards PF-12 for fieldStrip (design-spec.md
-// §15 PF-12 item 2, "alle markierbaren Zeilen" -- same root cause as the
-// header fix, fixed in the same pass): the active branch prefixes "▌" (1
-// column) before the label, the inactive branch has none -- so a field's own
-// label starts 1 column earlier when inactive than when active. The fix adds
-// a matching " " gutter to the inactive branch.
-func TestFieldStripGutterWidthStable(t *testing.T) {
-	fields := []relationField{{beanID: "solo", label: "solo-field"}}
+// TestRenderAccordionOmitsFieldStripForRelations guards B04 (design-spec.md
+// §15 PF-17, bean bt-b0w0, 2026-07-16): the fieldStrip mechanism is REMOVED
+// entirely -- a section carrying fields (RELATIONS was fieldStrip's only
+// remaining caller; Meta's own field cursor already lived inline via
+// metaSectionBody, PF-4) must never render a "Fields:" line, active or not.
+// Replaces TestFieldStripGutterWidthStable (DELETED, not adapted -- it
+// called fieldStrip() directly, which this task deletes wholesale, design-
+// spec.md §15 PF-17 "Muster PF-14/B13-Removal": compiler-verified, no
+// caller left standing).
+func TestRenderAccordionOmitsFieldStripForRelations(t *testing.T) {
+	secs := []accordionSection{
+		{title: "Meta", body: "meta-body"},
+		{
+			title:  "Relations",
+			body:   "▷ relation-row-one\n▶ relation-row-two",
+			fields: []relationField{{beanID: "a", label: "one"}, {beanID: "b", label: "two"}},
+		},
+	}
+	// Relations (i=1) active, fieldIdx=1 -- exactly the state that used to
+	// trigger fieldStrip's own render branch (activeSec && i != 0 && len(s.
+	// fields) > 0).
+	out := renderAccordion(secs, 2, 60, true, 1, 1)
 
-	activeOut := ansi.Strip(fieldStrip(fields, 0, 60))    // the only field IS active
-	inactiveOut := ansi.Strip(fieldStrip(fields, -1, 60)) // -1 matches no field -- inactive
-
-	activeCol := cellCol(t, activeOut, "solo-field")
-	inactiveCol := cellCol(t, inactiveOut, "solo-field")
-	if activeCol != inactiveCol {
-		t.Errorf("PF-12: field label starts at column %d when active vs column %d when inactive -- gutter must reserve the same 1 column either way", activeCol, inactiveCol)
+	if strings.Contains(out, "Fields:") {
+		t.Errorf("B04: renderAccordion must never emit a 'Fields:' strip line any more, got: %q", out)
 	}
 }
 

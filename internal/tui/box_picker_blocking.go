@@ -46,7 +46,7 @@ func buildBlockingItems(idx *data.Index, selfID string) []pickerItem {
 
 	items := make([]pickerItem, len(all))
 	for i, cand := range all {
-		items[i] = pickerItem{id: cand.ID, label: relationRow(cand)}
+		items[i] = pickerItem{id: cand.ID, label: relationRow(cand, "", relationRowNoWrap)}
 	}
 	return items
 }
