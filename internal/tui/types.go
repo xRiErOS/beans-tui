@@ -606,6 +606,21 @@ type model struct {
 	tagMgmtInputTarget string
 	tagMgmtInputErr    string
 
+	// Tag-Management page's own Delete-Confirm (E10 Task 4, bean bt-1lsu,
+	// epic bt-362n D12/D15): a page-local Bool+Ziel-Paar mirroring
+	// m.confirmQuit's own "bewusst NICHT ins overlayID-Enum zurückgeholt"
+	// precedent (types.go doc-stamp above) -- Delete is REGISTRY-ONLY (D12:
+	// removing a tag Definition never touches any Bean, the tag simply
+	// becomes "free" again), so keyTagMgmtDeleteConfirm's own enter path
+	// dispatches the SAME saveTagDefsCmd/tagDefsSavedMsg tail Create (T3)
+	// already introduced -- no second save path, no SetTags/Bean-mutation
+	// call anywhere in this pair's own dispatch. tagMgmtDeleteTarget is the
+	// tag name the Confirm is asking about; the LIVE usage count shown in
+	// the modal is resolved from m.tagMgmtRows at RENDER time
+	// (tagMgmtDeleteConfirmBox), not captured here as a third field.
+	tagMgmtDeleteConfirm bool
+	tagMgmtDeleteTarget  string
+
 	// repoMetrics is the Lobby's own "Open/Total" column per configured
 	// repo (design note, bean bt-zhwl: "Kosten/Latenz-Abwägung dokumentieren"
 	// -- resolved as N independent async tea.Cmd dispatches, batched via

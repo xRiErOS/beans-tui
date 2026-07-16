@@ -841,3 +841,434 @@ func TestViewTagManagementInputSubmodeNoWrapAt80(t *testing.T) {
 		}
 	}
 }
+
+// --- openTagMgmtDeleteConfirm / keyTagMgmtDeleteConfirm: D12/D15 Delete ---
+
+// TestOpenTagMgmtDeleteConfirmNoOpOnFreeTag is the bean's own named RED test
+// (bt-1lsu TDD section, quoted verbatim): `d` on a FREE (undefined) row has
+// nothing to delete -- a free tag has no Registry Definition to remove --
+// so opening the Confirm is a silent no-op, mirrors focusedBean()==nil's
+// no-op convention quer durchs Repo (bean body wording).
+func TestOpenTagMgmtDeleteConfirmNoOpOnFreeTag(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "free-tag", defined: false, count: 3}}
+	nm, _ := m.openTagMgmtDeleteConfirm()
+	if nm.(model).tagMgmtDeleteConfirm {
+		t.Fatal("want no-op for a free (undefined) tag row")
+	}
+}
+
+// TestOpenTagMgmtDeleteConfirmOnDefinedRowSetsConfirmAndTarget guards the
+// success path: `d` on a DEFINED row sets tagMgmtDeleteConfirm=true and
+// tagMgmtDeleteTarget to that row's name (D15's page-local Bool+Ziel-Paar).
+func TestOpenTagMgmtDeleteConfirmOnDefinedRowSetsConfirmAndTarget(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "to-review", defined: true, count: 5}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.openTagMgmtDeleteConfirm()
+	mm := nm.(model)
+	if !mm.tagMgmtDeleteConfirm {
+		t.Fatal("want tagMgmtDeleteConfirm=true for a defined row")
+	}
+	if mm.tagMgmtDeleteTarget != "to-review" {
+		t.Fatalf("tagMgmtDeleteTarget = %q, want %q", mm.tagMgmtDeleteTarget, "to-review")
+	}
+	if cmd != nil {
+		t.Fatalf("want nil Cmd (no save yet, only the confirm opens), got %v", cmd)
+	}
+}
+
+// TestOpenTagMgmtDeleteConfirmNoOpWhenCursorOutOfRange guards the Randfall
+// an empty/degenerate row list -- must never panic or open a confirm with a
+// bogus target.
+func TestOpenTagMgmtDeleteConfirmNoOpWhenCursorOutOfRange(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = nil
+	m.tagMgmtCursor = listState{}
+
+	nm, _ := m.openTagMgmtDeleteConfirm()
+	if nm.(model).tagMgmtDeleteConfirm {
+		t.Fatal("want no-op when the cursor has no row to target")
+	}
+}
+
+// TestKeyTagManagementDeleteDispatchesToOpenConfirm guards keyTagManagement's
+// own D06 dispatch wiring: keys.Delete ("d") on a defined row opens the
+// Confirm via the SAME path a direct openTagMgmtDeleteConfirm() call takes.
+func TestKeyTagManagementDeleteDispatchesToOpenConfirm(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "to-review", defined: true, count: 2}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, _ := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	mm := nm.(model)
+	if !mm.tagMgmtDeleteConfirm || mm.tagMgmtDeleteTarget != "to-review" {
+		t.Fatalf("want confirm opened targeting 'to-review', got confirm=%v target=%q", mm.tagMgmtDeleteConfirm, mm.tagMgmtDeleteTarget)
+	}
+}
+
+// TestKeyTagManagementDeleteNoOpOnFreeRowViaFullDispatch guards the SAME
+// no-op through the full keyTagManagement dispatch (not just the direct
+// openTagMgmtDeleteConfirm() call above).
+func TestKeyTagManagementDeleteNoOpOnFreeRowViaFullDispatch(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "free-one", defined: false, count: 4}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	mm := nm.(model)
+	if mm.tagMgmtDeleteConfirm {
+		t.Fatal("want no confirm opened for a free row")
+	}
+	if cmd != nil {
+		t.Fatalf("want nil Cmd, got %v", cmd)
+	}
+}
+
+// TestKeyTagMgmtDeleteConfirmEscCancelsWithoutSaving is the bean's own named
+// RED test (bt-1lsu TDD section, quoted verbatim).
+func TestKeyTagMgmtDeleteConfirmEscCancelsWithoutSaving(t *testing.T) {
+	m := newModel(nil, "")
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "to-review"
+	nm, cmd := m.keyTagMgmtDeleteConfirm(tea.KeyMsg{Type: tea.KeyEsc})
+	if nm.(model).tagMgmtDeleteConfirm || cmd != nil {
+		t.Fatalf("want cancel with no Cmd, got confirm=%v cmd=%v",
+			nm.(model).tagMgmtDeleteConfirm, cmd)
+	}
+}
+
+// TestKeyTagMgmtDeleteConfirmNCancelsWithoutSaving extends the esc-cancel
+// RED test above to the literal 'n' key (deleteBox's own esc/n-cancel dual,
+// box_confirm_delete.go's keyDeleteConfirm precedent).
+func TestKeyTagMgmtDeleteConfirmNCancelsWithoutSaving(t *testing.T) {
+	m := newModel(nil, "")
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "to-review"
+	nm, cmd := m.keyTagMgmtDeleteConfirm(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	if nm.(model).tagMgmtDeleteConfirm || cmd != nil {
+		t.Fatalf("want cancel with no Cmd, got confirm=%v cmd=%v",
+			nm.(model).tagMgmtDeleteConfirm, cmd)
+	}
+	if nm.(model).tagMgmtDeleteTarget != "" {
+		t.Fatalf("want tagMgmtDeleteTarget cleared after cancel, got %q", nm.(model).tagMgmtDeleteTarget)
+	}
+}
+
+// TestKeyTagMgmtDeleteConfirmOtherKeysDuringConfirmAreNoOp is the
+// Full-Capture-Disziplin guard this task's harness brief explicitly demands:
+// any key OTHER than enter/esc/n while the Confirm is open must be silently
+// swallowed (no leak to any global/node-action handler, mirrors
+// TestKeyTagMgmtInputCapturesEveryKeyNoLeak's own precedent one layer up).
+func TestKeyTagMgmtDeleteConfirmOtherKeysDuringConfirmAreNoOp(t *testing.T) {
+	m := newModel(nil, "")
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "to-review"
+
+	for _, msg := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("x")},
+		{Type: tea.KeyUp},
+		{Type: tea.KeyDown},
+		{Type: tea.KeyRunes, Runes: []rune("?")},
+	} {
+		nm, cmd := m.keyTagMgmtDeleteConfirm(msg)
+		mm := nm.(model)
+		if !mm.tagMgmtDeleteConfirm || mm.tagMgmtDeleteTarget != "to-review" || cmd != nil {
+			t.Fatalf("key %v must be a no-op while Confirm is open, got confirm=%v target=%q cmd=%v", msg, mm.tagMgmtDeleteConfirm, mm.tagMgmtDeleteTarget, cmd)
+		}
+	}
+}
+
+// TestKeyTagManagementDeleteConfirmCapturesFullDispatchNoLeak extends the
+// no-leak guard through the FULL keyTagManagement dispatch (not just the
+// isolated keyTagMgmtDeleteConfirm call above) -- pressing 'd'/'?'/ctrl+k
+// while the Confirm is open must not open a SECOND confirm, Help, or the
+// Command-Center (mirrors TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction/
+// TestKeyTagMgmtInputCapturesEveryKeyNoLeak's own D06/full-capture
+// precedent).
+func TestKeyTagManagementDeleteConfirmCapturesFullDispatchNoLeak(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "to-review", defined: true, count: 1}, {name: "other-tag", defined: true, count: 0}}
+	m.tagMgmtCursor.setLen(2)
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "to-review"
+
+	m = step(t, m, runeMsg('d'))
+	m = step(t, m, runeMsg('?'))
+	m = step(t, m, keyMsg(tea.KeyCtrlK))
+
+	if m.helpOpen {
+		t.Fatal("'?' while Confirm is open must not open Help")
+	}
+	if m.paletteOpen {
+		t.Fatal("ctrl+k while Confirm is open must not open the Command-Center")
+	}
+	if !m.tagMgmtDeleteConfirm || m.tagMgmtDeleteTarget != "to-review" {
+		t.Fatalf("want Confirm to stay open and unchanged, got confirm=%v target=%q", m.tagMgmtDeleteConfirm, m.tagMgmtDeleteTarget)
+	}
+}
+
+// TestKeyTagMgmtDeleteConfirmEnterFiresSaveTagDefsCmdWithTargetRemoved
+// guards D12's core dispatch: enter fires saveTagDefsCmd EXACTLY ONCE with
+// the target removed from the registry's current defined names
+// (data.RemoveTagDefName, reused from T1 per bean bt-604w's own "Notes for
+// T4+T5" pointer) -- proven against a REAL t.TempDir()-backed *data.Client,
+// doubling as the Registry-Roundtrip requirement (tag gone from the file).
+func TestKeyTagMgmtDeleteConfirmEnterFiresSaveTagDefsCmdWithTargetRemoved(t *testing.T) {
+	dir := t.TempDir()
+	client := &data.Client{RepoDir: dir}
+	if err := client.SaveTagDefs([]string{"keep-me", "to-review"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+
+	m := newModel(client, dir)
+	m.tagMgmtRows = []tagRegistryRow{{name: "keep-me", defined: true}, {name: "to-review", defined: true, count: 3}}
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "to-review"
+
+	nm, cmd := m.keyTagMgmtDeleteConfirm(tea.KeyMsg{Type: tea.KeyEnter})
+	mm := nm.(model)
+	if mm.tagMgmtDeleteConfirm {
+		t.Fatal("enter must close the Confirm immediately (mirrors keyDeleteConfirm)")
+	}
+	if cmd == nil {
+		t.Fatal("enter must return a non-nil Cmd (saveTagDefsCmd)")
+	}
+
+	msg := cmd()
+	tdm, ok := msg.(tagDefsSavedMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want tagDefsSavedMsg", msg)
+	}
+	if tdm.err != nil {
+		t.Fatalf("SaveTagDefs against a real t.TempDir() client failed: %v", tdm.err)
+	}
+
+	got, err := (&data.Client{RepoDir: dir}).LoadTagDefs()
+	if err != nil {
+		t.Fatalf("LoadTagDefs after delete: %v", err)
+	}
+	want := []string{"keep-me"} // "to-review" removed, "keep-me" untouched
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("on-disk registry = %v, want %v (Registry-Roundtrip)", got, want)
+	}
+}
+
+// TestFullDeleteFlowUsedTagFallsBackToFreeGroupCountPreserved is the
+// end-to-end D12 regression: deleting the Definition of a tag that is
+// CURRENTLY USED by a bean must NOT touch that bean -- the tag simply falls
+// back into the Free group with its usage count UNCHANGED. Drives the
+// ENTIRE wiring through m.Update() (handleKey -> keyTagManagement ->
+// keyTagMgmtDeleteConfirm -> saveTagDefsCmd -> cmd() ->
+// Update(tagDefsSavedMsg) -> applyTagDefsSaved), mirrors T3's own
+// TestFullCreateFlowRefreshesPageAndTouchesNoBean D11-regression precedent,
+// here for D12.
+func TestFullDeleteFlowUsedTagFallsBackToFreeGroupCountPreserved(t *testing.T) {
+	dir := t.TempDir()
+	beans := fixtureBeansTagged() // "urgent" used by tk-1+tk-2 (count 2)
+	m := fixtureModel(t, beans)
+	m.client = &data.Client{RepoDir: dir}
+	m.repoDir = dir
+	if err := m.client.SaveTagDefs([]string{"urgent"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+	m.view = viewTagManagement
+	nm, _ := m.openTagManagementPage()
+	m = nm.(model)
+	idxBefore := m.idx
+
+	found := false
+	for i, r := range m.tagMgmtRows {
+		if r.name == "urgent" && r.defined {
+			m.tagMgmtCursor.cursor = i
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("setup: want 'urgent' as a defined row before delete, got %+v", m.tagMgmtRows)
+	}
+
+	m = step(t, m, runeMsg('d'))
+	if !m.tagMgmtDeleteConfirm || m.tagMgmtDeleteTarget != "urgent" {
+		t.Fatalf("want Confirm open targeting 'urgent', got confirm=%v target=%q", m.tagMgmtDeleteConfirm, m.tagMgmtDeleteTarget)
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	m = tm.(model)
+	if cmd == nil {
+		t.Fatal("enter on the Confirm must return the saveTagDefsCmd Cmd")
+	}
+	msg := cmd()
+	tm2, _ := m.Update(msg)
+	m = tm2.(model)
+
+	if m.tagMgmtDeleteConfirm {
+		t.Fatal("Confirm must be closed after the save round-trips")
+	}
+
+	var row *tagRegistryRow
+	for i := range m.tagMgmtRows {
+		if m.tagMgmtRows[i].name == "urgent" {
+			row = &m.tagMgmtRows[i]
+		}
+	}
+	if row == nil {
+		t.Fatal("want 'urgent' to still appear as a row (now free) after delete")
+	}
+	if row.defined {
+		t.Fatal("D12: 'urgent' must be FREE (undefined) after its Definition is deleted")
+	}
+	if row.count != 2 {
+		t.Fatalf("D12: usage count must be preserved (tk-1+tk-2 still carry it), got %d, want 2", row.count)
+	}
+
+	if m.idx != idxBefore {
+		t.Fatal("D12: Delete must not touch m.idx (no Bean mutation, Registry-only)")
+	}
+	tagged := 0
+	for _, b := range m.idx.ByID {
+		for _, tag := range b.Tags {
+			if tag == "urgent" {
+				tagged++
+			}
+		}
+	}
+	if tagged != 2 {
+		t.Fatalf("D12: both beans must still carry 'urgent' after Delete, got %d beans tagged", tagged)
+	}
+}
+
+// TestFullDeleteFlowUnusedTagDisappearsEntirely is D12's second acceptance
+// clause ("unbenutztes Tag verschwindet ganz"): deleting the Definition of a
+// tag with usage count 0 removes the row ENTIRELY (it was only visible
+// because it was defined -- with the Definition gone and no bean carrying
+// it, D09's Union has nothing left to list it under).
+func TestFullDeleteFlowUnusedTagDisappearsEntirely(t *testing.T) {
+	dir := t.TempDir()
+	m := fixtureModel(t, fixtureBeans()) // no tags on any bean
+	m.client = &data.Client{RepoDir: dir}
+	m.repoDir = dir
+	if err := m.client.SaveTagDefs([]string{"unused-tag"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+	m.view = viewTagManagement
+	nm, _ := m.openTagManagementPage()
+	m = nm.(model)
+
+	found := false
+	for i, r := range m.tagMgmtRows {
+		if r.name == "unused-tag" {
+			m.tagMgmtCursor.cursor = i
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("setup: want 'unused-tag' as a row before delete, got %+v", m.tagMgmtRows)
+	}
+
+	m = step(t, m, runeMsg('d'))
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	m = tm.(model)
+	msg := cmd()
+	tm2, _ := m.Update(msg)
+	m = tm2.(model)
+
+	for _, r := range m.tagMgmtRows {
+		if r.name == "unused-tag" {
+			t.Fatalf("want 'unused-tag' to disappear entirely after delete, still present: %+v", r)
+		}
+	}
+}
+
+// TestTagMgmtDeleteConfirmBoxShowsLiveCountAndName guards the Confirm
+// modal's own render contract (D12's own "zeigt trotzdem den LIVE-
+// Verwendungszähler VOR dem Löschen" wording): the box's text names the
+// target and its CURRENT count, resolved live from m.tagMgmtRows at render
+// time (mirrors deleteBox's own "typ resolves from the LIVE index at render
+// time... since it is only needed for display, not for dispatch" precedent,
+// box_confirm_delete.go doc-stamp).
+func TestTagMgmtDeleteConfirmBoxShowsLiveCountAndName(t *testing.T) {
+	m := newModel(nil, "")
+	m.width = 80
+	m.tagMgmtRows = []tagRegistryRow{{name: "to-review", defined: true, count: 7}}
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "to-review"
+
+	out := m.tagMgmtDeleteConfirmBox()
+	if !strings.Contains(out, "to-review") {
+		t.Errorf("Confirm box missing the target tag name:\n%s", out)
+	}
+	if !strings.Contains(out, "7") {
+		t.Errorf("Confirm box missing the live usage count:\n%s", out)
+	}
+	if !strings.Contains(out, "enter") || !strings.Contains(out, "esc") {
+		t.Errorf("Confirm box missing the enter/esc footer hint:\n%s", out)
+	}
+}
+
+// TestTagMgmtDeleteConfirmBoxZeroCountShorterText pins D12's own explicit
+// wording for the count==0 case ("Not currently used by any bean" -- a
+// shorter, non-contradictory text, not "Still used by 0 bean(s)").
+func TestTagMgmtDeleteConfirmBoxZeroCountShorterText(t *testing.T) {
+	m := newModel(nil, "")
+	m.width = 80
+	m.tagMgmtRows = []tagRegistryRow{{name: "unused-tag", defined: true, count: 0}}
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "unused-tag"
+
+	out := m.tagMgmtDeleteConfirmBox()
+	if !strings.Contains(out, "Not currently used by any bean") {
+		t.Errorf("want the zero-count shorter text, got:\n%s", out)
+	}
+	if strings.Contains(out, "Still used by") {
+		t.Errorf("zero-count text must not also render the 'Still used by' wording:\n%s", out)
+	}
+}
+
+// TestViewTagManagementRendersDeleteConfirmCentered guards the D15/D06
+// compositing wiring: viewTagManagement (via composeOverlays,
+// view_browse_repo.go) paints the Confirm modal over the row list when
+// tagMgmtDeleteConfirm is set -- mirrors confirmQuit's own composeOverlays
+// branch (D15's explicit "exakt wie es bereits m.confirmQuit kennt"
+// wording).
+func TestViewTagManagementRendersDeleteConfirmCentered(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.width, m.height = 100, 30
+	nm, _ := m.openTagManagementPage()
+	m = nm.(model)
+	m.tagMgmtRows = []tagRegistryRow{{name: "to-review", defined: true, count: 4}}
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = "to-review"
+
+	out := m.viewTagManagement()
+	if !strings.Contains(out, "to-review") {
+		t.Errorf("viewTagManagement() with Confirm open missing the target tag name:\n%s", out)
+	}
+	if !strings.Contains(out, "Still used by 4 beans") {
+		t.Errorf("viewTagManagement() with Confirm open missing the live count text:\n%s", out)
+	}
+}
+
+// TestTagManagementLocalBindingsIncludesDelete guards the Footer Zone 3
+// wiring: tagManagementLocalBindings (shared function body, T2's own "EIN
+// gemeinsamer Funktionsrumpf" contract) grows keys.Delete alongside
+// Up/Down/NewTag/Back.
+func TestTagManagementLocalBindingsIncludesDelete(t *testing.T) {
+	bindings := tagManagementLocalBindings()
+	found := false
+	for _, b := range bindings {
+		if b.Help().Key == keys.Delete.Help().Key {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("tagManagementLocalBindings missing keys.Delete, got %+v", bindings)
+	}
+}

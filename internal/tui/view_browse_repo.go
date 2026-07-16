@@ -678,6 +678,20 @@ func (m model) composeOverlays(out string, w, h int) string {
 	if m.helpOpen {
 		out = placeOverlay(out, m.helpBox(), w, h)
 	}
+	// E10 Task 4 (bean bt-1lsu, D12/D15): the Tag-Management page's own
+	// Delete-Confirm -- viewTagManagement is NOT routed through the generic
+	// m.overlay enum (D06), so it cannot be just another `case` in the
+	// switch above; a page-local bool gets its OWN composeOverlays branch
+	// instead, exactly the precedent m.confirmQuit already set (D15's own
+	// "exakt wie es bereits m.confirmQuit kennt" wording). Painted BEFORE
+	// confirmQuit (quit stays the topmost layer, unchanged precedent) --
+	// the two can never actually coincide in practice: `q` never reaches
+	// requestQuit while viewTagManagement holds full capture (D06), so this
+	// ordering is a defensive mirror of confirmQuit's own position, not a
+	// load-bearing z-order decision.
+	if m.tagMgmtDeleteConfirm {
+		out = placeOverlay(out, m.tagMgmtDeleteConfirmBox(), w, h)
+	}
 	if m.confirmQuit {
 		out = placeOverlay(out, m.quitBox(), w, h)
 	}

@@ -33,8 +33,20 @@ package tui
 // (D14) between Create (this task, tagMgmtInputMode "create") and Rename
 // (T5, "rename") -- one textinput.Model, one open/close/validate path, two
 // callers.
+//
+// E10 Task 4 (bean bt-1lsu, D12/D15) adds Delete: `d` (keys.Delete, reused
+// verbatim -- same "delete" meaning as the Delete-Confirm elsewhere in the
+// app, box_confirm_delete.go) on a DEFINED row opens a page-local
+// Delete-Confirm (tagMgmtDeleteConfirm/tagMgmtDeleteTarget, D15 -- again NO
+// new overlayID case, mirrors m.confirmQuit) showing the tag's LIVE usage
+// count; `d` on a free row is a silent no-op (nothing to delete -- a free
+// tag has no Definition). REGISTRY-ONLY (D12): confirming removes ONLY the
+// Definition (data.RemoveTagDefName + the SAME saveTagDefsCmd/
+// tagDefsSavedMsg tail T3 introduced) -- any Bean currently carrying the tag
+// keeps it, the tag simply becomes "free" again on its next row-rebuild.
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -150,15 +162,18 @@ func (m model) tagManagementChrome(innerW int) (head, localKeys string) {
 // T2 shipped Up/Down/Back only (read-only Grundgerüst) -- T3 (bean bt-604w)
 // appends keys.NewTag here (reuse of the EXISTING binding, same "n"/"new
 // tag" meaning as the Tag-Picker's own, no new keybind.Binding introduced,
-// keymap.go's helpGroups already lists it). T4 (Delete)/T5 (Rename) append
-// their own bindings to this SAME shared function body as they land (bean
-// bt-r92i's own wording: "EIN gemeinsamer Funktionsrumpf, kein Duplikat je
-// Task"), never a second, parallel bindings list. Ordering: NewTag sits
-// BEFORE Back (mirrors tagPickerLocalBindings' own action-keys-before-Back
-// convention, footer_context.go) -- an implementer decision, the bean body
-// only specifies "hängt an", not an exact position.
+// keymap.go's helpGroups already lists it). T4 (Delete, bean bt-1lsu)
+// appends keys.Delete here (same reuse precedent -- same "d"/"delete"
+// meaning as the Delete-Confirm elsewhere in the app, no new
+// keybind.Binding introduced). T5 (Rename) appends its own binding to this
+// SAME shared function body as it lands (bean bt-r92i's own wording: "EIN
+// gemeinsamer Funktionsrumpf, kein Duplikat je Task"), never a second,
+// parallel bindings list. Ordering: NewTag/Delete sit BEFORE Back (mirrors
+// tagPickerLocalBindings' own action-keys-before-Back convention,
+// footer_context.go) -- an implementer decision, neither bean body
+// specifies more than "hängt an".
 func tagManagementLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.NewTag, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, keys.NewTag, keys.Delete, keys.Back}
 }
 
 // tagManagementMarkerGlyph is the PF-12 reserved-gutter glyph (design-
@@ -309,9 +324,11 @@ func (m model) viewTagManagement() string {
 // esc (keys.Back) returns to Browse (D03/D06-Pendant: exactly ONE level
 // back, mirrors keyLobby's own esc-with-a-live-client case); `n` (keys.NewTag,
 // E10 Task 3, bean bt-604w, D11/D14) opens the shared Create/Rename input
-// sub-mode. Every OTHER key (including the global s/t/a/r/c/d/e node-action
-// set AND `?`/ctrl+k/`p`) is silently swallowed -- the D06 regression this
-// page exists to prevent.
+// sub-mode; `d` (keys.Delete, E10 Task 4, bean bt-1lsu, D12/D15) opens the
+// page-local Delete-Confirm on a defined row (no-op on a free one). Every
+// OTHER key (including the global s/t/a/r/c/e node-action set AND
+// `?`/ctrl+k/`p`) is silently swallowed -- the D06 regression this page
+// exists to prevent.
 func (m model) keyTagManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// E10 Task 3 (bean bt-604w, D14): the shared input sub-mode is checked
 	// FIRST and fully captures every key except enter/esc -- same precedent
@@ -323,6 +340,16 @@ func (m model) keyTagManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// name.
 	if m.tagMgmtInputActive {
 		return m.keyTagMgmtInput(msg)
+	}
+	// E10 Task 4 (bean bt-1lsu, D12/D15): the Delete-Confirm sub-mode is
+	// checked NEXT, after the Input sub-mode above -- Input and
+	// Delete-Confirm are mutually exclusive by construction (Delete-Confirm
+	// can only be OPENED from the base state below, `openTagMgmtDeleteConfirm`
+	// is never called while `tagMgmtInputActive` is true), so this order is
+	// never ambiguous, only a defensive precedence mirroring T3's own
+	// checkpoint shape one case down.
+	if m.tagMgmtDeleteConfirm {
+		return m.keyTagMgmtDeleteConfirm(msg)
 	}
 
 	switch navKey(msg.String()) {
@@ -345,6 +372,8 @@ func (m model) keyTagManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keybind.Matches(msg, keys.NewTag):
 		return m.openTagMgmtInput("create", "")
+	case keybind.Matches(msg, keys.Delete):
+		return m.openTagMgmtDeleteConfirm()
 	}
 	return m, nil
 }
@@ -446,4 +475,89 @@ func (m model) tagMgmtInputRows() []string {
 		rows = append(rows, "", lipgloss.NewStyle().Foreground(theme.Red).Render(m.tagMgmtInputErr))
 	}
 	return rows
+}
+
+// openTagMgmtDeleteConfirm opens the page-local Delete-Confirm (E10 Task 4,
+// bean bt-1lsu, D12/D15): reads the CURRENTLY SELECTED row
+// (m.tagMgmtRows[m.tagMgmtCursor.cursor]) -- a free (undefined) row has no
+// Registry Definition to remove, so this is a silent, HANDLED no-op
+// (mirrors the focusedBean()==nil no-op convention quer durchs Repo, same
+// guard shape for an out-of-range cursor on an empty/degenerate row list).
+// A defined row sets tagMgmtDeleteConfirm=true and tagMgmtDeleteTarget to
+// its name -- no Cmd fires here, the actual SaveTagDefs write only happens
+// on a CONFIRMED enter (keyTagMgmtDeleteConfirm below).
+func (m model) openTagMgmtDeleteConfirm() (tea.Model, tea.Cmd) {
+	if m.tagMgmtCursor.cursor < 0 || m.tagMgmtCursor.cursor >= len(m.tagMgmtRows) {
+		return m, nil
+	}
+	row := m.tagMgmtRows[m.tagMgmtCursor.cursor]
+	if !row.defined {
+		return m, nil
+	}
+	m.tagMgmtDeleteConfirm = true
+	m.tagMgmtDeleteTarget = row.name
+	return m, nil
+}
+
+// keyTagMgmtDeleteConfirm drives the open Delete-Confirm (D12/D15): enter
+// dispatches saveTagDefsCmd (T3's own Save infra, reused verbatim -- no
+// second save path) with the target removed from the registry's CURRENT
+// defined names (data.RemoveTagDefName, T1); esc/n cancels WITHOUT saving
+// (mirrors keyDeleteConfirm's own esc/n-cancel dual, box_confirm_delete.go).
+// REGISTRY-ONLY (D12): this function never calls data.Client.SetTags or
+// touches m.idx in any way -- only SaveTagDefs, exactly like Create (T3).
+// Every OTHER key is a silent, HANDLED no-op (Full-Capture-Disziplin, the
+// SAME "no fallthrough to any outer handler" contract keyTagMgmtInput
+// already established one layer up).
+func (m model) keyTagMgmtDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case keybind.Matches(msg, keys.Enter):
+		target := m.tagMgmtDeleteTarget
+		m.tagMgmtDeleteConfirm = false
+		m.tagMgmtDeleteTarget = ""
+		defs := definedTagNames(m.tagMgmtRows)
+		return m, saveTagDefsCmd(m.client, data.RemoveTagDefName(defs, target))
+	case keybind.Matches(msg, keys.Back), msg.String() == "n":
+		m.tagMgmtDeleteConfirm = false
+		m.tagMgmtDeleteTarget = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+// tagMgmtDeleteConfirmBox renders the floating Delete-Confirm modal (D12/
+// D15) -- mirrors deleteBox's own Aufbau (box_confirm_delete.go: singular/
+// plural count discipline, Red border for a "Delete"-named action) but via
+// modalPanel (the bean body's own explicit choice, quitBox's own precedent,
+// box_confirm_quit.go) rather than a hand-built modalBox call. count is
+// resolved LIVE from m.tagMgmtRows at RENDER time (mirrors deleteBox's own
+// "typ resolves from the LIVE index at render time... since it is only
+// needed for display, not for dispatch" doc-stamp) -- not a separate
+// captured-at-open-time field (the bean body deliberately lists ONLY
+// tagMgmtDeleteConfirm/tagMgmtDeleteTarget as new model fields, no third
+// count field). Count 0 gets the bean's own explicit shorter, non-
+// contradictory text ("Not currently used by any bean") instead of "Still
+// used by 0 bean(s)".
+func (m model) tagMgmtDeleteConfirmBox() string {
+	count := 0
+	for _, r := range m.tagMgmtRows {
+		if r.name == m.tagMgmtDeleteTarget {
+			count = r.count
+			break
+		}
+	}
+
+	var body string
+	switch count {
+	case 0:
+		body = "Not currently used by any bean.\n"
+	case 1:
+		body = "Still used by 1 bean — it keeps the tag, it just won't be prioritized anymore.\n"
+	default:
+		body = fmt.Sprintf("Still used by %d beans — they keep the tag, it just won't be prioritized anymore.\n", count)
+	}
+
+	title := fmt.Sprintf("Delete tag definition '%s'?", m.tagMgmtDeleteTarget)
+	footer := "enter: delete   esc/n: cancel"
+	return modalPanel(title, body, footer, clampModalWidth(48, m.width), theme.Red)
 }
