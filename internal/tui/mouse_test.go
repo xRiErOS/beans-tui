@@ -380,6 +380,47 @@ func TestClickPaneGeometryOriginYExcludesTitleAndSeparator(t *testing.T) {
 	}
 }
 
+// TestClickPaneGeometryMultiLineFooterHeightPin (PRELUDE, T6-Review F01,
+// bean bt-13l7, 2026-07-16): D02 collapsed the Backlog/Browse footer
+// divergence that used to be the ONLY real render exercising clickPaneGeometry
+// with footH != 2 (TestDetailClickBacklogFooterAt80Cols's own doc comment,
+// above) -- every OTHER clickPaneGeometry test in this file (and every real
+// Chrome at >=80 columns, post-D02) now renders a 2-line localKeys, so the
+// bodyH/footerY boundary math has not been exercised at any OTHER footH value
+// since D02 landed. This is a SYNTHETIC (hand-built, not render-grounded)
+// regression: a fabricated >=3-line localKeys string proves the dynamic
+// footH := lipgloss.Height(localKeys)+2 mechanism (mouse.go) generalizes to
+// any footer height, independent of whether a real view ever happens to
+// diverge from 2 lines again. head="H" (1 line) + a 3-line localKeys + w=80/
+// h=40 is a small enough fixture that bodyH/originY/footerY can be verified
+// against literal numbers, not a second call into the function under test
+// (LESSONS-LEARNED #5: a pin test must pin LITERALS, never the constant/
+// formula it's supposed to be checking).
+//
+//	innerH = h-2            = 38
+//	footH  = 3 (localKeys lines) + 2 = 5
+//	avail  = innerH - head(1) - footH(5) - 1(divider) = 31
+//	bodyH  = avail - 2 (both panes' own border)        = 29
+//	originY = 1 (outer border) + head(1) + 1 (divider) + 1 (pane's own border) = 4
+//	footerY = originY + bodyH + 2 (pane bottom border + divider, D02-era
+//	          TestDetailClickBacklogFooterAt80Cols precedent)             = 35
+func TestClickPaneGeometryMultiLineFooterHeightPin(t *testing.T) {
+	head := "H"
+	localKeys := "line one\nline two\nline three" // 3 lines -- the bean's own ">=3-Zeilen" requirement
+	bodyH, _, _, _, originY := clickPaneGeometry(80, 40, head, localKeys, 0)
+
+	if bodyH != 29 {
+		t.Fatalf("bodyH = %d, want 29 (innerH 38 - head 1 - footH 5 - divider 1 = avail 31, bodyH = avail-2)", bodyH)
+	}
+	if originY != 4 {
+		t.Fatalf("originY = %d, want 4 (outer border 1 + head 1 + divider 1 + pane's own border 1) -- must stay independent of footer height", originY)
+	}
+	footerY := originY + bodyH + 2
+	if footerY != 35 {
+		t.Fatalf("footerY = %d, want 35 (originY 4 + bodyH 29 + pane-bottom-border/divider 2)", footerY)
+	}
+}
+
 // --- B07 (design-spec.md §15 PF-16, bean bt-duz7, E8 Task 4): Maus im
 // Detail-Pane -- Sektionen + Meta-Felder klickbar ---
 
