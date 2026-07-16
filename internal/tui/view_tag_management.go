@@ -173,7 +173,7 @@ func (m model) tagManagementChrome(innerW int) (head, localKeys string) {
 // footer_context.go) -- an implementer decision, neither bean body
 // specifies more than "hängt an".
 func tagManagementLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.NewTag, keys.Delete, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, keys.NewTag, keys.Delete, keys.RenameTag, keys.Back}
 }
 
 // tagManagementMarkerGlyph is the PF-12 reserved-gutter glyph (design-
@@ -374,6 +374,8 @@ func (m model) keyTagManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openTagMgmtInput("create", "")
 	case keybind.Matches(msg, keys.Delete):
 		return m.openTagMgmtDeleteConfirm()
+	case keybind.Matches(msg, keys.RenameTag):
+		return m.openTagMgmtRename()
 	}
 	return m, nil
 }
@@ -394,6 +396,28 @@ func (m model) openTagMgmtInput(mode, prefill string) (tea.Model, tea.Cmd) {
 	m.tagMgmtInput.SetValue(prefill)
 	m.tagMgmtInput.Focus()
 	return m, textinput.Blink
+}
+
+// openTagMgmtRename enters the shared input sub-mode in "rename" mode (E10
+// Task 5, bean bt-y9my, D13/D14): reads the CURRENTLY SELECTED row, No-Op
+// (mirrors openTagMgmtDeleteConfirm's own no-op shape) when the cursor is
+// out of range OR the row is a free/undefined one -- a free tag has no
+// Registry entry to rename, the PO must `n`-define it first (bean body's
+// own wording). A defined row's name seeds BOTH the input's visible text AND
+// tagMgmtInputTarget in ONE openTagMgmtInput("rename", row.name) call (T3's
+// own "Notes for T5" pointer) -- keyTagMgmtInput's existing dedupe loop
+// already excludes tagMgmtInputTarget from the "already defined" check
+// (T3-introduced `name != m.tagMgmtInputTarget`), so a PO who re-confirms
+// the unchanged old name is never rejected as a duplicate of themselves.
+func (m model) openTagMgmtRename() (tea.Model, tea.Cmd) {
+	if m.tagMgmtCursor.cursor < 0 || m.tagMgmtCursor.cursor >= len(m.tagMgmtRows) {
+		return m, nil
+	}
+	row := m.tagMgmtRows[m.tagMgmtCursor.cursor]
+	if !row.defined {
+		return m, nil
+	}
+	return m.openTagMgmtInput("rename", row.name)
 }
 
 // keyTagMgmtInput drives the open input sub-mode -- mirrors keyTagInput's
@@ -439,6 +463,21 @@ func (m model) keyTagMgmtInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// bt-1lsu): applyTagDefsSaved no longer reads the input's Value()
 			// implicitly -- every dispatch site names its own cursor target.
 			return m, saveTagDefsCmd(m.client, data.AddTagDefName(defs, name), name)
+		case "rename":
+			// E10 Task 5 (bean bt-y9my, D13): Registry-Rename and Bean-Sweep
+			// dispatch as TWO INDEPENDENT Cmds in ONE tea.Batch -- neither
+			// waits on the other (tagRenameDoneMsg's own doc-stamp,
+			// messages.go, explains why that's harmless: disjoint state
+			// writes). refindName = the NEW name (mirrors "create"'s own
+			// convention above) -- applyTagDefsSaved's cursor re-find works
+			// identically for Rename, it is mode-agnostic (T3's "Notes for
+			// T5", bean bt-604w).
+			old := m.tagMgmtInputTarget
+			defs := definedTagNames(m.tagMgmtRows)
+			return m, tea.Batch(
+				saveTagDefsCmd(m.client, data.RenameTagDefName(defs, old, name), name),
+				renameTagCmd(m.client, m.idx, old, name),
+			)
 		}
 		return m, nil
 	}

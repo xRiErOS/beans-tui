@@ -7,6 +7,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -82,6 +83,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// loadCmd reload is needed, messages.go's own tagDefsSavedMsg
 		// doc-stamp).
 		return m.applyTagDefsSaved(msg)
+
+	case tagRenameDoneMsg:
+		// E10 Task 5 (bean bt-y9my, D13): renameTagCmd's own completion
+		// tail -- applyTagRenameDone below is the SECOND deliberate
+		// exception to mutationDoneMsg (tagDefsSavedMsg above was the
+		// first). UNLIKE tagDefsSavedMsg (a pure Registry write, no Bean
+		// ever touched), this Msg's whole point IS a real Bean-tag
+		// mutation across N beans, so it always reloads (mirrors
+		// applyMutationResult's own unconditional-reload convention).
+		return m.applyTagRenameDone(msg)
 
 	case beanRawLoadedMsg:
 		// D01 (design-spec.md §15 PF-17, bean bt-z4b1): openBeanEditor's
@@ -484,6 +495,29 @@ func (m model) applyTagDefsSaved(msg tagDefsSavedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// applyTagRenameDone is renameTagCmd's own completion tail (E10 Task 5, bean
+// bt-y9my, D13): ALWAYS reloads (loadCmd, mirrors applyMutationResult's own
+// unconditional-reload convention) so m.idx reflects the swept beans' new
+// tag before the Page next rebuilds tagMgmtRows from it -- UNLIKE
+// applyTagDefsSaved above, which deliberately never reloads (no Bean is ever
+// touched by a pure Registry write). A non-empty failed slice degrades the
+// Toast to toastError (continue-on-error, D13: SOME beans may have missed
+// the rename), otherwise a plain success Toast -- toastInfo is the
+// "Hinweis/Erfolg" kind (overlay_show_toast.go's own doc-stamp), the SAME
+// kind e.g. the Yank "Copied: "+b.ID toast above already uses for a bare
+// success.
+func (m model) applyTagRenameDone(msg tagRenameDoneMsg) (tea.Model, tea.Cmd) {
+	title := fmt.Sprintf("Renamed %s → %s: %d bean(s) updated", msg.oldTag, msg.newTag, msg.renamed)
+	kind := toastInfo
+	if len(msg.failed) > 0 {
+		title += fmt.Sprintf(", %d failed (first: %v)", len(msg.failed), msg.failed[0].err)
+		kind = toastError
+	}
+	var toastCmd tea.Cmd
+	m, toastCmd = m.showToast(kind, title, "", nil, false)
+	return m, tea.Batch(toastCmd, loadCmd(m.client))
 }
 
 // applyBeanRawLoaded handles openBeanEditor's FIRST Cmd-hop result (D01,

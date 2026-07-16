@@ -376,3 +376,82 @@ func saveTagDefsCmd(c *data.Client, defs []string, refindName string) tea.Cmd {
 		return tagDefsSavedMsg{err: c.SaveTagDefs(defs), refindName: refindName}
 	}
 }
+
+// tagRenameFailure records one bean's failed SetTags call during a Rename
+// sweep (renameTagCmd below, E10 Task 5, bean bt-y9my, epic bt-362n D13) --
+// id + the raw error, enough for a Toast's "first: <err>" summary
+// (applyTagRenameDone, update.go) without a second lookup back into m.idx.
+type tagRenameFailure struct {
+	id  string
+	err error
+}
+
+// tagRenameDoneMsg carries a Rename-sweep's outcome (D13) -- the SECOND
+// deliberate exception to the shared mutationDoneMsg tail (tagDefsSavedMsg
+// above was the first): a bulk, continue-on-error sweep across N beans needs
+// richer feedback than a single error, the same "needs more than a bare
+// error back" rationale createDoneMsg's own doc-stamp already establishes,
+// one layer further. renamed/failed are populated by renameTagCmd's own
+// continue-on-error loop.
+//
+// Ordering note (D13): the Registry rename (saveTagDefsCmd) and this Bean
+// sweep (renameTagCmd) are dispatched as TWO INDEPENDENT Cmds in the SAME
+// tea.Batch (keyTagMgmtInput's "rename" case, view_tag_management.go) --
+// tea.Batch makes NO ordering guarantee between them, which is deliberately
+// harmless: the two Cmds write disjoint state (applyTagDefsSaved only
+// touches tagMgmtRows/the input sub-mode; applyTagRenameDone only touches
+// m.idx/the Toast), so there is no Write-Write conflict regardless of which
+// one lands first.
+type tagRenameDoneMsg struct {
+	oldTag, newTag string
+	renamed        int
+	failed         []tagRenameFailure
+}
+
+// renameTagCmd sweeps every bean CURRENTLY carrying oldTag (idx.WithTag,
+// index.go -- an IN-MEMORY snapshot, so each bean's etag is read directly
+// off idx's own Bean pointers, no m.beanETag redirect needed: this sweep
+// operates on the exact idx handed to it at dispatch time) and fires ONE
+// combined data.Client.SetTags(id, add=[newTag], remove=[oldTag], etag) call
+// per bean (mutations.go's existing single-etag-no-cascade convention,
+// reused verbatim -- no new Client method). CONTINUE-ON-ERROR (D13): a
+// failure on one bean is collected into failed and the loop moves on to the
+// NEXT bean, no early return -- beans has no cross-bean transaction
+// (verified, epic bt-362n body's own empirical check against `beans update
+// --help`), so a stale etag on bean K must never abort K+1..N.
+//
+// idx == nil degrades to a zero-value, no-op sweep (mirrors
+// collectTagCounts' own "if idx != nil" defensive guard, box_picker_tag.go)
+// -- a pre-load/test-fixture model (m.idx unset) must never panic here.
+//
+// oldTag == newTag guard: a resubmitted, UNCHANGED name (D14's dedupe
+// exclusion of the rename's own old name, keyTagMgmtInput, deliberately lets
+// this happen -- "eigener alter Name im Dedupe-Check durchgelassen") is
+// treated as an ALREADY-COMPLETE no-op sweep: every bean currently carrying
+// the tag counts as renamed WITHOUT ever calling SetTags. This is not just
+// an optimization -- SetTags' own documented "the SAME tag in both add and
+// remove -> remove wins" resolver (mutations.go, I2) would otherwise
+// silently STRIP the tag from every one of these beans on a harmless
+// re-confirm keystroke, a real, avoidable data-loss bug for this chain's
+// riskiest (real-bean-mutating) task.
+func renameTagCmd(c *data.Client, idx *data.Index, oldTag, newTag string) tea.Cmd {
+	return func() tea.Msg {
+		msg := tagRenameDoneMsg{oldTag: oldTag, newTag: newTag}
+		if idx == nil {
+			return msg
+		}
+		tagged := idx.WithTag(oldTag)
+		if oldTag == newTag {
+			msg.renamed = len(tagged)
+			return msg
+		}
+		for _, b := range tagged {
+			if err := c.SetTags(b.ID, []string{newTag}, []string{oldTag}, b.ETag); err != nil {
+				msg.failed = append(msg.failed, tagRenameFailure{id: b.ID, err: err})
+				continue
+			}
+			msg.renamed++
+		}
+		return msg
+	}
+}

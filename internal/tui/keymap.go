@@ -76,6 +76,20 @@ type keyMap struct {
 	// msg.String() comparison cannot be rendered.
 	NewTag keybind.Binding // n — new tag (Tag-Picker free-text sub-mode)
 
+	// RenameTag (E10 Task 5, bean bt-y9my, epic bt-362n D13/D14) is a
+	// Tag-Management-page-LOCAL binding on "e" -- the SAME raw key as the
+	// GLOBAL Editor binding ("e"/"ctrl+e"), but a disjoint, mutually
+	// exclusive display/dispatch context: viewTagManagement is a
+	// FULL-CAPTURE page (D06, view_tag_management.go), so keyNodeAction's
+	// own "e" case (which fires Editor) is structurally unreachable while
+	// this page is open -- mirrors the established Backlog "S" precedent
+	// (same physical key, different view-local meaning, no functional
+	// collision). A SEPARATE keybind.Binding (not a reuse of Editor)
+	// because TestHelpGroupsCoverEveryBindingExactlyOnce identifies
+	// bindings by their OWN key set ("e" alone vs "e,ctrl+e"), so the two
+	// coexist without tripping that drift guard.
+	RenameTag keybind.Binding // e — rename tag (Tag-Management page)
+
 	// Fullscreen (F01 Kernmechanik, E9 Task 7, bean bt-13l7, design-spec.md
 	// §15): `v` (view) -- verified free against every OTHER binding above
 	// before wiring (no collision). Dispatch: keyFullscreen
@@ -136,6 +150,8 @@ func newKeyMap() keyMap {
 
 		NewTag: keybind.NewBinding(keybind.WithKeys("n"), keybind.WithHelp("n", "New tag")),
 
+		RenameTag: keybind.NewBinding(keybind.WithKeys("e"), keybind.WithHelp("e", "Rename")),
+
 		Fullscreen: keybind.NewBinding(keybind.WithKeys("v"), keybind.WithHelp("v", "fullscreen")),
 
 		HistoryBack:    keybind.NewBinding(keybind.WithKeys("ctrl+left", "["), keybind.WithHelp("[", "history back")),
@@ -160,7 +176,7 @@ func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen, k.HistoryBack, k.HistoryForward}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
-		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort, k.NewTag}},
+		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort, k.NewTag, k.RenameTag}},
 	}
 }
 

@@ -7,7 +7,9 @@ package tui
 // fixtureBeans/fixtureModel/keyMsg/runeMsg (update_test.go), same package.
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -1420,5 +1422,584 @@ func TestTagManagementLocalBindingsIncludesDelete(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("tagManagementLocalBindings missing keys.Delete, got %+v", bindings)
+	}
+}
+
+// --- T5 (bean bt-y9my, epic bt-362n D13/D14): Rename + Bean-Sweep ---
+
+// fakeBeansSucceed installs a fake "beans" that always exits 0 with empty
+// stdout -- for tests that need every dispatched `beans update` call to
+// SUCCEED (mutations.go's update(): "if err == nil { return nil }", it never
+// parses stdout on the success path), without a real .beans/ repo backing
+// it. Mirrors fakeBeansConflict/fakeBeansOnPath's own precedent
+// (editor_test.go).
+func fakeBeansSucceed(t *testing.T) {
+	t.Helper()
+	fakeBeansOnPath(t, "#!/bin/sh\nexit 0\n")
+}
+
+// fakeBeansFailForIDLogCalls installs a fake "beans" that logs every
+// dispatched bean ID (the CLI's second positional arg, `beans update <id>
+// ...`) to logPath, one per line, THEN fails with a CONFLICT envelope for
+// exactly failID and succeeds (exit 0) for every other ID -- lets a test
+// drive renameTagCmd's continue-on-error sweep against a REAL *data.Client
+// with exactly one bean's SetTags call deterministically failing, AND prove
+// every OTHER bean was still attempted (not just infer it from the final
+// count). data.Client has no interface seam to mock (concrete struct
+// shelling out via exec.Command) -- this codebase always drives it via a
+// fake binary on PATH instead (mirrors fakeBeansConflict/fakeBeansEchoIfMatch,
+// editor_test.go).
+func fakeBeansFailForIDLogCalls(t *testing.T, failID, logPath string) {
+	t.Helper()
+	fakeBeansOnPath(t, fmt.Sprintf(`#!/bin/sh
+echo "$2" >> %s
+if [ "$2" = "%s" ]; then
+  echo '{"success":false,"error":"etag mismatch: stale","code":"CONFLICT"}'
+  exit 1
+fi
+exit 0
+`, logPath, failID))
+}
+
+// --- openTagMgmtRename ---
+
+// TestOpenTagMgmtRenameNoOpOnFreeTag mirrors
+// TestOpenTagMgmtDeleteConfirmNoOpOnFreeTag's own no-op shape (T4,
+// bt-1lsu): a free (undefined) row has no Registry entry to rename.
+func TestOpenTagMgmtRenameNoOpOnFreeTag(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "free-tag", defined: false, count: 3}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.openTagMgmtRename()
+	if nm.(model).tagMgmtInputActive {
+		t.Fatal("want no-op for a free (undefined) tag row")
+	}
+	if cmd != nil {
+		t.Fatalf("want nil Cmd, got %v", cmd)
+	}
+}
+
+// TestOpenTagMgmtRenameNoOpWhenCursorOutOfRange guards the degenerate/empty
+// row-list Randfall -- must never panic or open the input with a bogus
+// target.
+func TestOpenTagMgmtRenameNoOpWhenCursorOutOfRange(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = nil
+	m.tagMgmtCursor = listState{}
+
+	nm, _ := m.openTagMgmtRename()
+	if nm.(model).tagMgmtInputActive {
+		t.Fatal("want no-op when the cursor has no row to target")
+	}
+}
+
+// TestOpenTagMgmtRenameOnDefinedRowOpensPrefilledInput guards the success
+// path: `e` on a DEFINED row opens the SHARED input sub-mode (D14) in
+// "rename" mode, prefilled with the row's own name in BOTH the visible text
+// AND tagMgmtInputTarget (T3's own "Notes for T5" pointer, bean bt-604w).
+func TestOpenTagMgmtRenameOnDefinedRowOpensPrefilledInput(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "to-review", defined: true, count: 5}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.openTagMgmtRename()
+	mm := nm.(model)
+	if !mm.tagMgmtInputActive || mm.tagMgmtInputMode != "rename" {
+		t.Fatalf("want rename input open, got active=%v mode=%q", mm.tagMgmtInputActive, mm.tagMgmtInputMode)
+	}
+	if mm.tagMgmtInputTarget != "to-review" {
+		t.Fatalf("tagMgmtInputTarget = %q, want %q", mm.tagMgmtInputTarget, "to-review")
+	}
+	if mm.tagMgmtInput.Value() != "to-review" {
+		t.Fatalf("input value = %q, want prefilled %q", mm.tagMgmtInput.Value(), "to-review")
+	}
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (textinput.Blink)")
+	}
+}
+
+// TestKeyTagManagementRenameDispatchesToOpenInput guards keyTagManagement's
+// own D06 dispatch wiring: keys.RenameTag ("e") on a defined row opens the
+// rename input via the SAME path a direct openTagMgmtRename() call takes.
+func TestKeyTagManagementRenameDispatchesToOpenInput(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "to-review", defined: true, count: 2}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, _ := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	mm := nm.(model)
+	if !mm.tagMgmtInputActive || mm.tagMgmtInputMode != "rename" || mm.tagMgmtInputTarget != "to-review" {
+		t.Fatalf("want rename input opened targeting 'to-review', got active=%v mode=%q target=%q",
+			mm.tagMgmtInputActive, mm.tagMgmtInputMode, mm.tagMgmtInputTarget)
+	}
+}
+
+// TestKeyTagManagementRenameNoOpOnFreeRowViaFullDispatch guards the SAME
+// no-op through the full keyTagManagement dispatch (not just the isolated
+// openTagMgmtRename() call above).
+func TestKeyTagManagementRenameNoOpOnFreeRowViaFullDispatch(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "free-one", defined: false, count: 4}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	mm := nm.(model)
+	if mm.tagMgmtInputActive {
+		t.Fatal("want no input opened for a free row")
+	}
+	if cmd != nil {
+		t.Fatalf("want nil Cmd, got %v", cmd)
+	}
+}
+
+// --- keyTagMgmtInput "rename" mode: dedupe, esc, submit ---
+
+// TestKeyTagMgmtInputRenameDedupeAllowsOwnOldNameUnchanged is the bean's own
+// explicitly-demanded Randfall test (bt-y9my TDD section): re-confirming
+// the UNCHANGED old name (the prefilled value, untouched) must NOT be
+// rejected as a duplicate of itself.
+func TestKeyTagMgmtInputRenameDedupeAllowsOwnOldNameUnchanged(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "alpha", defined: true}, {name: "bravo", defined: true}}
+	nm, _ := m.openTagMgmtInput("rename", "alpha")
+	m = nm.(model)
+
+	nm2, _ := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
+	got := nm2.(model)
+	if got.tagMgmtInputErr != "" {
+		t.Fatalf("want no dedupe error for the unchanged own old name, got %q", got.tagMgmtInputErr)
+	}
+}
+
+// TestKeyTagMgmtInputRenameRejectsDuplicateAgainstOtherExistingName guards
+// the OTHER side of the dedupe exclusion: renaming to a DIFFERENT existing
+// name is still rejected, only the rename's own old name is excluded.
+func TestKeyTagMgmtInputRenameRejectsDuplicateAgainstOtherExistingName(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "alpha", defined: true}, {name: "bravo", defined: true}}
+	nm, _ := m.openTagMgmtInput("rename", "alpha")
+	m = nm.(model)
+	m.tagMgmtInput.SetValue("bravo")
+
+	nm2, _ := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
+	got := nm2.(model)
+	if !got.tagMgmtInputActive || got.tagMgmtInputErr == "" {
+		t.Fatalf("want rejected duplicate against a DIFFERENT existing name, got %+v", got)
+	}
+}
+
+// TestKeyTagMgmtInputEscInRenameModeDiscardsOnlySubmodeNoSave mirrors T3's
+// own esc-discards-only-submode contract (D14) explicitly for Rename: esc
+// must fire NO Cmd (no Registry save, no sweep) and leave the Page itself
+// open.
+func TestKeyTagMgmtInputEscInRenameModeDiscardsOnlySubmodeNoSave(t *testing.T) {
+	m := newModel(&data.Client{RepoDir: "/nonexistent-bt-y9my-scratch-dir"}, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "alpha", defined: true}}
+	nm, _ := m.openTagMgmtInput("rename", "alpha")
+	m = nm.(model)
+	m.tagMgmtInput.SetValue("zulu")
+
+	nm2, cmd := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEsc})
+	mm := nm2.(model)
+	if mm.tagMgmtInputActive {
+		t.Fatal("want esc to close the rename submode")
+	}
+	if cmd != nil {
+		t.Fatalf("want nil Cmd on esc (no save, no sweep), got %v", cmd)
+	}
+	if mm.view != viewTagManagement {
+		t.Fatal("want esc to leave the Page itself open (only the submode closes)")
+	}
+}
+
+// TestKeyTagMgmtInputCapturesEveryKeyNoLeakInRenameMode is the Full-Capture-
+// Disziplin guard, specifically for Rename mode (mirrors
+// TestKeyTagMgmtInputCapturesEveryKeyNoLeak's own "create"-mode precedent
+// one layer up -- this task's harness brief explicitly demands the SAME
+// coverage for Rename).
+func TestKeyTagMgmtInputCapturesEveryKeyNoLeakInRenameMode(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "leak-probe", defined: true, count: 1}}
+	m.tagMgmtCursor.setLen(1)
+	nm, _ := m.openTagMgmtInput("rename", "leak-probe")
+	m = nm.(model)
+
+	for _, r := range "d?" {
+		m = step(t, m, runeMsg(r))
+	}
+	m = step(t, m, keyMsg(tea.KeyCtrlK))
+
+	if m.tagMgmtDeleteConfirm {
+		t.Fatal("'d' while typing (rename mode) must not open the page-local Delete-Confirm")
+	}
+	if m.overlay != overlayNone {
+		t.Fatalf("no overlay may open while typing, overlay = %v", m.overlay)
+	}
+	if m.helpOpen {
+		t.Fatal("'?' while typing (rename mode) must not open Help")
+	}
+	if m.paletteOpen {
+		t.Fatal("ctrl+k while typing (rename mode) must not open the Command-Center")
+	}
+	if !m.tagMgmtInputActive || m.tagMgmtInputMode != "rename" {
+		t.Fatal("want the rename submode to stay active and unchanged")
+	}
+}
+
+// TestKeyTagMgmtInputRenameValidSubmitFiresBatchOfTwoCmds guards D13's core
+// dispatch shape: a valid Rename submit fires EXACTLY TWO independent Cmds
+// in ONE tea.Batch (Registry-save + Bean-sweep) -- proven by resolving the
+// returned Cmd and asserting it decomposes into a tea.BatchMsg of length 2
+// (no assertion against execution ORDER, D13's own "tea.Batch garantiert
+// KEINE Reihenfolge" rationale, messages.go's tagRenameDoneMsg doc-stamp).
+func TestKeyTagMgmtInputRenameValidSubmitFiresBatchOfTwoCmds(t *testing.T) {
+	m := newModel(&data.Client{RepoDir: t.TempDir()}, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "alpha", defined: true}}
+	nm, _ := m.openTagMgmtInput("rename", "alpha")
+	m = nm.(model)
+	m.tagMgmtInput.SetValue("zulu")
+
+	_, cmd := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd")
+	}
+	msg := cmd()
+	bm, ok := msg.(tea.BatchMsg)
+	if !ok || len(bm) != 2 {
+		t.Fatalf("cmd() = %T (%v), want tea.BatchMsg of length 2", msg, msg)
+	}
+}
+
+// TestKeyTagMgmtInputRenameRegistryPersistsIndependentlyOfSweepCmd is the
+// bean's own explicitly-demanded "Registry-sofort-Semantik" test (D13:
+// "Datei schon umbenannt BEVOR Sweep endet -- testbar über Cmd-Zerlegung"):
+// executing ONLY the Registry-save half of the batch (never the sweep half)
+// must already persist the rename to disk -- the two Cmds are genuinely
+// independent, not a hidden sequential dependency.
+func TestKeyTagMgmtInputRenameRegistryPersistsIndependentlyOfSweepCmd(t *testing.T) {
+	dir := t.TempDir()
+	client := &data.Client{RepoDir: dir}
+	if err := client.SaveTagDefs([]string{"alpha", "bravo"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+	m := newModel(client, dir)
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "alpha", defined: true}, {name: "bravo", defined: true}}
+	nm, _ := m.openTagMgmtInput("rename", "alpha")
+	m = nm.(model)
+	m.tagMgmtInput.SetValue("zulu")
+
+	_, cmd := m.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
+	bm, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("want tea.BatchMsg, got %T", cmd())
+	}
+
+	var savedRan bool
+	for _, c := range bm {
+		if sm, ok := c().(tagDefsSavedMsg); ok {
+			savedRan = true
+			if sm.err != nil {
+				t.Fatalf("tagDefsSavedMsg.err = %v, want nil", sm.err)
+			}
+			if sm.refindName != "zulu" {
+				t.Fatalf("refindName = %q, want %q", sm.refindName, "zulu")
+			}
+		}
+	}
+	if !savedRan {
+		t.Fatal("want the Registry-save Cmd present in the batch")
+	}
+
+	got, err := client.LoadTagDefs()
+	if err != nil {
+		t.Fatalf("LoadTagDefs: %v", err)
+	}
+	want := []string{"bravo", "zulu"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("registry on disk = %v, want %v (renamed, independent of the sweep Cmd ever running)", got, want)
+	}
+}
+
+// TestTagManagementLocalBindingsIncludesRenameTag mirrors
+// TestTagManagementLocalBindingsIncludesDelete's own shape.
+func TestTagManagementLocalBindingsIncludesRenameTag(t *testing.T) {
+	bindings := tagManagementLocalBindings()
+	found := false
+	for _, b := range bindings {
+		if b.Help().Key == keys.RenameTag.Help().Key {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("tagManagementLocalBindings missing keys.RenameTag, got %+v", bindings)
+	}
+}
+
+// --- renameTagCmd: the Bean-Sweep itself ---
+
+// TestRenameTagCmdContinuesPastOneFailure is the bean's own named RED test
+// (bt-y9my TDD section), adapted to this codebase's REAL test pattern for
+// driving data.Client (a concrete struct with no interface seam, always
+// exercised via a fake "beans" binary on PATH -- see fakeBeansConflict/
+// fakeBeansEchoIfMatch, editor_test.go -- NOT a fakeSetTagsClient mock,
+// which cannot satisfy renameTagCmd's *data.Client parameter type; the
+// bean's own literal sketch has the same "test-sketch compiles against a
+// fake type" issue T3/T4 already documented as ERRATA and fixed the same
+// way). fakeBeansFailForIDLogCalls fails ONLY b2's call (a genuine CONFLICT)
+// and additionally logs every ATTEMPTED id, so this test can prove b1 AND
+// b3 were still attempted despite b2's failure -- not just infer it from
+// the final count.
+func TestRenameTagCmdContinuesPastOneFailure(t *testing.T) {
+	logPath := t.TempDir() + "/attempted.log"
+	fakeBeansFailForIDLogCalls(t, "b2", logPath)
+
+	idx := data.NewIndex([]data.Bean{
+		{ID: "b1", Tags: []string{"old"}, ETag: "e1"},
+		{ID: "b2", Tags: []string{"old"}, ETag: "stale"},
+		{ID: "b3", Tags: []string{"old"}, ETag: "e3"},
+	})
+	c := &data.Client{RepoDir: t.TempDir()}
+	msg := renameTagCmd(c, idx, "old", "new")().(tagRenameDoneMsg)
+	if msg.renamed != 2 || len(msg.failed) != 1 || msg.failed[0].id != "b2" {
+		t.Fatalf("want 2 renamed, 1 failed(b2), got %+v", msg)
+	}
+
+	logged, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read attempted.log: %v", err)
+	}
+	for _, id := range []string{"b1", "b2", "b3"} {
+		if !strings.Contains(string(logged), id) {
+			t.Fatalf("attempted.log = %q, want it to contain %q (proves the sweep did not abort after b2's failure)", logged, id)
+		}
+	}
+}
+
+// TestRenameTagCmdDispatchesTagAndRemoveTagFlagsPerBean guards the exact
+// per-bean CLI call shape the harness brief demands: "je Bean EIN
+// CLI-Aufruf --remove-tag old --tag new" -- fakeBeansEchoArgs
+// (editor_test.go, existing precedent) always fails and echoes every
+// argument to stderr, letting this test assert on the ACTUAL flags
+// dispatched.
+func TestRenameTagCmdDispatchesTagAndRemoveTagFlagsPerBean(t *testing.T) {
+	fakeBeansEchoArgs(t)
+	idx := data.NewIndex([]data.Bean{{ID: "solo", Tags: []string{"old"}, ETag: "e1"}})
+	c := &data.Client{RepoDir: t.TempDir()}
+
+	msg := renameTagCmd(c, idx, "old", "new")().(tagRenameDoneMsg)
+	if len(msg.failed) != 1 {
+		t.Fatalf("want 1 failure (fake always fails), got %+v", msg)
+	}
+	errText := msg.failed[0].err.Error()
+	if !strings.Contains(errText, "--tag new") || !strings.Contains(errText, "--remove-tag old") {
+		t.Fatalf("dispatched args = %q, want both --tag new and --remove-tag old", errText)
+	}
+}
+
+// TestRenameTagCmdNoBeansWithOldTagReturnsZeroRenamedNoFailures guards the
+// empty-sweep floor -- no bean currently carries oldTag, so the sweep is a
+// clean zero-value no-op, never a panic or a spurious CLI call.
+func TestRenameTagCmdNoBeansWithOldTagReturnsZeroRenamedNoFailures(t *testing.T) {
+	idx := data.NewIndex([]data.Bean{{ID: "b1", Tags: []string{"other"}, ETag: "e1"}})
+	c := &data.Client{RepoDir: t.TempDir()}
+
+	msg := renameTagCmd(c, idx, "old", "new")().(tagRenameDoneMsg)
+	if msg.renamed != 0 || len(msg.failed) != 0 {
+		t.Fatalf("want a zero-value no-op sweep, got %+v", msg)
+	}
+}
+
+// TestRenameTagCmdNilIndexNoPanicZeroRenamed mirrors collectTagCounts' own
+// "if idx != nil" defensive guard (box_picker_tag.go) -- a pre-load/
+// test-fixture model (m.idx unset) must never panic here.
+func TestRenameTagCmdNilIndexNoPanicZeroRenamed(t *testing.T) {
+	c := &data.Client{RepoDir: t.TempDir()}
+	msg := renameTagCmd(c, nil, "old", "new")().(tagRenameDoneMsg)
+	if msg.renamed != 0 || len(msg.failed) != 0 {
+		t.Fatalf("want a zero-value sweep result for a nil idx, got %+v", msg)
+	}
+}
+
+// TestRenameTagCmdSameOldNewNameSkipsSweepNoDestructiveSetTags guards the
+// self-rename data-loss guard renameTagCmd's own doc-stamp explains
+// (messages.go): a resubmitted, UNCHANGED name (D14's dedupe exclusion
+// deliberately lets this happen) must NEVER call SetTags -- doing so would
+// hit SetTags' own documented "same tag in both add and remove -> remove
+// wins" resolver and silently STRIP the tag from every bean. The fake here
+// FAILS EVERY call it receives, so any (bug-triggered) SetTags call at all
+// would flip this test red.
+func TestRenameTagCmdSameOldNewNameSkipsSweepNoDestructiveSetTags(t *testing.T) {
+	fakeBeansOnPath(t, "#!/bin/sh\necho '{\"success\":false,\"error\":\"must never be called\",\"code\":\"VALIDATION_ERROR\"}'\nexit 1\n")
+	idx := data.NewIndex([]data.Bean{
+		{ID: "b1", Tags: []string{"same"}, ETag: "e1"},
+		{ID: "b2", Tags: []string{"same"}, ETag: "e2"},
+	})
+	c := &data.Client{RepoDir: t.TempDir()}
+
+	msg := renameTagCmd(c, idx, "same", "same")().(tagRenameDoneMsg)
+	if msg.renamed != 2 || len(msg.failed) != 0 {
+		t.Fatalf("want renamed=2 failed=0 (self-rename no-op, no SetTags call ever fired), got %+v", msg)
+	}
+}
+
+// --- applyTagRenameDone ---
+
+// TestApplyTagRenameDoneAlwaysReloads is the bean's own named RED test
+// (bt-y9my TDD section, quoted verbatim).
+func TestApplyTagRenameDoneAlwaysReloads(t *testing.T) {
+	m := newModel(nil, "")
+	_, cmd := m.applyTagRenameDone(tagRenameDoneMsg{oldTag: "old", newTag: "new", renamed: 1})
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (toast + loadCmd batch)")
+	}
+}
+
+// TestApplyTagRenameDoneSuccessTextAndToastKind guards the Toast's success
+// shape: toastInfo (overlay_show_toast.go's own "Blue/Mauve —
+// Hinweis/Erfolg" doc-stamp), title mentions old/new/count, no "failed"
+// wording.
+func TestApplyTagRenameDoneSuccessTextAndToastKind(t *testing.T) {
+	m := newModel(nil, "")
+	nm, _ := m.applyTagRenameDone(tagRenameDoneMsg{oldTag: "old", newTag: "new", renamed: 3})
+	mm := nm.(model)
+	if mm.toast == nil {
+		t.Fatal("want a toast set")
+	}
+	if mm.toast.kind != toastInfo {
+		t.Fatalf("toast.kind = %v, want toastInfo (success)", mm.toast.kind)
+	}
+	if !strings.Contains(mm.toast.title, "old") || !strings.Contains(mm.toast.title, "new") || !strings.Contains(mm.toast.title, "3") {
+		t.Fatalf("toast.title = %q, want it to mention old/new/3", mm.toast.title)
+	}
+	if strings.Contains(mm.toast.title, "failed") {
+		t.Fatalf("toast.title = %q, must not mention 'failed' on a clean success", mm.toast.title)
+	}
+}
+
+// TestApplyTagRenameDoneFailureTextAndToastKindError guards the Toast's
+// continue-on-error shape: toastError, title mentions the failure count AND
+// the first error's text (D13's own "erste Fehlermeldung" wording).
+func TestApplyTagRenameDoneFailureTextAndToastKindError(t *testing.T) {
+	m := newModel(nil, "")
+	nm, _ := m.applyTagRenameDone(tagRenameDoneMsg{
+		oldTag: "old", newTag: "new", renamed: 2,
+		failed: []tagRenameFailure{{id: "b2", err: errors.New("boom")}},
+	})
+	mm := nm.(model)
+	if mm.toast == nil || mm.toast.kind != toastError {
+		t.Fatalf("want an error-kind toast, got %+v", mm.toast)
+	}
+	if !strings.Contains(mm.toast.title, "1 failed") || !strings.Contains(mm.toast.title, "boom") {
+		t.Fatalf("toast.title = %q, want it to mention '1 failed' and the first error text", mm.toast.title)
+	}
+}
+
+// TestUpdateDispatchesTagRenameDoneMsgToApplyTagRenameDone guards the
+// central Update() switch wiring (mirrors how tagDefsSavedMsg/createDoneMsg
+// are already wired there).
+func TestUpdateDispatchesTagRenameDoneMsgToApplyTagRenameDone(t *testing.T) {
+	m := newModel(nil, "")
+	tm, cmd := m.Update(tagRenameDoneMsg{oldTag: "old", newTag: "new", renamed: 1})
+	mm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update did not return a model, got %T", tm)
+	}
+	if mm.toast == nil {
+		t.Fatal("want Update(tagRenameDoneMsg) to route through applyTagRenameDone (toast set)")
+	}
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd")
+	}
+}
+
+// --- Full end-to-end Rename flow (real *data.Client) ---
+
+// TestFullRenameFlowRenamesRegistryAndSweepsBeansViaRealClient drives the
+// COMPLETE Rename flow (open -> type -> submit -> resolve both halves of
+// the batch) against a real *data.Client/temp-dir Registry AND a fake
+// always-succeeding "beans" binary standing in for the Bean-sweep's CLI
+// calls -- proves the whole D13 chain end-to-end, not just its isolated
+// pieces.
+func TestFullRenameFlowRenamesRegistryAndSweepsBeansViaRealClient(t *testing.T) {
+	dir := t.TempDir()
+	client := &data.Client{RepoDir: dir}
+	if err := client.SaveTagDefs([]string{"alpha", "bravo"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+	fakeBeansSucceed(t)
+
+	idx := data.NewIndex([]data.Bean{
+		{ID: "b1", Tags: []string{"alpha"}, ETag: "e1"},
+		{ID: "b2", Tags: []string{"alpha"}, ETag: "e2"},
+	})
+	m := newModel(client, dir)
+	m.idx = idx
+	m.view = viewTagManagement
+	m.tagMgmtRows = tagRegistryRows(idx, []string{"alpha", "bravo"})
+	m.tagMgmtCursor.setLen(len(m.tagMgmtRows))
+	// "alpha" sorts first in the Defined (alpha-sorted) group -- cursor
+	// already points at it.
+
+	nm, _ := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	mm := nm.(model)
+	if !mm.tagMgmtInputActive || mm.tagMgmtInputMode != "rename" || mm.tagMgmtInput.Value() != "alpha" {
+		t.Fatalf("want rename input open prefilled 'alpha', got active=%v mode=%q value=%q",
+			mm.tagMgmtInputActive, mm.tagMgmtInputMode, mm.tagMgmtInput.Value())
+	}
+
+	mm.tagMgmtInput.SetValue("renamed-alpha")
+	_, cmd := mm.keyTagMgmtInput(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd on valid rename submit")
+	}
+
+	bm, ok := cmd().(tea.BatchMsg)
+	if !ok || len(bm) != 2 {
+		t.Fatalf("want tea.BatchMsg of length 2, got %T", cmd())
+	}
+
+	var sawSaved, sawRenamed bool
+	for _, c := range bm {
+		switch rm := c().(type) {
+		case tagDefsSavedMsg:
+			sawSaved = true
+			if rm.err != nil {
+				t.Fatalf("tagDefsSavedMsg.err = %v, want nil", rm.err)
+			}
+			if rm.refindName != "renamed-alpha" {
+				t.Fatalf("refindName = %q, want %q", rm.refindName, "renamed-alpha")
+			}
+		case tagRenameDoneMsg:
+			sawRenamed = true
+			if rm.oldTag != "alpha" || rm.newTag != "renamed-alpha" || rm.renamed != 2 || len(rm.failed) != 0 {
+				t.Fatalf("tagRenameDoneMsg = %+v, want oldTag=alpha newTag=renamed-alpha renamed=2 failed=0", rm)
+			}
+		default:
+			t.Fatalf("unexpected batch msg type %T", rm)
+		}
+	}
+	if !sawSaved || !sawRenamed {
+		t.Fatalf("want both tagDefsSavedMsg and tagRenameDoneMsg in the batch, sawSaved=%v sawRenamed=%v", sawSaved, sawRenamed)
+	}
+
+	got, err := client.LoadTagDefs()
+	if err != nil {
+		t.Fatalf("LoadTagDefs after rename: %v", err)
+	}
+	want := []string{"bravo", "renamed-alpha"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("registry after rename = %v, want %v", got, want)
 	}
 }
