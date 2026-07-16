@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:47Z
-updated_at: 2026-07-16T20:47:11Z
+updated_at: 2026-07-16T21:51:13Z
 parent: bt-tct9
 ---
 
@@ -428,3 +428,15 @@ Cursor-Parameter mitschleppen).
   Fenster == volle Liste, Verhalten unverändert.
 - tmux-Smoke mit einem relations-reichen Bean (z. B. `bt-apmy`, 11 Children)
   PFLICHT, analog dem ursprünglichen Task-Smoke.
+
+
+## Prelude aus bt-98cb-Review (2026-07-16, non-blocking, zuerst als eigener Mini-Commit)
+
+1. design-spec §15: PF-1-Definitionsstelle (~Z.279-294) bekommt Vorwärtsverweis
+   "REVIDIERT durch PF-18, s. u." direkt bei der PF-1-Überschrift — Leser sieht
+   sonst die Revision (Z.1212+) nicht.
+2. Spec-Präzisierung ebd.: `accOpen` persistiert nach FocusOut/View-Wechsel
+   (Tree↔Backlog) — "Browse-Default accOpen==0" gilt nur für den Ausgangszustand,
+   nicht nach einem Fokus-Zyklus. Vorbestehendes, gewolltes Verhalten — einen
+   Satz beim PF-18-Nachtrag ergänzen.
+Quelle: Reviewer bt-98cb, APPROVED-Run.
