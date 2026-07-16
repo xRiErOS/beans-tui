@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-16T20:36:23Z
+updated_at: 2026-07-16T22:47:53Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
@@ -311,3 +311,12 @@ Tag-Picker-Typeahead), bt-98cb (Bug, Accordion-Kollaps), bt-lg68 (Bug,
 Datums-Dopplung Meta/History), bt-39cl (Bug, Tree-Children-Aufklapp-Fehler,
 high), bt-ct3k (Bug, fehlendes Feedback e/d auf freier Zeile), bt-idm1
 (Feature, n=Adopt auf freier Zeile).
+
+
+## E11-Nacharbeit abgeschlossen (2026-07-17)
+
+Alle E10-seitigen Items fertig, je mit APPROVED-Review: bt-ct3k (Toast bei e/d
+auf freiem Tag, 2da5ef9) · bt-idm1 (n-Adopt direkt, b9ed10b + ValidTagName-
+Fix-Runde d83c50a) · bt-9ipw (Tag-Picker Typeahead, df249d7 + Cursor-Test-
+Fix-Runde 9a42af6). Nebenfund als eigenes bean: bt-l8e7 (Lobby i/k-Alias-Leak,
+low). Voll-Suite auf integriertem main grün. PO-Abnahme steht aus (to-review).

@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T20:59:50Z
+updated_at: 2026-07-16T22:47:53Z
 parent: bt-apmy
 ---
 
@@ -213,3 +213,14 @@ ursprüngliche bt-98cb-Befund ("voriges Segment kollabiert nicht") war genau der
 PF-1-Effekt — kein Regression-Bug, sondern Design-Änderungswunsch. Umsetzung in
 bt-98cb (aus Repro-first wird Design-Change-Task). Spec-§15-Nachtrag PF-18 erfolgt
 im Zuge der Umsetzung.
+
+
+## E11-Nacharbeit abgeschlossen (2026-07-17)
+
+Alle E9-seitigen Items der Nacharbeitsrunde fertig, je mit APPROVED-Review:
+bt-lg68 (META-Dopplung, a2a3919) · bt-98cb (PF-18 META exklusiv, 66b91f4 +
+spec-§15-Nachtrag) · bt-b0w0/NB-2 (Relations-Scroll, 6429ee5) · bt-39cl
+(Archiv-Platzhalter D01=b, 09bb044 + Fix-Runde R1 3a79433 nach einzigem
+CHANGES_REQUIRED der Runde). Follow-up offen: bt-se4q (Glyph-Rescan, normal).
+Voll-Suite auf integriertem main grün (alle Pakete, internal/tui 143s).
+PO-Abnahme des Epics steht aus (Tag to-review bleibt).
