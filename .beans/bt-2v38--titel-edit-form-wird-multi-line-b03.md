@@ -1,11 +1,11 @@
 ---
 # bt-2v38
 title: Titel-Edit-Form wird multi-line (B03)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:45Z
-updated_at: 2026-07-16T10:10:58Z
+updated_at: 2026-07-16T10:25:53Z
 parent: bt-tct9
 ---
 
@@ -199,3 +199,43 @@ Design-Lücke, keine Abweichung von den TDD-Schritten.
 1. F01: Behavioral-Test, der bei OFFENEM Titel-Formular ein echtes ctrl+e-KeyMsg durch model.Update schickt und beweist, dass KEIN huh-eigener Editor-Cmd (tea.execMsg) resultiert. Zusätzlich Robustheit: nicht auf Aufruf-Reihenfolge verlassen — field.KeyBinds() nach dem Bauen explizit aufrufen ODER per WithKeyMap das Editor-Binding hart disablen (key.WithDisabled()).
 2. F02 — SUPERVISOR-ENTSCHEID: Validator-Weg. nonEmpty-Validator erweitern: Titel mit "\n" wird ABGELEHNT (klare Fehlermeldung, z.B. "title must be single-line"), keine stille Normalisierung. Regressionstests für beide Fälle (mit \n → Validierungsfehler; ohne \n → Submit unverändert).
 3. F03: Doc-Kommentar präzisieren (prüft Feldtyp + Mindesthöhe, nicht exakten Lines-Wert) — Lines(3) bleibt Planner-Schätzung, kein harter Pin nötig.
+
+
+
+## Fix-Runde 1 (2026-07-16, Commit d30077e)
+
+| Fxx | Status | Fix |
+|---|---|---|
+| F01 | behoben | Expliziter `field.KeyBinds()`-Aufruf in `buildEditTitleForm` NACH `huh.NewForm(...)` (NewForms eigenes `WithKeyMap` ersetzt die Field-Keymap mit einem frischen Default, Editor-Binding enabled — `KeyBinds()` ist der einzige huh-Codepfad, der `externalEditor=false` in ein disabled Binding übersetzt, field_text.go:249-252). Deaktivierung hängt nicht mehr an styleForms Aufrufreihenfolge. `.ExternalEditor(false)` bleibt als autoritative Flag-Quelle (spätere KeyBinds-Läufe re-derivieren daraus). Neuer Behavioral-Test `TestEditTitleFormCtrlEDoesNotFireHuhEditor`: echter model-Flow (enter auf title: → openEditTitleForm → styleForm), dann ctrl+e-KeyMsg durch `model.Update`, Cmd-Baum via neuem Helper `collectCmdMsgs` abgelaufen — kein `tea.execMsg` erlaubt. |
+| F02 | behoben (Validator-Weg, Supervisor-Entscheid) | Neuer Validator `singleLineTitle` (form_edit_title.go): `nonEmpty` PLUS `strings.Contains(s, "\n")` → `"title must be single-line"`. Keine stille Normalisierung. Bewusst auf dieses Formular gescoped (Create-Form-Titel ist weiterhin huh.Input, strukturell \n-frei). Neuer Test `TestEditTitleSubmitRejectsEmbeddedNewline`: echter ctrl+j durch huhs NewLine-Binding (Setup-Assertion: \n wirklich im Feldwert), Submit → `State != StateCompleted` + Fehlermeldung enthält "single-line"; Gegenhälfte: identischer Flow ohne \n completet mit unverändertem Wert. |
+| F03 | behoben | Doc-Kommentar von `TestBuildEditTitleFormUsesMultiLineText` präzisiert: pinnt Feldtyp (`*huh.Text`) + Mindesthöhe (mehr Zeilen als äquivalenter huh.Input), NICHT den exakten `.Lines(3)`-Wert — der bleibt Planner-Schätzung; `.Lines(4)` oder entferntes `.Lines()` (huh-Default 6) fällt absichtlich nicht durch, nur eine Regression auf single-line. |
+
+### RED-Belege
+
+F02 (Test neu, Produktionscode unverändert):
+
+```
+=== RUN   TestEditTitleSubmitRejectsEmbeddedNewline
+    form_edit_title_test.go:283: a title with an embedded newline reached StateCompleted, want the single-line validator to block the submit (F02)
+--- FAIL: TestEditTitleSubmitRejectsEmbeddedNewline (1.60s)
+```
+
+F01 — Fall A, `.ExternalEditor(false)` temporär entfernt:
+
+```
+=== RUN   TestEditTitleFormCtrlEDoesNotFireHuhEditor
+    form_edit_title_test.go:251: ctrl+e inside the Title-Edit-Form produced tea.execMsg -- huh's own editor-suspend fired despite .ExternalEditor(false) (F01: the flag only acts via KeyBinds(), which must be invoked deterministically, not as a styleForm call-order accident)
+--- FAIL: TestEditTitleFormCtrlEDoesNotFireHuhEditor (0.00s)
+```
+
+F01 — Fall B, Flag vorhanden, aber styleForm-Reihenfolge vertauscht (WithShowHelp vor WithHeight), noch ohne Fix: identischer FAIL (`tea.execMsg` produziert) — beweist die Reviewer-These der akzidentellen Deaktivierung. Beide temporären Änderungen danach zurückgesetzt (`git checkout forms_shared.go` bzw. Flag restauriert).
+
+### GREEN-Belege
+
+Alle EditTitle-Tests (`-run "EditTitle"`): 9/9 PASS, darunter beide neuen. Robustheits-Gegenprobe: MIT Fix und ERNEUT vertauschter styleForm-Reihenfolge bleibt `TestEditTitleFormCtrlEDoesNotFireHuhEditor` PASS (Reihenfolge jetzt irrelevant), danach restauriert.
+
+Commit-Gate: `command go test ./...` alle Packages ok (internal/tui 138.8s) · `command go test ./internal/tui/ -race` ok (141.3s) · `gofmt -l .` leer · `command go vet ./...` leer · Golden-Gegenbeleg ohne -update: alle 5 Subtests PASS.
+
+### Smoke (Fix-Runde 1)
+
+tmux, `bin/bt`, Titel-Formular offen: ctrl+e → kein Editor-Suspend, Formular bleibt (F01). ctrl+j + enter → Submit blockiert, huh-ErrorIndicator (`Title *`) sichtbar, Formular bleibt offen (F02). esc → keine Mutation an `.beans/`.
