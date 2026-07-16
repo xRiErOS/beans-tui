@@ -1,11 +1,11 @@
 ---
 # bt-r92i
 title: T2 — Tag-Management-Page Grundgerüst (read-only)
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:24Z
-updated_at: 2026-07-16T16:25:06Z
+updated_at: 2026-07-16T16:37:35Z
 parent: bt-362n
 blocked_by:
     - bt-49hh
@@ -411,3 +411,10 @@ lesend bestätigt), nur die erwarteten Quelldateiänderungen.
   (Green) liegen in `view_tag_management.go` — T6 kann sie direkt
   importieren/wiederverwenden für die Suggest-Mode-Marker-Spalte im
   Tag-Picker, statt einen zweiten Glyph zu erfinden (PF-12-Konsistenz).
+
+## Review-Findings Runde 1 (2026-07-16, T2-Review, Verdict CHANGES_REQUIRED)
+
+- **F01 (medium, view_tag_management_test.go:117-124):** `TestHandleKeyOnTagManagementViewDoesNotLeakToNodeAction` nutzt `newModel(nil, "")` — Model OHNE fokussiertes Bean. keyNodeActions Zweig (update.go:645-648) ist bei focusedBean()==nil ohnehin ein silent No-Op → der Test bleibt auch GRÜN, wenn der D06-Guard (update.go:894-896) komplett entfernt wird (Reviewer-Mutation belegt; mit echtem Bean öffnet `d` dann overlay=6). Produktionscode ist korrekt — nur der Test beweist es nicht. FIX: Test auf `fixtureModel(t, fixtureBeans())` mit gesetztem Cursor/cursorID auf ein echtes Bean umstellen (wie die ?/ctrl+k-Companion-Tests), sodass Guard-Entfernung den Test rot macht.
+- **F02 (low, mouse.go:158-159):** Full-Capture-Guard in handleMouse listet `m.view == viewTagManagement` NICHT, obwohl der Doc-Kommentar darüber Vollständigkeit beansprucht. Aktuell folgenlos (switch ohne default schützt indirekt), aber latente Falle für T3-T6. FIX: View in die OR-Kette aufnehmen (Defense-in-Depth) + falls sinnvoll Testabdeckung.
+
+Fix-Runde beim selben Implementer; Re-Review beim selben Reviewer. Nach Fix: Verifikation, dass die Reviewer-Mutation (D06-Guard raus) den neuen Test ROT macht — als RED-Beleg zitieren.
