@@ -1,10 +1,11 @@
 ---
 # bt-13l7
 title: Vollbild-Modus 'v' — Listen-/Detail-Vollbild, esc-Ausstieg (F01 Kernmechanik)
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:55Z
-updated_at: 2026-07-16T06:45:55Z
+updated_at: 2026-07-16T12:59:56Z
 parent: bt-tct9
 blocked_by:
     - bt-b0w0
@@ -323,3 +324,14 @@ ist).
 - Neue `keys.HistoryBack`/`keys.HistoryForward`-Bindings UND die kontextsensitive
   `fullscreenDetailLocalBindings()`-Footer-Ergänzung sind vollständig Task 8s Aufgabe,
   hier bewusst nicht vorgegriffen.
+
+
+## PRELUDE (2026-07-16, aus T6-Review F01 — ZUERST erledigen, eigener Commit)
+
+Test-Härtung, low: D02 beseitigte die letzte real-gerenderte Footer-Höhen-Divergenz —
+die Click-Boundary-Mathematik (clickPaneGeometry: bodyH/footerY via footH =
+lipgloss.Height(localKeys)+2) wird nur noch bei footH-Wert 2 gegen echten Chrome-Render
+geprüft. Härtung: synthetischer clickPaneGeometry-Test mit echtem mehrzeiligem
+(>=3-Zeilen) localKeys-String, der die Boundary-Auflösung (bodyH/footerY) asserted —
+beweist die Generalität des dynamischen Mechanismus unabhängig von View-Divergenz.
+Commit: `test(tui): clickPaneGeometry multi-line footH pin (T6-F01)`, `Refs: bt-13l7`.
