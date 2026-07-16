@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-15T21:06:05Z
-updated_at: 2026-07-16T01:29:01Z
+updated_at: 2026-07-16T01:54:24Z
 parent: bt-ntoz
 ---
 
@@ -191,3 +191,93 @@ neue "q: quit/lobby"-Doppel-Beschriftung noetig.
 - `command go test ./... -count=1`: 2x GRUEN (internal/tui 137.46s, 139.06s)
 - `command go test ./... -race -count=1`: GRUEN (internal/tui 139.06s)
 - Commit: `ce3200a` `fix(tui): PF-16 zweistufiger Quit-Flow ueber Lobby + Text-Fix (B08)`
+
+
+
+## Fix-Runde 1 (2026-07-16, Review R1)
+
+**B01 (high, blocking, Reviewer live bestaetigt): Lobby-Stufe-2 war im
+Hauptfall unerreichbar.** `keyLobby` (view_lobby.go) behandelte
+esc/q/ctrl+c UNIFORM: `client != nil` -> zurueck zu Browse. Da `m.client`
+nach dem ersten Repo-Oeffnen nie wieder nil wird, gab es danach KEINEN
+q-basierten Exit mehr (Lobby-q ging immer zu Browse; sogar ctrl+c in der
+Lobby beendete nicht -- Prozess lebte weiter). Widersprach dem
+PO-Wortlaut (bt-ntoz B08: "aus der Lobby q→enter beendet die TUI") UND
+dem eigenen bean-Text ("Bereits in der Lobby (egal ob m.client nil oder
+nicht) → Exit (Stufe 2)"). Die urspruengliche Umsetzung hatte B08s
+"NICHT anfassen: keyLobby"-Anweisung woertlich befolgt -- der bean-Text
+selbst enthielt den Widerspruch (Stufe 2 "egal ob client nil" vs.
+keyLobby unangetastet lassen); der Reviewer hat ihn aufgeloest.
+
+**Fix (PO-Wortlaut-konform, kein Herkunfts-Flag):** Die drei Keys in
+`keyLobby` ENTKOPPELT:
+1. `q` -> IMMER `requestQuit()` (Confirm oeffnet ueber der Lobby;
+   `quitBoxWillGoToLobby()` liefert dort false -> Hint "enter: quit",
+   enter -> tea.Quit -- Stufe 2 komplett). Beide client-Zustaende.
+2. `ctrl+c` -> sofortiger `tea.Quit` (konsistent mit globalem
+   ctrl+c-Kill-Switch-Kontrakt bt-7jr8; das alte "ctrl+c -> Browse" war
+   Teil desselben Lochs).
+3. `esc` UNVERAENDERT: `client != nil` -> Browse (D03: eine Ebene
+   zurueck, Lobby als Abstecher), `client == nil` -> `requestQuit()`.
+
+**Zusatz (notwendige Konsequenz, dokumentiert):** Der Lobby-Footer-Hint
+`esc/q:back` waere nach der Entkopplung eine Luege gewesen (q fuehrt
+nicht mehr zurueck). `lobbyBackHint()` -> `lobbyExitHint()`: bei
+`client != nil` jetzt `esc:back  q:quit` (getrennt), bei `client == nil`
+weiterhin kombiniert `esc/q:quit`. Gleiche Anti-Ueberraschungs-Rationale
+wie die quitBox-Hint-Zeile aus der Hauptrunde.
+
+**I01 (non-blocking, miterledigt):** Header-Kommentar
+box_confirm_quit.go ("ctrl+c bypasses this entirely") praezisiert --
+gilt nur solange der Confirm NICHT offen ist (bei confirmQuit=true
+schluckt keyConfirmQuits Full-Capture ctrl+c wie jeden anderen
+non-enter/non-esc-Key). NUR Kommentar, Verhalten unveraendert.
+
+**Q01 (Reviewer, dokumentierte Abgrenzung, bewusst NICHT abgedeckt):**
+Randfall "Repo konfiguriert, aber nicht ladbar" (config.yaml nennt einen
+Pfad, der kein beans-Repo mehr ist/nicht existiert) -> die Kaskade
+fuehrt zur Lobby, die das Repo mit err-Metrik listet. Bewusste
+Abgrenzung: die Lobby IST auch dann der richtige Zwischenstopp (sie
+zeigt den Fehler sichtbar an, statt ihn zu verschlucken), kein
+Sonderpfad noetig. Nicht getestet/nicht Teil von B08s drei PO-Faellen.
+
+### Test-Output Fix-Runde 1 (RED -> GREEN)
+
+Neue Tests in view_lobby_test.go (+ Fixture
+`lobbyFixtureModelWithClient`):
+
+**(1) q in Lobby mit Client -> Confirm + Stufe 2** --
+`TestLobbyQOpensQuitConfirmWithLiveClient`
+RED: `q in the Lobby with a live client did not open the quit-confirm (B01: bounced back to Browse instead?)`
+GREEN: `--- PASS: TestLobbyQOpensQuitConfirmWithLiveClient (0.00s)`
+(asserted: confirmQuit true, view bleibt viewLobby, enter -> tea.QuitMsg)
+
+**(2) ctrl+c in Lobby mit Client -> sofort tea.Quit** --
+`TestLobbyCtrlCQuitsImmediatelyWithLiveClient`
+RED: `ctrl+c in the Lobby must return a Cmd` (alter Code: view-Wechsel zu Browse, cmd nil)
+GREEN: `--- PASS: TestLobbyCtrlCQuitsImmediatelyWithLiveClient (0.00s)`
+
+**(3) esc-Bestand gepinnt (kein RED, Verhalten unveraendert)** --
+`TestLobbyEscReturnsToBrowseWithLiveClient`: esc mit Client -> Browse,
+esc ohne Client -> Confirm. PASS vor UND nach dem Fix.
+
+**(4) Hint-Split** -- `TestLobbyHintReflectsSplitEscQBehavior`
+RED (Subtest "live client"): `viewLobby() hint still shows the combined esc/q label ... esc/q:back`
+GREEN: beide Subtests PASS (`esc:back  q:quit` bei Client, `esc/q:quit` ohne).
+
+**Alt-Tests, die q/ctrl+c->Browse pinnten: KEINE gefunden** (grep ueber
+alle *_test.go: kein Test exercierte keyLobbys esc/q/ctrl+c-Case --
+genau deshalb konnte B01 durch die Hauptrunde rutschen).
+
+### Voll-Gate Fix-Runde 1
+
+- Build gruen, `gofmt -l .` leer, `command go vet ./...` leer
+- Goldens (tree/backlog/chrome, ohne -update): PASS, unveraendert
+- `command go test ./... -count=1` GRUEN (internal/tui 136.98s)
+- `command go test ./... -race -count=1` GRUEN
+- tmux-Smoke komplette Kaskade (echtes Binary, ps-Belege):
+  Browse q->enter -> Lobby LEBT (Hint zeigt neu `esc:back  q:quit`) ->
+  q -> Confirm "enter: quit" ueber der Lobby -> enter -> Prozess weg,
+  Pane lebt, Terminal sauber. esc-Abstecher: Lobby -> esc -> Browse,
+  Prozess lebt. ctrl+c in Lobby mit Client -> Prozess SOFORT beendet
+  (vorher: bounced zu Browse, Prozess lebte weiter).
