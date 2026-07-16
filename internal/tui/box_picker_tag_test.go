@@ -542,6 +542,43 @@ func TestTagInputEnterOnSuggestionAssignsExistingTagNoDuplicateNoRegistryWrite(t
 	}
 }
 
+// TestTagInputEnterSelectsCursoredSuggestionNotFirst pins that enter picks
+// the tag AT THE CURSOR, not blindly tagInputFiltered[0] (Review-Finding 1,
+// bt-9ipw Fix-Runde: a `[m.tagInputSuggestCursor]` -> `[0]` mutation
+// survived the original suite, because its only enter-on-suggestion test
+// narrowed to exactly ONE match -- cursor trivially 0). Here the filter
+// keeps >1 rows, the cursor is moved OFF index 0 via Down, and enter must
+// assign the cursored tag -- and NOT the index-0 tag.
+func TestTagInputEnterSelectsCursoredSuggestionNotFirst(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2") // original tags: urgent
+	m = step(t, m, runeMsg('t'))
+
+	m = step(t, m, runeMsg('n')) // empty query -> all 3 suggested: urgent, backend, zeta
+	if len(m.tagInputFiltered) < 2 {
+		t.Fatalf("setup: tagInputFiltered = %+v, want >1 rows", m.tagInputFiltered)
+	}
+	first := m.tagInputFiltered[0].tag
+
+	m = step(t, m, keyMsg(tea.KeyDown)) // cursor -> index 1, off the trivial 0
+	cursored := m.tagInputFiltered[m.tagInputSuggestCursor].tag
+	if cursored == first {
+		t.Fatalf("setup: cursored tag %q must differ from index-0 tag %q", cursored, first)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+
+	if !m.tagPending[cursored] {
+		t.Fatalf("enter must assign the CURSORED suggestion %q, tagPending = %v", cursored, m.tagPending)
+	}
+	if first != "urgent" && m.tagPending[first] {
+		// index-0 tag must NOT have been picked instead (urgent is exempt
+		// from this assertion only because it is tk-2's ORIGINAL tag and
+		// thus legitimately pending from the seed).
+		t.Fatalf("enter picked index-0 tag %q instead of the cursored %q", first, cursored)
+	}
+}
+
 // TestTagInputEnterWithNoMatchStillFallsBackToUnchangedCreatePath pins the
 // Enter-Dispatch Step's OTHER branch (bean bt-9ipw, D11): an empty
 // tagInputFiltered (no substring match at all) must fall through to

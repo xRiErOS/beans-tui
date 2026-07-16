@@ -260,9 +260,11 @@ type model struct {
 	// the RAW tea.KeyUp/tea.KeyDown KeyType in keyTagInput, NEVER via
 	// navKey's letter-alias table (keys.Up/keys.Down also bind "i"/"k") --
 	// this is a free-text capture field, so "i"/"k" must stay literal,
-	// typeable characters (e.g. a tag named "risk"), unlike keyLobby's own
-	// repoQuery filter, which accepts navKey's aliasing because a repo slug
-	// containing "i"/"k" is not a realistic concern there.
+	// typeable characters (e.g. a tag named "risk"). keyLobby's own
+	// repoQuery filter routes navKey() BEFORE its textinput update and thus
+	// SWALLOWS typed "i"/"k"/"j"/"l" -- that is an EXISTING BUG there (bean
+	// bt-l8e7), NOT a precedent to follow; the raw-KeyType intercept here is
+	// the correct pattern for any free-text field with nav keys.
 	tagItems              []tagCount
 	tagOriginal           map[string]bool
 	tagPending            map[string]bool

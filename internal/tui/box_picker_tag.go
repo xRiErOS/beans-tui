@@ -292,9 +292,11 @@ func filterTagItems(items []tagCount, query string) []tagCount {
 // esc closes the input WITHOUT touching the outer picker's pending/original
 // state (only the input sub-mode itself is discarded). up/down move
 // tagInputSuggestCursor over tagInputFiltered, clamped to its bounds --
-// intercepted via the RAW tea.KeyUp/tea.KeyDown KeyType (types.go's own
-// doc-stamp explains why NOT navKey: "i"/"k" must stay literal, typeable
-// characters here). enter branches on tagInputFiltered: non-empty ->
+// intercepted via the RAW tea.KeyUp/tea.KeyDown KeyType, NEVER via navKey's
+// letter-alias table ("i"/"k" must stay literal, typeable characters here;
+// keyLobby swallowing them in its repoQuery filter is an EXISTING BUG, bean
+// bt-l8e7, not a precedent -- full rationale in types.go's own doc-stamp).
+// enter branches on tagInputFiltered: non-empty ->
 // EXISTING-tag path, assigning the cursored suggestion to tagPending
 // (Copy-on-Write, mirrors toggleTagPending) with NO tagItems mutation and NO
 // Registry write (D11, the tag is already present); empty (no substring
