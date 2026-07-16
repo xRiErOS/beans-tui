@@ -1,10 +1,11 @@
 ---
 # bt-4mo9
 title: Relations-Picker (Blocking/Parent) breiter + hängender Einzug (B06)
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-07-16T06:45:53Z
-updated_at: 2026-07-16T06:45:53Z
+updated_at: 2026-07-16T11:39:25Z
 parent: bt-tct9
 blocked_by:
     - bt-b0w0
@@ -117,3 +118,11 @@ Fenster auf).
 - [ ] tmux-Smoke bei 80 Spalten belegt (Commit-Body)
 - [ ] Keine Tree/Backlog/Chrome-Goldens betroffen (Gegenbeleg grün)
 - [ ] Voller Testlauf grün, gofmt/vet leer
+
+
+## PRELUDE (2026-07-16, aus T4-Re-Review F05 — ZUERST erledigen, eigener Mini-Commit oder im Haupt-Commit, kein eigener Zyklus)
+
+Doku-Nit in view_detail_bean.go:236 (Kommentar über dem Hardwrap-Aufruf in hangingIndentWrap):
+"(true = preserve ANSI sequences)" ist falsch beschriftet — Hardwraps dritter Parameter ist
+preserveSpace (führende Leerzeichen erhalten); ANSI-Sequenzen werden immer erhalten.
+Korrektur: "(true = preserveSpace, wie wrapText)". Kein Verhaltens-Fix, reine Kommentar-Korrektur.
