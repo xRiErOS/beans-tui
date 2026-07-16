@@ -137,14 +137,19 @@ func metaSectionBody(b *data.Bean, bodyW int, active bool, fieldIdx int) string 
 }
 
 // detailHeaderBlock renders the NEW Detail-Pane Kopfblock (PF-3+PF-4,
-// verschmolzen laut PO-Antwort Q01, design-spec.md §15): bean-id / NAME /
-// blank / "type: X    status: Y    prio: Z" / trailing blank, above the
-// Accordion. type/status render as the colored WORD (theme.TypeStyle/
-// StatusStyle applied to b.Type/b.Status) -- prio renders as the colored
-// GLYPH (theme.Priority; PF-6 removed the word-producing counterpart, there
-// is no PriorityStyle to apply to a word). Not the App-Chrome header (PO-
-// Antwort Q01 explicit: "Kein separater App-Header-Umbau") -- Detail-Pane
-// only.
+// verschmolzen laut PO-Antwort Q01, design-spec.md §15; PF-17/B05 (bean
+// bt-mtig): bean-id / NAME / blank / "type: X    status: Y    prio: Z
+// tags: <swatches>" / trailing blank, above the Accordion. type/status
+// render as the colored WORD (theme.TypeStyle/StatusStyle applied to
+// b.Type/b.Status) -- prio renders as the colored GLYPH (theme.Priority;
+// PF-6 removed the word-producing counterpart, there is no PriorityStyle to
+// apply to a word). tags is a 4th, appended column (PO-Mockup exact: "type:
+// epic  status: in-progress  prio: !  tags: to-review") -- variable width is
+// uncritical since it is the row's last column (no trailing padded field
+// depends on it, unlike type/status which DO have a following column and
+// therefore keep their fixed E8-B02 padding unchanged). Not the App-Chrome
+// header (PO-Antwort Q01 explicit: "Kein separater App-Header-Umbau") --
+// Detail-Pane only.
 func detailHeaderBlock(b *data.Bean, w int) string {
 	priority := b.Priority
 	if priority == "" {
@@ -159,9 +164,19 @@ func detailHeaderBlock(b *data.Bean, w int) string {
 	// padding of its own.
 	typeWord := fmt.Sprintf("%-9s", b.Type)
 	statusWord := fmt.Sprintf("%-11s", b.Status)
+	// tags mirrors metaFields' own tagsInline/"(none)" fallback (render_
+	// shared.go/view_detail_bean.go) verbatim -- kept as a small duplicate
+	// here (not extracted into a shared helper) because the two call sites
+	// have unrelated surrounding logic; if either changes, update both (see
+	// metaFields above).
+	tags := tagsInline(b.Tags)
+	if tags == "" {
+		tags = theme.Dim.Render("(none)")
+	}
 	typeStatusPrio := theme.Muted.Render("type: ") + theme.TypeStyle(b.Type).Render(typeWord) +
 		theme.Muted.Render("    status: ") + theme.StatusStyle(b.Status).Render(statusWord) +
-		theme.Muted.Render("    prio: ") + theme.Priority(priority)
+		theme.Muted.Render("    prio: ") + theme.Priority(priority) +
+		theme.Muted.Render("    tags: ") + tags
 	lines := []string{
 		truncate(theme.Key.Render(b.ID), w),
 		truncate(theme.Header.Render(b.Title), w),

@@ -418,6 +418,20 @@ func TestDetailClickRowMapsSectionHeaderClick(t *testing.T) {
 	}
 }
 
+// metaTagsFieldSubstr disambiguates a click-target search for the Meta
+// field list's "tags:" row from the Kopfblock's OWN "tags:" column (B05,
+// bean bt-mtig, design-spec.md §15 PF-17): detailHeaderBlock now renders
+// "tags: " (single space after the colon) ABOVE the Accordion, so a bare
+// "tags:" search finds the Kopfblock first (row < headerBlockLines, never a
+// Section-/Feld-Treffer -- see TestDetailClickRowAccountsForFiveLineHeader
+// Offset). metaFieldLabels' 12-wide padding (metaSectionBody's
+// `fmt.Sprintf("%-12s", ...)`) is unique to the Meta row -- computed here
+// via the SAME formula, not a hand-typed literal that could silently drift
+// from it.
+func metaTagsFieldSubstr() string {
+	return fmt.Sprintf("%-12s", "tags:")
+}
+
 // TestDetailClickRowMapsMetaFieldClick guards the Meta field-row mapping
 // (T1/bt-e6q9's 7-line field list): a click on the "tags:" row resolves to
 // secIdx=metaSectionIdx, fieldIdx=4 (metaFields' fixed order: title/status/
@@ -426,7 +440,7 @@ func TestDetailClickRowMapsMetaFieldClick(t *testing.T) {
 	m := detailFocusModel(t)
 	b := m.focusedBean()
 
-	msg := detailClickAt(t, m, "tags:")
+	msg := detailClickAt(t, m, metaTagsFieldSubstr())
 	secIdx, fieldIdx, ok := detailClickRow(m, b, msg)
 	if !ok {
 		t.Fatal("click on the tags: row must resolve")
@@ -474,7 +488,7 @@ func TestMouseDetailClickSectionHeaderActivatesAndExpands(t *testing.T) {
 func TestMouseDetailClickSingleClickSelectsField(t *testing.T) {
 	m := detailFocusModel(t)
 
-	msg := detailClickAt(t, m, "tags:")
+	msg := detailClickAt(t, m, metaTagsFieldSubstr())
 	tm, _ := m.handleMouse(msg)
 	nm, ok := tm.(model)
 	if !ok {
@@ -500,7 +514,7 @@ func TestMouseDetailClickDoubleClickOnFieldOpensOverlay(t *testing.T) {
 	fixed := time.Unix(3000, 0)
 	m.clock = func() time.Time { return fixed }
 
-	msg := detailClickAt(t, m, "tags:")
+	msg := detailClickAt(t, m, metaTagsFieldSubstr())
 	tm, _ := m.handleMouse(msg) // 1st click: selects, no overlay
 	m2, ok := tm.(model)
 	if !ok {
@@ -510,8 +524,8 @@ func TestMouseDetailClickDoubleClickOnFieldOpensOverlay(t *testing.T) {
 		t.Fatal("setup: first click must not open an overlay")
 	}
 
-	msg2 := detailClickAt(t, m2, "tags:") // re-render, same field is now selected
-	tm2, _ := m2.handleMouse(msg2)        // 2nd click, same fixed time -> double
+	msg2 := detailClickAt(t, m2, metaTagsFieldSubstr()) // re-render, same field is now selected
+	tm2, _ := m2.handleMouse(msg2)                      // 2nd click, same fixed time -> double
 	m3, ok := tm2.(model)
 	if !ok {
 		t.Fatalf("handleMouse did not return a model, got %T", tm2)
@@ -656,7 +670,7 @@ func TestMouseDetailClickSecondClickOnSelectedFieldOpensOverlayOutsideWindow(t *
 	current := time.Unix(6000, 0)
 	m.clock = func() time.Time { return current }
 
-	msg := detailClickAt(t, m, "tags:")
+	msg := detailClickAt(t, m, metaTagsFieldSubstr())
 	tm, _ := m.handleMouse(msg) // 1st click: selects tags (fieldCursor=4)
 	m2, ok := tm.(model)
 	if !ok {
@@ -668,7 +682,7 @@ func TestMouseDetailClickSecondClickOnSelectedFieldOpensOverlayOutsideWindow(t *
 
 	current = current.Add(800 * time.Millisecond) // OUTSIDE doubleClickInterval (500ms)
 
-	msg2 := detailClickAt(t, m2, "tags:")
+	msg2 := detailClickAt(t, m2, metaTagsFieldSubstr())
 	tm2, _ := m2.handleMouse(msg2)
 	m3, ok := tm2.(model)
 	if !ok {

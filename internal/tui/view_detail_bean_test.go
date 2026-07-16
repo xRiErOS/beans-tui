@@ -330,6 +330,54 @@ func TestDetailHeaderBlockTruncatesToWidth(t *testing.T) {
 	}
 }
 
+// TestDetailHeaderBlockShowsTagsColumn guards B05 (bean bt-mtig, design-
+// spec.md §15 PF-17, bt-tct9 "B05 REDEFINIERT"): the Kopfblock's type/status/
+// prio row (line 4) grows a 4th column "    tags: <tagsInline(b.Tags)>" --
+// PO-Mockup exact: "type: epic  status: in-progress  prio: !  tags: to-
+// review". Render-geerdet against tagsInline itself (the SAME helper
+// metaFields already reuses, PF-15) -- no second, independently computed
+// formula for the tag swatches.
+func TestDetailHeaderBlockShowsTagsColumn(t *testing.T) {
+	b := &data.Bean{ID: "hdr-tags", Title: "Tagged Header", Status: "in-progress", Type: "epic", Priority: "high", Tags: []string{"to-review"}}
+	const w = 100
+	out := detailHeaderBlock(b, w)
+	lines := strings.Split(out, "\n")
+	if len(lines) < 4 {
+		t.Fatalf("header block has %d lines, want at least 4", len(lines))
+	}
+	line := lines[3]
+	stripped := ansi.Strip(line)
+	if !strings.Contains(stripped, "tags:") {
+		t.Errorf("header block line 4 missing \"tags:\" label: %q", stripped)
+	}
+	if !strings.Contains(stripped, "to-review") {
+		t.Errorf("header block line 4 missing tag value \"to-review\": %q", stripped)
+	}
+	wantTags := tagsInline(b.Tags)
+	if !strings.Contains(line, wantTags) {
+		t.Errorf("header block line 4 does not contain tagsInline(b.Tags) output %q verbatim: %q", wantTags, line)
+	}
+	// B02 (E8-B02) column widths for type/status/prio must stay untouched --
+	// tags is a NEW, appended 4th column, not a rework of the first three.
+	wantTypeCol := fmt.Sprintf("type: %-9s    status:", "epic")
+	if !strings.Contains(stripped, wantTypeCol) {
+		t.Errorf("header block type column not padded to 9 (B05 must not touch E8-B02 padding): got %q, want to contain %q", stripped, wantTypeCol)
+	}
+}
+
+// TestDetailHeaderBlockShowsNoneForTaglessBean guards the taglos fallback:
+// mirrors metaFields' own "(none)" (theme.Dim) convention, not a bare empty
+// string or a missing "tags:" label.
+func TestDetailHeaderBlockShowsNoneForTaglessBean(t *testing.T) {
+	b := &data.Bean{ID: "hdr-notags", Title: "No Tags Header", Status: "todo", Type: "task", Priority: "normal"}
+	out := detailHeaderBlock(b, 100)
+	lines := strings.Split(out, "\n")
+	stripped := ansi.Strip(lines[3])
+	if !strings.Contains(stripped, "tags: (none)") {
+		t.Errorf("header block line 4 missing taglos placeholder \"tags: (none)\": %q", stripped)
+	}
+}
+
 // TestBeanSectionsBodyEmptyShowsPlaceholder guards the empty-body path: no
 // Body field set -> a placeholder, not an empty string (digit-jump 2 must
 // always show something).
