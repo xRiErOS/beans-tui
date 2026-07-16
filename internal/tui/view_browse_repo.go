@@ -494,7 +494,10 @@ func windowAround(rows []string, height, cursor int) []string {
 // renderBacklogDetailPane (view_browse_backlog.go) used to hand-duplicate
 // the ~20-line bodyW/accW/beanSections/renderAccordion/renderPane body;
 // extracted once both call sites existed so a future accordion-pane change
-// (e.g. scrolling) can't drift between Tree and Backlog.
+// (e.g. scrolling) can't drift between Tree and Backlog -- confirmed by NB-2
+// (bean bt-b0w0): the RELATIONS-scroll fix landed once in renderAccordionPane
+// and Tree/Backlog/Fullscreen (view_fullscreen.go's own renderFullscreenBody)
+// all picked it up for free, no per-caller duplication.
 func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string {
 	pos := m.cursorPos(nodes)
 	var b *data.Bean
@@ -515,14 +518,17 @@ func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string
 // renderAccordion's own PaddingLeft(2)-eats-into-Width(w) contract
 // (accordion.go doc comment) -- bodyW = w-4 is NOT an arbitrary number.
 //
-// Scrolling when a section's content exceeds the pane height: no separate
-// scroll-offset state is added here (out of plan scope) -- rows are simply
-// split and handed to renderPane, whose existing Golden-Rule-#1 line cap
-// (render_shared.go: `for i := 0; ... && len(lines) < h`) already prevents
-// any overflow past the pane's border, the same mechanism the Tree pane
-// relies on. A true scroll-with-indicator (mirroring Chrome()'s scrollView)
-// is not needed yet: exclusive-open sections keep the open section's content
-// near the top, and digit-jump/1-4 always re-opens from row 0.
+// Scrolling when a section's content exceeds the pane height: RELATIONS is
+// the one section whose entry count is unbounded (Parent/Children/Blocking/
+// Blocked-By, potentially dozens of beans) -- NB-2 (Reopen bt-b0w0, PO-Review
+// Runde 3) gave it exactly the true scroll-with-indicator this comment used
+// to say "not needed yet" for (windowRelationsSection, view_browse_repo.go,
+// composing windowStart + scrollView). Meta/Body/History keep the ORIGINAL
+// behavior described below unchanged (their content doesn't grow unbounded
+// the way a bean's relations can): rows are simply split and handed to
+// renderPane, whose existing Golden-Rule-#1 line cap (render_shared.go:
+// `for i := 0; ... && len(lines) < h`) prevents any overflow past the pane's
+// border, the same mechanism the Tree pane relies on.
 func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) string {
 	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused)
 }
@@ -556,12 +562,88 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 		// Antwort Q01: Detail-Pane only).
 		rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
 		secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
+		// NB-2 (Reopen bt-b0w0, PO-Review Runde 3, US-05, design-spec.md §15
+		// PF-17 Akzeptanz-Zusatz): when RELATIONS (the ONLY section this
+		// applies to, deliberately -- see windowRelationsSection's own doc
+		// comment) is the open section, its body is windowed to the pane's
+		// own line budget BEFORE renderAccordion ever joins it in -- the OLD
+		// path handed the full body to renderPane below, whose line cap just
+		// cut the tail off with no scroll/indicator (this function's own doc
+		// comment already anticipated exactly this drift). Every OTHER
+		// section (Meta/Body/History) is untouched, renderPane's existing cap
+		// still applies to them unchanged.
+		if open == relationsSectionIdx+1 {
+			secs[relationsSectionIdx].body = windowRelationsSection(secs[relationsSectionIdx].body, h)
+		}
 		acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
 		rows = append(rows, strings.Split(acc, "\n")...)
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}
 	return renderPane(pane{rows: rows}, w, h, focused)
+}
+
+// windowRelationsSection windows the RELATIONS section's body to fit the
+// pane's fixed chrome budget (NB-2 Reopen, bean bt-b0w0, design-spec.md §15
+// PF-17 Akzeptanz-Zusatz) -- composes two EXISTING primitives, no new
+// windowing algorithm (Planner-Konkretisierung, Implementer-Wahl): windowStart
+// (cursor-centered, the SAME convention treeRows/windowAround already use for
+// the Tree) picks the offset, scrollView (Chrome/Lobby/Help's own ↑/↓
+// indicator, view.go) slices the window AND formats the "L n–m/total" hint in
+// one call.
+//
+// avail is the body's own line budget: h (the pane's full content height)
+// minus the FIXED chrome that always surrounds it -- detailHeaderBlock
+// (5 lines, constant, view_detail_bean.go) plus exactly one header line per
+// section (beanSectionCount == 4, PF-2's shared constant): sections are
+// exclusive-open (PF-18), so only ONE of them ever contributes additional
+// body lines, which is the `body` string this function receives. A no-op
+// (body returned verbatim, byte-identical) when it already fits avail -- the
+// "kein Golden-Bruch bei wenigen Relations" Akzeptanzkriterium -- or when
+// avail leaves no room at all (h too small even for the fixed chrome, a
+// pre-existing edge case out of NB-2 scope; renderPane's own cap still guards
+// the pane from overflowing in that case).
+//
+// Deliberately scoped to RELATIONS ONLY (renderAccordionPane's own call site
+// gates on open==relationsSectionIdx+1) -- Meta/Body/History keep their
+// pre-NB-2 behavior (renderPane's plain line cap) unchanged, matching the
+// bean's Root-Cause section ("Betroffene Funktionen: renderAccordionPane...
+// renderPane bleibt UNVERÄNDERT für andere Fälle").
+func windowRelationsSection(body string, h int) string {
+	avail := h - 5 - beanSectionCount
+	if avail <= 0 {
+		return body
+	}
+	lines := strings.Split(body, "\n")
+	if len(lines) <= avail {
+		return body
+	}
+	winH := avail - 1 // reserve exactly 1 line for the more-entries indicator
+	if winH < 1 {
+		winH = 1
+	}
+	cursor := activeRelationLine(lines)
+	start := windowStart(len(lines), winH, cursor)
+	win, ind := scrollView(body, winH, start)
+	return win + "\n" + theme.Muted.Render(ind)
+}
+
+// activeRelationLine finds the line carrying relationRowMarker's active glyph
+// ("▶", view_detail_bean.go) -- the only row-start line that can ever contain
+// it (a hanging-indent-wrapped title's continuation lines carry plain padding
+// spaces, never the marker, hangingIndentWrap's own doc comment). Returns 0
+// (top) when no row is active -- e.g. RELATIONS is open (accOpen==3,
+// PF-18/the Prelude doc note: accOpen persists across a FocusOut) but focus
+// sits elsewhere, so there is no real cursor to center the window on; 0 is
+// the deterministic, jitter-free default (same "no hidden state" property
+// windowStart's own doc comment requires).
+func activeRelationLine(lines []string) int {
+	for i, l := range lines {
+		if strings.Contains(l, "▶") {
+			return i
+		}
+	}
+	return 0
 }
 
 // searchShield is the search head row's glyph (U+2315 TELEPHONE RECORDER,
