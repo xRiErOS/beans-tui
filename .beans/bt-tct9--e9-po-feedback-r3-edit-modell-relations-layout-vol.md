@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T06:27:44Z
+updated_at: 2026-07-16T06:33:34Z
 parent: bt-apmy
 ---
 
@@ -101,3 +101,10 @@ Interpretation (gilt analog für den Parent-Picker 'a' — vermutlich gleiche Bo
 prüfen): Overlay-Breite deutlich erhöhen (Richtung ~80-90% der Terminalbreite bzw.
 inhaltsbasiert), Einträge einzeilig wo möglich; bei Umbruch hängender Einzug analog
 B04.3-Mockup (Meta-Spalten nie unterwandern). Höhe unverändert.
+
+
+## B02 GESCHLOSSEN (2026-07-16, PO-Retest)
+
+PO verbatim: "Retest gemacht: New Tag funktioniert jetzt mit frischem Binary."
+Ursache war stale Binary (Investigator-Hypothese a bestätigt). Kein Code-Task.
+Gegenmittel etabliert: zsh-Aliase bt-tui / bt-tui-build (Build zeigt Commit an).
