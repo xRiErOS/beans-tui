@@ -1,11 +1,11 @@
 ---
 # bt-z4b1
 title: 'Edit-Modell: ''e'' wird Ganz-Bean-$EDITOR, ''enter'' bleibt Feld-Kaskade (D01)'
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-16T06:45:42Z
-updated_at: 2026-07-16T08:51:00Z
+updated_at: 2026-07-16T09:02:39Z
 parent: bt-tct9
 ---
 
@@ -294,3 +294,18 @@ Kein manueller tmux-Smoke durchgeführt (reine Tastatur-/Datenlogik-Änderung, k
 | F03 | low | editor_test.go parseRawBean-Tests | Kein Regressionstest für Body mit eingebetteten `---`-Zeilen (Logik korrekt, Sandbox-verifiziert, aber ungesichert gegen Refactor). |
 
 **Fix-Rezept (Reviewer):** (1) mutateCmd-Closure: JEDEN UpdateWhole-Fehler über writeConflictTempFile(content) recoverable machen (ErrConflict-Sonderfall kann entfallen — conflictWithRecovery reicht ErrConflict via Unwrap() durch); applyMutationResult generischer else-Zweig muss conflictWithRecovery via errors.As prüfen + Pfad im Statustext anhängen. (2) Test umbenennen zu ...OnParseError + neuen TestApplyEditorFinishedRecoversTempfileOnCLIValidationError (Fake-CLI code VALIDATION_ERROR, kein CONFLICT; Tempfile-Existenz UND -Inhalt gegen vollen Rohtext prüfen). (3) TestParseRawBeanRoundTrip-Variante mit ---im Body. Danach volles Gate + Checklisten-Item erst dann wieder abhaken.
+
+
+## Fix-Runde 1 (2026-07-16, Findings F01-F03 behoben, Commit 34c62c8)
+
+| Fxx | Fix | Status |
+|-----|-----|--------|
+| F01 | mutateCmd-Closure in applyEditorFinished wrappt jetzt JEDEN UpdateWhole-Fehler (nicht nur ErrConflict) via writeConflictTempFile in conflictWithRecovery; der ErrConflict-Sonderfall ist entfallen (Unwrap reicht ErrConflict durch, Konflikt-Branch feuert unverändert). applyMutationResult's else-Zweig prüft conflictWithRecovery via errors.As und hängt den Tempfile-Pfad an Statuszeile + Toast-ctx an (Title/ctx-Split spiegelt den Konflikt-Branch). Andere Mutation-Sites wrappen nie → errors.As bleibt für sie false, Verhalten unberührt. | 🟢 Done |
+| F02 | TestApplyEditorFinishedRecoversTempfileOnValidationError → ...OnParseError umbenannt (Doc-Kommentar erklärt die False-Confidence-Historie); der neue TestApplyEditorFinishedRecoversTempfileOnCLIValidationError trägt den CLI-Validation-Namen. | 🟢 Done |
+| F03 | TestParseRawBeanBodyWithEmbeddedDelimiterLines pinnt Split-am-ZWEITEN-Delimiter gegen einen Body mit eingebetteten ---Zeilen (Markdown horizontal rules) — Frontmatter endet am ersten Close-Delimiter, Body behält die eingebetteten Zeilen verbatim. | 🟢 Done |
+
+**TDD-Beleg F01:** RED wörtlich: `editor_test.go:880: status line = "beans: VALIDATION_ERROR: bean tk-1: invalid status: banana", want it to carry the recovery tempfile's path ("your version: ") -- F01: a CLI rejection must not lose the PO's edits` → nach Fix GREEN: `--- PASS: TestApplyEditorFinishedRecoversTempfileOnCLIValidationError (0.28s)`. Der Test prüft via Fake-CLI (code VALIDATION_ERROR, KEIN CONFLICT) Tempfile-Existenz UND -Inhalt gegen den vollen Rohtext, plus errors.Is(err, ErrConflict)==false als Setup-Guard.
+
+**Commit-Gate Fix-Runde:** voller Lauf `command go test ./...` grün (`ok beans-tui/internal/tui 136.625s`), `command go test ./internal/tui/ -race -count=1` grün (`ok 139.977s`), `gofmt -l .` leer, `command go vet ./...` leer, Golden-Gegenbeleg ohne -update grün (TestChromeGolden/TestTreeGolden/TestBacklogGolden alle PASS).
+
+**Akzeptanz-Item-Korrektur:** "Validation-Fehler/Parse-Fehler verlieren die PO-Edits nicht (Recovery-Tempfile)" war in der ersten Runde fälschlich abgehakt (galt nur für Parse-Fehler) — jetzt NACH grünem neuen CLI-VALIDATION_ERROR-Test wieder als verifiziert geführt: BEIDE Fehlerklassen (Parse-Fehler vor CLI-Call, CLI-Rejection nach Parse) recovern den vollen Rohtext.
