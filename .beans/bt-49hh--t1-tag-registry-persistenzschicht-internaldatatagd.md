@@ -1,11 +1,11 @@
 ---
 # bt-49hh
 title: T1 — Tag-Registry Persistenzschicht (internal/data/tagdefs.go)
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-16T15:44:20Z
-updated_at: 2026-07-16T15:44:20Z
+updated_at: 2026-07-16T15:48:13Z
 parent: bt-362n
 ---
 
