@@ -13,6 +13,7 @@ package tui
 // covers keyFullscreen itself + renderFullscreenBody.
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -499,6 +500,13 @@ func TestHistoryBackForwardRoundTripReturnsToOriginalBean(t *testing.T) {
 	if len(m.navBack) != 3 {
 		t.Fatalf("setup: navBack = %v, want 3 entries after 3 jumps", m.navBack)
 	}
+	// T8-Review PRELUDE finding T8-F02: pin the EXACT navBack contents (push
+	// order), not just its length -- a bug that pushed the right length but
+	// wrong order/values would otherwise slip through undetected.
+	wantNavBackAfterSetup := []string{"n1", "n2", "n3"}
+	if !reflect.DeepEqual(m.navBack, wantNavBackAfterSetup) {
+		t.Fatalf("setup: navBack = %v, want %v (exact push order)", m.navBack, wantNavBackAfterSetup)
+	}
 
 	for i := 0; i < 3; i++ {
 		m = step(t, m, keyMsg(tea.KeyCtrlLeft))
@@ -512,6 +520,12 @@ func TestHistoryBackForwardRoundTripReturnsToOriginalBean(t *testing.T) {
 	if len(m.navForward) != 3 {
 		t.Fatalf("after 3x Back: navForward = %v, want 3 entries", m.navForward)
 	}
+	// T8-F02: exact navForward contents, not just length -- Back pushes the
+	// bean being LEFT in LIFO order (n4 first, then n3, then n2).
+	wantNavForwardAfterBack := []string{"n4", "n3", "n2"}
+	if !reflect.DeepEqual(m.navForward, wantNavForwardAfterBack) {
+		t.Fatalf("after 3x Back: navForward = %v, want %v (exact LIFO push order)", m.navForward, wantNavForwardAfterBack)
+	}
 
 	for i := 0; i < 3; i++ {
 		m = step(t, m, keyMsg(tea.KeyCtrlRight))
@@ -524,6 +538,17 @@ func TestHistoryBackForwardRoundTripReturnsToOriginalBean(t *testing.T) {
 	}
 	if len(m.navBack) != 3 {
 		t.Fatalf("after 3x Forward: navBack = %v, want 3 entries (identical to pre-Back state)", m.navBack)
+	}
+	// T8-F02: the round trip's whole point is landing EXACTLY back where it
+	// started -- assert the FINAL navBack/navForward contents via
+	// reflect.DeepEqual against the exact pre-Back snapshots above, not just
+	// matching lengths (a length-only check would miss e.g. a silent
+	// element-order swap that still nets out to the same count).
+	if !reflect.DeepEqual(m.navBack, wantNavBackAfterSetup) {
+		t.Fatalf("after 3x Forward: navBack = %v, want %v (identical contents to pre-Back state)", m.navBack, wantNavBackAfterSetup)
+	}
+	if !reflect.DeepEqual(m.navForward, []string{}) {
+		t.Fatalf("after 3x Forward: navForward = %v, want [] (identical contents to pre-jump state)", m.navForward)
 	}
 }
 
@@ -596,6 +621,62 @@ func TestHistoryForwardSkipsVanishedEntry(t *testing.T) {
 	}
 	if len(m.navBack) != 1 || m.navBack[0] != "bean-a" {
 		t.Fatalf("navBack = %v, want [bean-a]", m.navBack)
+	}
+}
+
+// TestHistoryBackNoOpWhenIndexNil pins T8-Review PRELUDE finding T8-F01
+// (view_fullscreen.go:94): `if m.idx == nil { break }` inside HistoryBack's
+// pop loop had no dedicated coverage -- every other History test builds its
+// model via fixtureModel, which always leaves m.idx non-nil after the
+// beansLoadedMsg round-trip. A nil m.idx IS reachable in practice (a
+// History key pressed before the first beansLoadedMsg lands, or mid a
+// repo-switch that clears the Index) -- the same defensive trigger class as
+// the b==nil-Guard fix (update.go), just one layer earlier (no Index at all
+// to resolve a bean against). Pins the IMPLEMENTED behavior as-is, not a
+// fix: no panic, and no NAVIGATION happens (fullscreenBeanID/navForward
+// stay untouched) -- but the popped top entry IS silently dropped from
+// navBack (consumed by the loop body's reslice before the nil check fires),
+// a known, accepted trade-off of this defensive guard's current shape, not
+// a bug to change here.
+func TestHistoryBackNoOpWhenIndexNil(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-b"
+	m.navBack = []string{"bean-a"}
+	m.idx = nil
+
+	m = step(t, m, keyMsg(tea.KeyCtrlLeft))
+
+	if m.fullscreenBeanID != "bean-b" {
+		t.Fatalf("fullscreenBeanID = %q, want unchanged bean-b (nil m.idx: no navigation, no panic)", m.fullscreenBeanID)
+	}
+	if len(m.navForward) != 0 {
+		t.Fatalf("navForward = %v, want unchanged empty (no navigation happened)", m.navForward)
+	}
+	if len(m.navBack) != 0 {
+		t.Fatalf("navBack = %v, want drained empty (documented: the nil-idx guard consumes the popped entry)", m.navBack)
+	}
+}
+
+// TestHistoryForwardNoOpWhenIndexNil mirrors TestHistoryBackNoOpWhenIndexNil
+// for HistoryForward's own nil-idx guard (view_fullscreen.go:112).
+func TestHistoryForwardNoOpWhenIndexNil(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansWithBlocking())
+	m.fullscreen = fullscreenDetail
+	m.fullscreenBeanID = "bean-a"
+	m.navForward = []string{"bean-b"}
+	m.idx = nil
+
+	m = step(t, m, keyMsg(tea.KeyCtrlRight))
+
+	if m.fullscreenBeanID != "bean-a" {
+		t.Fatalf("fullscreenBeanID = %q, want unchanged bean-a (nil m.idx: no navigation, no panic)", m.fullscreenBeanID)
+	}
+	if len(m.navBack) != 0 {
+		t.Fatalf("navBack = %v, want unchanged empty (no navigation happened)", m.navBack)
+	}
+	if len(m.navForward) != 0 {
+		t.Fatalf("navForward = %v, want drained empty (documented: the nil-idx guard consumes the popped entry)", m.navForward)
 	}
 }
 
