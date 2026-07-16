@@ -524,6 +524,111 @@ func TestKeyTagManagementNewTagOpensInput(t *testing.T) {
 	}
 }
 
+// TestKeyTagManagementNewTagOnFreeRowAdoptsDirectlyNoInput guards bt-idm1's
+// Adopt path (E11 Item 6, blocked_by bt-ct3k): cursor on a FREE row + 'n'
+// registers that row's OWN name directly via saveTagDefsCmd -- NO input
+// sub-mode opens (Planner-Entscheidung final: "ein Tastendruck ohne
+// Zwischenstopp", Registrieren ist nicht-destruktiv, kein Confirm-Bedarf).
+// The dispatched Cmd carries the row's name both as the new Definition
+// (data.AddTagDefName) and as refindName, plus a non-empty successToast
+// (bt-ct3k Toast-Konsistenz: kein neuer stiller Erfolgspfad).
+func TestKeyTagManagementNewTagOnFreeRowAdoptsDirectlyNoInput(t *testing.T) {
+	dir := t.TempDir()
+	m := newModel(&data.Client{RepoDir: dir}, dir)
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "old-defined", defined: true}, {name: "free-tag", defined: false, count: 2}}
+	m.tagMgmtCursor.setLen(2)
+	m.tagMgmtCursor.cursor = 1 // "free-tag"
+
+	nm, cmd := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	mm := nm.(model)
+	if mm.tagMgmtInputActive {
+		t.Fatal("Adopt must NOT open the input sub-mode -- the name is already fixed")
+	}
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (saveTagDefsCmd)")
+	}
+	msg := cmd()
+	tdm, ok := msg.(tagDefsSavedMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want tagDefsSavedMsg", msg)
+	}
+	if tdm.err != nil {
+		t.Fatalf("SaveTagDefs against a real t.TempDir() client failed: %v", tdm.err)
+	}
+	if tdm.refindName != "free-tag" {
+		t.Fatalf("refindName = %q, want %q", tdm.refindName, "free-tag")
+	}
+	if tdm.successToast == "" {
+		t.Fatal("want a non-empty successToast (Adopt's own success feedback, bt-ct3k Toast-Konsistenz)")
+	}
+
+	got, err := (&data.Client{RepoDir: dir}).LoadTagDefs()
+	if err != nil {
+		t.Fatalf("LoadTagDefs after save: %v", err)
+	}
+	want := []string{"free-tag", "old-defined"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("on-disk registry = %v, want %v (free-tag adopted alongside the existing Definition)", got, want)
+	}
+}
+
+// TestKeyTagManagementNewTagOnDefinedRowStillOpensBlankCreate guards the
+// Randfall the bean body's own Akzeptanzkriterium names explicitly: cursor on
+// an ALREADY-defined row + 'n' must fall back to the unchanged Blank-Create
+// (Registrieren ergibt hier keinen Sinn, Name existiert schon) -- NOT Adopt.
+func TestKeyTagManagementNewTagOnDefinedRowStillOpensBlankCreate(t *testing.T) {
+	m := newModel(nil, "")
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "already-defined", defined: true}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	mm := nm.(model)
+	if !mm.tagMgmtInputActive || mm.tagMgmtInputMode != "create" {
+		t.Fatalf("cursor on a DEFINED row must fall back to the unchanged Blank-Create, got active=%v mode=%q", mm.tagMgmtInputActive, mm.tagMgmtInputMode)
+	}
+	if mm.tagMgmtInputTarget != "" {
+		t.Fatalf("tagMgmtInputTarget = %q, want empty (Blank-Create never targets an old name)", mm.tagMgmtInputTarget)
+	}
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (textinput.Blink)")
+	}
+}
+
+// TestKeyTagManagementNewTagOnFreeRowInvalidNameWarnsNoSave guards Adopt's
+// defensive ValidTagName gate (Review-Finding, Fix-Runde zu bt-idm1): a free
+// row's name comes from a bean's ACTUAL tags on disk -- a hand-edited bean
+// file can carry a name the tag grammar rejects (uppercase, underscore, ...).
+// Adopting it must mirror the Create path's own pre-dispatch validation
+// (keyTagMgmtInput's data.ValidTagName check): warn Toast, NO Registry write,
+// and NO fallback to the Blank-Create input either (the PO pressed n ON this
+// row -- silently opening an empty input would misread the intent).
+func TestKeyTagManagementNewTagOnFreeRowInvalidNameWarnsNoSave(t *testing.T) {
+	dir := t.TempDir()
+	m := newModel(&data.Client{RepoDir: dir}, dir)
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "Bad_Tag", defined: false, count: 1}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.keyTagManagement(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	mm := nm.(model)
+	if mm.tagMgmtInputActive {
+		t.Fatal("an invalid free name must NOT fall back to the Blank-Create input")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast for an invalid free name, got %+v", mm.toast)
+	}
+	if cmd != nil {
+		if _, isSave := cmd().(tagDefsSavedMsg); isSave {
+			t.Fatal("an invalid free name must never dispatch saveTagDefsCmd (no Registry write)")
+		}
+	}
+	if got, _ := (&data.Client{RepoDir: dir}).LoadTagDefs(); len(got) != 0 {
+		t.Fatalf("on-disk registry must stay empty, got %v", got)
+	}
+}
+
 // TestKeyTagMgmtInputEscDiscardsOnlySubmode guards D14/D06: esc while the
 // input is active closes ONLY the input sub-mode -- the Page itself
 // (m.view) and its row list stay completely untouched, mirrors keyTagInput's
@@ -746,6 +851,37 @@ func TestApplyTagDefsSavedErrorKeepsInputOpenShowsToast(t *testing.T) {
 	}
 }
 
+// TestApplyTagDefsSavedSuccessToastShowsInfoToastWhenSuccessToastSet guards
+// bt-idm1's own success-Toast tail (E11 Item 6): when the dispatching Cmd
+// carried a non-empty successToast (Adopt's own dispatch, unlike Create/
+// Rename/Delete which all pass "" unchanged), the success path shows a
+// toastInfo Toast with that exact text -- Create/Rename/Delete stay silent on
+// success (TestApplyTagDefsSavedSuccessRefreshesRowsAndMovesCursor above
+// already guards the cmd==nil case for an empty successToast).
+func TestApplyTagDefsSavedSuccessToastShowsInfoToastWhenSuccessToastSet(t *testing.T) {
+	dir := t.TempDir()
+	client := &data.Client{RepoDir: dir}
+	if err := client.SaveTagDefs([]string{"free-tag"}); err != nil {
+		t.Fatalf("setup SaveTagDefs: %v", err)
+	}
+	m := newModel(client, dir)
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "free-tag", defined: false, count: 1}}
+	m.tagMgmtCursor.setLen(1)
+
+	nm, cmd := m.applyTagDefsSaved(tagDefsSavedMsg{err: nil, refindName: "free-tag", successToast: "tag 'free-tag' registered"})
+	mm := nm.(model)
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the success Toast's auto-dismiss timeout) when successToast is set")
+	}
+	if mm.toast == nil || mm.toast.kind != toastInfo {
+		t.Fatalf("want a toastInfo Toast, got %+v", mm.toast)
+	}
+	if mm.toast.title != "tag 'free-tag' registered" {
+		t.Fatalf("toast.title = %q, want %q", mm.toast.title, "tag 'free-tag' registered")
+	}
+}
+
 // TestFullCreateFlowRefreshesPageAndTouchesNoBean is the end-to-end
 // behavioral test the harness brief demands ("Page-Refresh nach Create") --
 // drives the ENTIRE wiring through m.Update() (handleKey -> keyTagManagement
@@ -798,6 +934,57 @@ func TestFullCreateFlowRefreshesPageAndTouchesNoBean(t *testing.T) {
 				t.Fatalf("D11: Create must not touch any Bean, but %s now carries 'released'", b.ID)
 			}
 		}
+	}
+}
+
+// TestFullAdoptFlowRegistersFreeRowShowsToastCursorFollows is the end-to-end
+// behavioral test for bt-idm1 (E11 Item 6): drives the ENTIRE wiring through
+// m.Update() (handleKey -> keyTagManagement -> openTagMgmtAdopt ->
+// saveTagDefsCmd -> cmd() -> Update(tagDefsSavedMsg) -> applyTagDefsSaved)
+// with the cursor on a FREE row -- asserts the row becomes defined=true, the
+// cursor follows it (mirrors Delete/Rename's own refindName convention), and
+// a toastInfo success Toast appears (no new silent success path, bt-ct3k
+// Toast-Konsistenz).
+func TestFullAdoptFlowRegistersFreeRowShowsToastCursorFollows(t *testing.T) {
+	dir := t.TempDir()
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: dir}
+	m.repoDir = dir
+	m.view = viewTagManagement
+	m.tagMgmtRows = []tagRegistryRow{{name: "old-defined", defined: true}, {name: "free-tag", defined: false, count: 3}}
+	m.tagMgmtCursor.setLen(2)
+	m.tagMgmtCursor.cursor = 1
+
+	tm, cmd := m.Update(runeMsg('n'))
+	m = tm.(model)
+	if m.tagMgmtInputActive {
+		t.Fatal("Adopt must not open the input sub-mode")
+	}
+	if cmd == nil {
+		t.Fatal("'n' on a free row must return the saveTagDefsCmd Cmd")
+	}
+	msg := cmd()
+
+	tm2, _ := m.Update(msg)
+	m = tm2.(model)
+
+	found := false
+	for i, r := range m.tagMgmtRows {
+		if r.name == "free-tag" {
+			found = true
+			if !r.defined {
+				t.Fatalf("want 'free-tag' now defined=true after Adopt, got %+v", r)
+			}
+			if m.tagMgmtCursor.cursor != i {
+				t.Fatalf("want cursor to follow 'free-tag' to index %d, cursor=%d", i, m.tagMgmtCursor.cursor)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("want 'free-tag' still present as a row, got %+v", m.tagMgmtRows)
+	}
+	if m.toast == nil || m.toast.kind != toastInfo {
+		t.Fatalf("want a toastInfo success Toast after Adopt, got %+v", m.toast)
 	}
 }
 
@@ -882,9 +1069,22 @@ func TestOpenTagMgmtDeleteConfirmNoOpOnFreeTag(t *testing.T) {
 	m := newModel(nil, "")
 	m.view = viewTagManagement
 	m.tagMgmtRows = []tagRegistryRow{{name: "free-tag", defined: false, count: 3}}
-	nm, _ := m.openTagMgmtDeleteConfirm()
-	if nm.(model).tagMgmtDeleteConfirm {
-		t.Fatal("want no-op for a free (undefined) tag row")
+	nm, cmd := m.openTagMgmtDeleteConfirm()
+	mm := nm.(model)
+	if mm.tagMgmtDeleteConfirm {
+		t.Fatal("want no-op for a free (undefined) tag row -- no confirm opens, no Registry write")
+	}
+	// bt-ct3k (E11 Item 5): the no-op must no longer be SILENT -- a warn Toast
+	// replaces the former "nothing visibly happens" behavior (PO-Nebenbefund,
+	// US-Review Runde 7: felt like a broken keybind).
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast's auto-dismiss timeout) instead of a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast, got %+v", mm.toast)
+	}
+	if !strings.Contains(mm.toast.title, "Unregistered tag") {
+		t.Fatalf("toast.title = %q, want it to mention 'Unregistered tag'", mm.toast.title)
 	}
 }
 
@@ -955,8 +1155,11 @@ func TestKeyTagManagementDeleteNoOpOnFreeRowViaFullDispatch(t *testing.T) {
 	if mm.tagMgmtDeleteConfirm {
 		t.Fatal("want no confirm opened for a free row")
 	}
-	if cmd != nil {
-		t.Fatalf("want nil Cmd, got %v", cmd)
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast), not a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast via the full dispatch, got %+v", mm.toast)
 	}
 }
 
@@ -1481,11 +1684,21 @@ func TestOpenTagMgmtRenameNoOpOnFreeTag(t *testing.T) {
 	m.tagMgmtCursor.setLen(1)
 
 	nm, cmd := m.openTagMgmtRename()
-	if nm.(model).tagMgmtInputActive {
-		t.Fatal("want no-op for a free (undefined) tag row")
+	mm := nm.(model)
+	if mm.tagMgmtInputActive {
+		t.Fatal("want no-op for a free (undefined) tag row -- no input opens, no Registry write")
 	}
-	if cmd != nil {
-		t.Fatalf("want nil Cmd, got %v", cmd)
+	// bt-ct3k (E11 Item 5): the no-op must no longer be SILENT -- a warn Toast
+	// replaces the former "nothing visibly happens" behavior (PO-Nebenbefund,
+	// US-Review Runde 7: felt like a broken keybind).
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast's auto-dismiss timeout) instead of a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast, got %+v", mm.toast)
+	}
+	if !strings.Contains(mm.toast.title, "Unregistered tag") {
+		t.Fatalf("toast.title = %q, want it to mention 'Unregistered tag'", mm.toast.title)
 	}
 }
 
@@ -1561,8 +1774,11 @@ func TestKeyTagManagementRenameNoOpOnFreeRowViaFullDispatch(t *testing.T) {
 	if mm.tagMgmtInputActive {
 		t.Fatal("want no input opened for a free row")
 	}
-	if cmd != nil {
-		t.Fatalf("want nil Cmd, got %v", cmd)
+	if cmd == nil {
+		t.Fatal("want a non-nil Cmd (the warn Toast), not a silent no-op")
+	}
+	if mm.toast == nil || mm.toast.kind != toastWarn {
+		t.Fatalf("want a toastWarn Toast via the full dispatch, got %+v", mm.toast)
 	}
 }
 

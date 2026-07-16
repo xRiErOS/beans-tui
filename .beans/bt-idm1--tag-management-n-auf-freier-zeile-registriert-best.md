@@ -1,11 +1,11 @@
 ---
 # bt-idm1
 title: 'Tag-Management: n auf freier Zeile registriert bestehenden Tag (Adopt statt Blank-Create)'
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-07-16T20:35:29Z
-updated_at: 2026-07-16T20:47:17Z
+updated_at: 2026-07-16T21:44:21Z
 parent: bt-362n
 blocked_by:
     - bt-ct3k
@@ -84,3 +84,64 @@ ODER Zeile bereits `defined` → Fallback auf heutiges Verhalten
 Konfliktrisiko: berührt DIESELBE Datei wie `bt-ct3k`
 (view_tag_management.go) — `blocked_by bt-ct3k` gesetzt, in einer Session
 NACH `bt-ct3k` bearbeiten.
+
+
+## Summary
+
+`keyTagManagement`s `keys.NewTag`-Case (`internal/tui/view_tag_management.go`) prüft jetzt die
+Cursor-Zeile (mirrort `openTagMgmtRename`s Row-Check): gültige, FREIE Zeile → neue Funktion
+`openTagMgmtAdopt(row)` dispatcht `saveTagDefsCmd(m.client, data.AddTagDefName(definedTagNames(
+m.tagMgmtRows), row.name), row.name, "tag '<name>' registered")` DIREKT — kein Input-Submodus
+(Planner-Entscheidung final). Sonst (keine Zeilen ODER Zeile bereits defined) → unverändertes
+Blank-Create. `tagDefsSavedMsg` trägt neues Feld `successToast` (`internal/tui/messages.go`);
+`applyTagDefsSaved` (`internal/tui/update.go`) zeigt bei nicht-leerem `successToast` einen
+toastInfo-Erfolgs-Toast — Create/Rename/Delete passen `""` und bleiben unverändert still.
+Cursor-Follow kommt gratis über den bestehenden refindName-Refind.
+
+## Test-Output
+
+RED (vor Fix): Compile-RED, `go vet`:
+```
+vet: internal/tui/view_tag_management_test.go:562:9: tdm.successToast undefined (type tagDefsSavedMsg has no field or method successToast)
+```
+(Die drei neuen Tests — `TestKeyTagManagementNewTagOnFreeRowAdoptsDirectlyNoInput`,
+`TestApplyTagDefsSavedSuccessToastShowsInfoToastWhenSuccessToastSet`,
+`TestFullAdoptFlowRegistersFreeRowShowsToastCursorFollows` plus
+`TestKeyTagManagementNewTagOnDefinedRowStillOpensBlankCreate` — waren vor dem Fix nicht
+kompilierbar/nicht erfüllbar.)
+
+GREEN (nach Fix): alle 4 neuen Tests PASS; voller `go test ./...` ×2 (Run 2 mit `-count=1`,
+internal/tui 139.7s) grün, `go vet` clean, `gofmt -l` leer.
+
+## Smoke
+
+Echter tmux-Smoke (`bin/bt` im Worktree, Registry `.beans-tags.yml` existierte nicht → alle
+Tags frei): Tags-Page, Cursor auf freiem "to-review", `n` → Toast "tag 'to-review' registered",
+Zeile bekommt ✓-Marker, KEIN Input-Submodus. `n` auf der jetzt definierten Zeile → unverändertes
+Blank-Create-Input (esc). Cursor-Follow: `n` auf freiem "smoke" (Mitte der Liste) → "smoke"
+wandert alpha-sortiert in die Defined-Gruppe, Cursor folgt (▌ auf "smoke"). Erzeugte
+`.beans-tags.yml` vor Commit entfernt (Test-Mutation), keine Bean-Mutationen (Adopt ist
+Registry-only).
+
+## Deviations/ERRATA
+
+- Zeilenreferenz Plan/bean `update.go:472` (applyTagDefsSaved) stimmte; `view_tag_management.go:373-374`
+  (keys.NewTag-Case) real bei Z.373-379 nach bt-ct3k-Commit — funktional identisch, kein echtes Erratum.
+- Signatur-Erweiterung statt neuem Msg-Typ: `saveTagDefsCmd` bekam einen 4. Parameter
+  `successToast` (alle 3 Bestands-Callsites explizit `""`), der Erfolgs-Toast hängt wie geplant
+  in `applyTagDefsSaved` am bestätigten Write — bean sah "Erfolgs-Toast in applyTagDefsSaved
+  anhängen" vor, ließ den Transportweg offen; refindName-B01-Konvention (jede Dispatch-Site
+  benennt explizit) wurde gespiegelt.
+
+
+## Fix-Runde (Review-Finding, 2026-07-16)
+
+Non-blocking Review-Finding umgesetzt: `openTagMgmtAdopt` validiert `row.name` jetzt defensiv
+gegen `data.ValidTagName` VOR dem Registry-Write (Spiegelung des Create-Pfads) — ungültiger
+Name (hand-editierte Bean-Datei kann Grammatik-verletzende Tags tragen) → toastWarn
+"invalid tag name (a-z0-9, hyphen-separated, lowercase)", KEIN Registry-Write, bewusst KEIN
+Fallback auf Blank-Create (n wurde AUF dieser Zeile gedrückt).
+
+RED: `TestKeyTagManagementNewTagOnFreeRowInvalidNameWarnsNoSave` —
+"want a toastWarn Toast for an invalid free name, got <nil>" → GREEN nach Gate.
+Gates: `-short`-Lauf + voller Lauf (internal/tui 142.0s) grün, vet/gofmt clean.

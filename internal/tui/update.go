@@ -494,6 +494,14 @@ func (m model) applyTagDefsSaved(msg tagDefsSavedMsg) (tea.Model, tea.Cmd) {
 			break
 		}
 	}
+	// E11 Item 6 (bean bt-idm1): Adopt is the ONE dispatch site that sets
+	// successToast (messages.go doc-stamp on the field) -- Create/Rename/
+	// Delete all leave it "" and stay silent on success, unchanged.
+	if msg.successToast != "" {
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastInfo, msg.successToast, "", nil, false)
+		return m, toastCmd
+	}
 	return m, nil
 }
 
