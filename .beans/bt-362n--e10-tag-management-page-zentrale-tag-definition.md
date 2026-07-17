@@ -5,9 +5,9 @@ status: todo
 type: epic
 priority: high
 tags:
-    - to-review
+    - rejected
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-17T06:27:03Z
+updated_at: 2026-07-17T06:27:29Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
