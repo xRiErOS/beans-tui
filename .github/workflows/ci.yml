@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  BEANS_VERSION: "0.4.2"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install beans CLI
+        run: |
+          curl -sL "https://github.com/hmans/beans/releases/download/v${BEANS_VERSION}/beans_Linux_x86_64.tar.gz" -o beans.tar.gz
+          tar -xzf beans.tar.gz beans
+          sudo mv beans /usr/local/bin/beans
+          beans --version
+
+      - name: Build
+        run: go build -o bin/bt .
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
