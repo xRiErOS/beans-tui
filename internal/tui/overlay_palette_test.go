@@ -453,14 +453,15 @@ func TestDispatchPaletteCreateIgnoredWhileCreateInFlight(t *testing.T) {
 		t.Fatal("pendingCreate must remain set -- the original in-flight create must not be forgotten")
 	}
 	// bt-81f0: m.err no longer renders anywhere -- Toast is the ONE visible
-	// channel, this guard must not go silent. kind=toastError per bt-81f0's
-	// bindender Rahmen (ERRATUM vs. update.go:735's own toastWarn choice for
-	// the identical message, see box_confirm_create_test.go's twin
-	// assertion / bean body Deviations).
+	// channel, this guard must not go silent. kind=toastWarn (bt-tm4a): the
+	// in-flight guard is a hint ("please wait"), not a hard error -- all
+	// three createInFlightNote guards now agree on toastWarn, matching
+	// keyNodeAction's original choice (update.go:747, see also
+	// box_confirm_create_test.go's twin assertion).
 	if mm.toast == nil {
 		t.Fatal("palette create dropping the second create must also show a Toast (m.err lost its rendering, bt-81f0)")
-	} else if mm.toast.kind != toastError {
-		t.Errorf("toast.kind = %v, want toastError (bt-81f0 bindender Rahmen)", mm.toast.kind)
+	} else if mm.toast.kind != toastWarn {
+		t.Errorf("toast.kind = %v, want toastWarn (bt-tm4a: unified in-flight-guard severity)", mm.toast.kind)
 	}
 }
 

@@ -405,16 +405,15 @@ func TestSubmitFormCreateIgnoredWhilePendingCreateInFlight(t *testing.T) {
 		t.Fatal("submitForm should surface a brief status note when it drops the second create")
 	}
 	// bt-81f0: this guard's m.err (box_confirm_create.go's OWN copy, distinct
-	// from keyNodeAction's already-Toast-backed guard, update.go:735) lost
-	// its rendering -- must not go silent. kind=toastError per bt-81f0's
-	// bindender Rahmen (all seven ex-silent sites get toastError, verbatim
-	// -- ERRATUM: update.go:735's OWN createInFlightNote toast uses
-	// toastWarn for the identical message; kept as bt-81f0 mandates rather
-	// than silently reconciling the two, see bean body Deviations).
+	// from keyNodeAction's already-Toast-backed guard, update.go:747) lost
+	// its rendering -- must not go silent. kind=toastWarn (bt-tm4a): the
+	// in-flight guard is a hint ("please wait"), not a hard error -- all
+	// three createInFlightNote guards now agree on toastWarn, matching
+	// keyNodeAction's original choice (update.go:747).
 	if m.toast == nil {
 		t.Fatal("submitForm dropping the second create must also show a Toast (m.err lost its rendering, bt-81f0)")
-	} else if m.toast.kind != toastError {
-		t.Errorf("toast.kind = %v, want toastError (bt-81f0 bindender Rahmen)", m.toast.kind)
+	} else if m.toast.kind != toastWarn {
+		t.Errorf("toast.kind = %v, want toastWarn (bt-tm4a: unified in-flight-guard severity)", m.toast.kind)
 	}
 }
 
