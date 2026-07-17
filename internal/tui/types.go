@@ -243,33 +243,43 @@ type model struct {
 	// cloneBoolMap before writing, though (I01, same convention as
 	// toggleFacet) -- the map is long-lived for the whole overlay session,
 	// not a throwaway per-keystroke value, so the same aliasing hazard the
-	// I01 doc-stamp describes applies. tagInput/tagInputActive/tagInputErr
-	// are the free-text new-tag sub-mode (`n`), mirroring searchInput's
-	// "one persistent textinput.Model, reset+focused on open" convention
-	// (openSearchInput).
+	// I01 doc-stamp describes applies.
 	//
-	// Typeahead (bean bt-9ipw): tagInputFiltered is tagItems narrowed by a
-	// case-insensitive substring match against tagInput's live value
-	// (filterTagItems, mirrors filteredRepos()'s "empty query -> full list"
-	// contract, view_lobby.go) -- recomputed only when the input's value
-	// actually changes (openTagInput seeds it once on open, keyTagInput
-	// recomputes on every value-changing keystroke). tagInputSuggestCursor
-	// is a plain int cursor over tagInputFiltered (NOT a listState -- the
-	// plan's own »Item 7« text calls for a bare field here), reset to 0
-	// whenever tagInputFiltered is recomputed. Deliberately intercepted via
-	// the RAW tea.KeyUp/tea.KeyDown KeyType in keyTagInput, NEVER via
-	// navKey's letter-alias table (keys.Up/keys.Down also bind "i"/"k") --
-	// this is a free-text capture field, so "i"/"k" must stay literal,
-	// typeable characters (e.g. a tag named "risk"). keyLobby's own
+	// Consolidated Search (bean bt-9ipw, US-07-Reopen 2026-07-17, epic-E12-
+	// plan.md »Item 1«, D01): tagInput/tagInputErr are now the Haupt-
+	// Picker's OWN always-visible, always-focused search field -- the
+	// former two-stage `t`->`n` entry (a separate tagInputActive sub-mode,
+	// opened only via the `n` key) is GONE; openTagPicker focuses tagInput
+	// directly on open, mirroring searchInput's "one persistent
+	// textinput.Model, reset+focused on open" convention (openSearchInput),
+	// just without a second gate in front of it. tagInputFiltered is
+	// tagItems narrowed by a case-insensitive substring match against
+	// tagInput's live value (filterTagItems, mirrors filteredRepos()'s
+	// "empty query -> full list" contract, view_lobby.go) -- seeded full on
+	// open, recomputed only when the input's value actually changes.
+	// tagInputSuggestCursor is a plain int cursor over tagInputFiltered
+	// (NOT a listState) -- THE Haupt-Picker's own row cursor now (space/x
+	// toggles the row AT this cursor, replacing the old m.menu-driven
+	// cursor over the unfiltered tagItems), reset to 0 whenever
+	// tagInputFiltered is recomputed. Up/Down/space/x are deliberately
+	// intercepted via RAW tea.KeyType/keybind.Matches in keyTagPicker,
+	// NEVER via navKey's letter-alias table (keys.Up/keys.Down also bind
+	// "i"/"k") -- this is a free-text capture field, so "i"/"k" must stay
+	// literal, typeable characters (e.g. a tag named "risk"). keyLobby's own
 	// repoQuery filter routes navKey() BEFORE its textinput update and thus
 	// SWALLOWS typed "i"/"k"/"j"/"l" -- that is an EXISTING BUG there (bean
 	// bt-l8e7), NOT a precedent to follow; the raw-KeyType intercept here is
-	// the correct pattern for any free-text field with nav keys.
+	// the correct pattern for any free-text field with nav keys. `enter`
+	// branches on tagInputFiltered/the typed value (keyTagPicker's own
+	// doc-stamp): a non-empty filtered set (including the empty-query "all
+	// tags" state) applies the pending diff and closes (applyTagPickerDiff,
+	// UNCHANGED); typed text with NO substring match at all falls through to
+	// the create-path (D11, reassigns tagItems/tagPending, then clears the
+	// query back to the full list WITHOUT closing the picker).
 	tagItems              []tagCount
 	tagOriginal           map[string]bool
 	tagPending            map[string]bool
 	tagInput              textinput.Model
-	tagInputActive        bool
 	tagInputErr           string
 	tagInputFiltered      []tagCount
 	tagInputSuggestCursor int
@@ -608,9 +618,9 @@ type model struct {
 	tagMgmtCursor listState
 
 	// Tag-Management page's own shared free-text input sub-mode (E10 Task 3,
-	// bean bt-604w, epic bt-362n D11/D14): mirrors tagInput/tagInputActive/
-	// tagInputErr's "one persistent textinput.Model, reset+focused on open"
-	// convention (box_picker_tag.go's own doc-stamp, types.go above) --
+	// bean bt-604w, epic bt-362n D11/D14): mirrors tagInput/tagInputErr's
+	// "one persistent textinput.Model, reset+focused on open" convention
+	// (box_picker_tag.go's own doc-stamp, types.go above) --
 	// tagMgmtInputActive fully captures input WITHIN the already-full-capture
 	// Page (D06), never a second overlayID case. tagMgmtInputMode is
 	// "create" (T3, this task) or "rename" (T5, D14: Rename reuses this SAME
@@ -664,8 +674,8 @@ func newModel(client *data.Client, repoDir string) model {
 	ti.Prompt = ""
 	ti.CharLimit = 80
 
-	tagIn := textinput.New() // E3 Task 2: Tag-Picker free-text new-tag input
-	tagIn.Placeholder = "new tag (a-z0-9, hyphen-separated)"
+	tagIn := textinput.New() // E3 Task 2/bean bt-9ipw: Tag-Picker's always-visible search/new-tag field
+	tagIn.Placeholder = "type to filter or create (a-z0-9, hyphen-separated)"
 	tagIn.Prompt = ""
 	tagIn.CharLimit = 40
 

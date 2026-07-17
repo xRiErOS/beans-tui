@@ -53,14 +53,14 @@ func valueMenuLocalBindings() []keybind.Binding {
 // select/toggle'") only half addressed -- Q04's PO example (the Filter-Menu)
 // was illustrative, not exhaustive. See this task's Deviations section.
 //
-// keys.NewTag (B14, design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean
-// bt-yqdy) closes a SEPARATE gap: the Tag-Picker's free-text new-tag
-// sub-mode (`n`) was never broken -- keyTagPicker already handled it, and
-// tagPickerBox's OWN inline hint line already showed it -- but THIS outer
-// Footer Zone 3 set never listed it, so a PO scanning the (more prominent)
-// outer footer never discovered the mode existed at all.
+// keys.NewTag REMOVED (bean bt-9ipw, US-07-Reopen 2026-07-17, D01): the
+// former separate `n`-gated free-text new-tag sub-mode this hint used to
+// point at is GONE -- D01 consolidated the Tag-Picker into ONE always-
+// focused search field, so "n" is now just a literal, typeable character
+// (e.g. filtering for a tag containing "n") rather than a picker command.
+// Advertising it here would be actively misleading post-consolidation.
 func tagPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.NewTag, keys.Enter, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.Enter, keys.Back}
 }
 
 // parentPickerLocalBindings is the Parent-Picker overlay's own footer set

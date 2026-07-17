@@ -1,19 +1,24 @@
 package tui
 
 // box_picker_tag.go — the Tag-Picker (`t`, E3 Task 2, bean bt-8v69):
-// usage-counted toggle-multi-select over every tag currently in use, plus a
-// free-text new-tag entry sub-mode. Port pattern (design decision, plan
-// »Task 2«): counter + sort semantics from beans-src tagpicker.go:64-96
-// (sort count desc, then alpha); the Pending-Diff/Enter-confirms/Esc-
-// discards semantics from beans-src blockingpicker.go:197-245 (space
-// toggles pending, enter diffs pending against original, esc discards) --
-// this is the FIRST beans-tui overlay carrying real mutation state across
-// multiple keystrokes before a single confirm, so it is deliberately NOT
-// box_filter_facets.go's keyFilterMenu pattern (whose enter only closes,
-// since facets act live and there is nothing to "confirm"). The free-text
-// capture sub-mode mirrors keySearchInput's "one persistent textinput.Model,
-// reset+focused on open, every key but enter/esc belongs to the input"
-// convention (update.go:520-549).
+// usage-counted toggle-multi-select over every tag currently in use, plus
+// (bean bt-9ipw, US-07-Reopen 2026-07-17, epic-E12-plan.md »Item 1«, D01) an
+// ALWAYS-visible, always-focused search field that live-filters the same
+// row list. Port pattern (design decision, plan »Task 2«): counter + sort
+// semantics from beans-src tagpicker.go:64-96 (sort count desc, then
+// alpha); the Pending-Diff/Enter-confirms/Esc-discards semantics from
+// beans-src blockingpicker.go:197-245 (space toggles pending, enter diffs
+// pending against original, esc discards) -- this is the FIRST beans-tui
+// overlay carrying real mutation state across multiple keystrokes before a
+// single confirm, so it is deliberately NOT box_filter_facets.go's
+// keyFilterMenu pattern (whose enter only closes, since facets act live and
+// there is nothing to "confirm"). The search field mirrors keySearchInput's
+// "one persistent textinput.Model, reset+focused on open, every key but
+// enter/esc belongs to the input" convention (update.go:520-549) -- EXCEPT
+// that here space/x (Toggle) and Up/Down (navigation) ALSO stay intercepted
+// ahead of the input, since multi-select must keep working while the field
+// is focused (D01, the very acceptance criterion this bean was reopened
+// for).
 //
 // ERRATUM vs. the plan's own EARLIER Step-1 test sketch ("+1 Tag, -1 Tag ->
 // 2 Mutationen (tea.Batch)"): superseded by the plan's own "Design-Nachtrag"
@@ -24,6 +29,17 @@ package tui
 // exactly ONE mutateCmd wrapping data.SetTags (mutations.go), which builds
 // ONE `beans update` invocation carrying every added/removed tag as
 // repeated --tag/--remove-tag flags -- one etag, no cascade.
+//
+// Consolidation history (bean bt-9ipw, D01): the picker used to be TWO
+// separate overlay states -- this Haupt-Picker (pure toggle, no textinput
+// at all, "Tippen tut nichts") and a SEPARATE `n`-gated free-text sub-mode
+// (tagInputActive/openTagInput/keyTagInput/tagInputBox) that carried the
+// only visible search field. PO-Review 2026-07-17 (US-07) rejected that
+// split: typing directly in the Haupt-Picker (the entry point the PO
+// actually used) gave zero visual feedback. D01 merges both into ONE mode:
+// this file's search field/filter/cursor are now the Haupt-Picker's own,
+// always on, no second gate -- the former sub-mode's functions are gone,
+// their logic lives in keyTagPicker/tagPickerBox below.
 
 import (
 	"fmt"
@@ -153,10 +169,20 @@ func tagItemIndex(items []tagCount, tag string) int {
 // tagItems is then built via collectTagCounts' Suggest-Mode union: defined
 // tags sort first, but every free tag stays fully togglable regardless
 // (kein strict mode, PO-Vorgabe wörtlich).
-func (m model) openTagPicker() model {
+//
+// Consolidated Search (bean bt-9ipw, D01): the search field is focused
+// IMMEDIATELY on open, no second `n` gate -- tagInputFiltered seeds from an
+// EMPTY query (filterTagItems treats "" as "match everything", mirrors
+// filteredRepos()'s own contract, view_lobby.go), so every row is visible
+// and togglable from the very first frame, tagInputSuggestCursor at the top
+// row. This REPLACES the old m.menu-driven cursor for this overlay (D01's
+// own acceptance: Pfeiltasten navigate the -- now live-filterable -- list).
+// Returns textinput.Blink (mirrors openSearchInput's own convention,
+// update.go) so the now-always-focused field's cursor actually blinks.
+func (m model) openTagPicker() (tea.Model, tea.Cmd) {
 	b := m.focusedBean()
 	if b == nil {
-		return m
+		return m, nil
 	}
 	m.mutTarget = b.ID
 
@@ -181,88 +207,13 @@ func (m model) openTagPicker() model {
 	m.tagOriginal = orig
 	m.tagPending = pending
 
-	m.menu = listState{}
-	m.menu.setLen(len(m.tagItems))
-
-	m.tagInputActive = false
-	m.tagInputErr = ""
-	m.tagInput.SetValue("")
-
-	m.overlay = overlayTagPicker
-	return m
-}
-
-// keyTagPicker drives the open Tag-Picker. The free-text new-tag sub-mode
-// (m.tagInputActive) is checked FIRST and fully captures every key except
-// enter/esc (same precedent as keySearchInput, update.go) -- otherwise
-// typing e.g. "x" into a new tag name would toggle the cursored row instead
-// of appearing in the input. Outside that sub-mode: up/down move the cursor
-// (navKey), space/x (keys.Toggle) toggles the cursored row's pending state,
-// "n" opens the new-tag input, enter diffs pending against original (see
-// applyTagPickerDiff), esc discards everything and closes.
-func (m model) keyTagPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.tagInputActive {
-		return m.keyTagInput(msg)
-	}
-
-	switch navKey(msg.String()) {
-	case "up":
-		m.menu.move(-1)
-		return m, nil
-	case "down":
-		m.menu.move(1)
-		return m, nil
-	}
-
-	switch {
-	case keybind.Matches(msg, keys.Back):
-		m.overlay = overlayNone
-		return m, nil
-	case keybind.Matches(msg, keys.Toggle):
-		return m.toggleTagPending(), nil
-	case keybind.Matches(msg, keys.NewTag):
-		return m.openTagInput()
-	case keybind.Matches(msg, keys.Enter):
-		return m.applyTagPickerDiff()
-	}
-	return m, nil
-}
-
-// toggleTagPending flips the cursored row's membership in m.tagPending.
-// I01 (types.go doc-stamp, bean bt-7jr8): clones via cloneBoolMap before
-// writing -- tagPending is COPY-ON-WRITE for every toggle during the
-// picker's (potentially multi-keystroke) open session, same convention as
-// toggleFacet (box_filter_facets.go), even though the map itself is
-// wholesale-replaced fresh on each OPEN (openTagPicker's doc-stamp).
-func (m model) toggleTagPending() model {
-	if m.menu.cursor < 0 || m.menu.cursor >= len(m.tagItems) {
-		return m
-	}
-	tag := m.tagItems[m.menu.cursor].tag
-	out := cloneBoolMap(m.tagPending)
-	if out[tag] {
-		delete(out, tag)
-	} else {
-		out[tag] = true
-	}
-	m.tagPending = out
-	return m
-}
-
-// openTagInput enters the free-text new-tag capture sub-mode (port
-// openSearchInput's convention: reset value, focus, blink). Typeahead (bean
-// bt-9ipw): tagInputFiltered is seeded from an EMPTY query -- filterTagItems
-// treats "" as "match everything" (mirrors filteredRepos()'s own contract,
-// view_lobby.go), so every existing tag is offered as a suggestion even
-// before the user types a single character; tagInputSuggestCursor starts at
-// the top row.
-func (m model) openTagInput() (tea.Model, tea.Cmd) {
-	m.tagInputActive = true
 	m.tagInputErr = ""
 	m.tagInput.SetValue("")
 	m.tagInput.Focus()
 	m.tagInputFiltered = filterTagItems(m.tagItems, "")
 	m.tagInputSuggestCursor = 0
+
+	m.overlay = overlayTagPicker
 	return m, textinput.Blink
 }
 
@@ -271,9 +222,9 @@ func (m model) openTagInput() (tea.Model, tea.Cmd) {
 // scoring/Bleve -- YAGNI, bean bt-9ipw's own "Nicht jetzt" section). An
 // empty (or whitespace-only) query matches every row, preserving items' own
 // order -- items is already sorted via sortTagCountsDefinedFirst at every
-// call site (collectTagCounts/keyTagInput's new-tag insert), so the
-// suggestion list's order stays defined-first/count-desc/alpha throughout,
-// same as tagPickerBox's own row list.
+// call site (collectTagCounts/the create-path's own insert in
+// tagPickerEnter below), so the filtered list's order stays
+// defined-first/count-desc/alpha throughout.
 func filterTagItems(items []tagCount, query string) []tagCount {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -288,35 +239,27 @@ func filterTagItems(items []tagCount, query string) []tagCount {
 	return out
 }
 
-// keyTagInput drives the free-text new-tag/Typeahead input (bean bt-9ipw).
-// esc closes the input WITHOUT touching the outer picker's pending/original
-// state (only the input sub-mode itself is discarded). up/down move
-// tagInputSuggestCursor over tagInputFiltered, clamped to its bounds --
-// intercepted via the RAW tea.KeyUp/tea.KeyDown KeyType, NEVER via navKey's
-// letter-alias table ("i"/"k" must stay literal, typeable characters here;
-// keyLobby swallowing them in its repoQuery filter is an EXISTING BUG, bean
-// bt-l8e7, not a precedent -- full rationale in types.go's own doc-stamp).
-// enter branches on tagInputFiltered: non-empty ->
-// EXISTING-tag path, assigning the cursored suggestion to tagPending
-// (Copy-on-Write, mirrors toggleTagPending) with NO tagItems mutation and NO
-// Registry write (D11, the tag is already present); empty (no substring
-// match at all) -> TODAY's create-path, UNCHANGED from before Typeahead:
-// data.ValidTagName gates the submit (invalid -> tagInputErr set, input
-// STAYS open for a retry), a valid name is appended to tagItems (deduped)
-// and set pending=true. Every other key falls through to
+// keyTagPicker drives the open Tag-Picker's now-consolidated single mode
+// (bean bt-9ipw, D01): Up/Down navigate tagInputSuggestCursor over the
+// live-filtered tagInputFiltered, clamped to its bounds -- intercepted via
+// the RAW tea.KeyUp/tea.KeyDown KeyType, NEVER via navKey's letter-alias
+// table ("i"/"k" must stay literal, typeable characters here, e.g. a tag
+// named "risk"; keyLobby swallowing them in its repoQuery filter is an
+// EXISTING BUG, bean bt-l8e7, not a precedent -- full rationale in
+// types.go's own doc-stamp). Esc/Toggle/Enter are matched via keybind so a
+// future rebind of any of the three stays correct here automatically; they
+// are intercepted AHEAD of the textinput for the same reason Up/Down are
+// (space/x must keep toggling multi-select while the field is focused, the
+// acceptance criterion this bean was reopened for -- D01 explicitly keeps
+// this "unverändert"). Every other key falls through to
 // m.tagInput.Update(msg); tagInputFiltered/tagInputSuggestCursor are
 // recomputed ONLY when that Update actually changed the input's value
 // (mirrors keyLobby's own prev/current repoQuery-changed guard,
 // view_lobby.go) -- a value-preserving keystroke (e.g. left/right cursor
-// movement inside the textinput) must not reset the suggestion cursor the
-// user just navigated to.
-func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// movement inside the textinput) must not reset the cursor the user just
+// navigated to.
+func (m model) keyTagPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
-	case tea.KeyEsc:
-		m.tagInputActive = false
-		m.tagInput.Blur()
-		m.tagInputErr = ""
-		return m, nil
 	case tea.KeyUp:
 		if len(m.tagInputFiltered) > 0 {
 			m.tagInputSuggestCursor--
@@ -333,49 +276,17 @@ func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case tea.KeyEnter:
-		if len(m.tagInputFiltered) > 0 {
-			tag := m.tagInputFiltered[m.tagInputSuggestCursor].tag
-			m.tagInputActive = false
-			m.tagInput.Blur()
-			m.tagInput.SetValue("")
-			m.tagInputErr = ""
-			out := cloneBoolMap(m.tagPending)
-			out[tag] = true
-			m.tagPending = out
-			if idx := tagItemIndex(m.tagItems, tag); idx >= 0 {
-				m.menu.cursor = idx
-			}
-			return m, nil
-		}
+	}
 
-		name := strings.TrimSpace(m.tagInput.Value())
-		if !data.ValidTagName(name) {
-			m.tagInputErr = "invalid tag name (a-z0-9, hyphen-separated, lowercase)"
-			return m, nil
-		}
-		m.tagInputErr = ""
-		m.tagInputActive = false
+	switch {
+	case keybind.Matches(msg, keys.Back):
+		m.overlay = overlayNone
 		m.tagInput.Blur()
-		m.tagInput.SetValue("")
-
-		if tagItemIndex(m.tagItems, name) < 0 {
-			items := append([]tagCount(nil), m.tagItems...)
-			// defined: false (zero value) -- B14's free-text new-tag path stays
-			// UNCHANGED (Q03 in the epic body, bt-362n: NOT part of this task,
-			// no Registry-write from here).
-			items = append(items, tagCount{tag: name, count: 0})
-			sortTagCountsDefinedFirst(items)
-			m.tagItems = items
-			m.menu.setLen(len(m.tagItems))
-		}
-		out := cloneBoolMap(m.tagPending)
-		out[name] = true
-		m.tagPending = out
-		if idx := tagItemIndex(m.tagItems, name); idx >= 0 {
-			m.menu.cursor = idx
-		}
 		return m, nil
+	case keybind.Matches(msg, keys.Toggle):
+		return m.toggleTagPending(), nil
+	case keybind.Matches(msg, keys.Enter):
+		return m.tagPickerEnter()
 	}
 
 	prev := m.tagInput.Value()
@@ -386,6 +297,79 @@ func (m model) keyTagInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tagInputSuggestCursor = 0
 	}
 	return m, cmd
+}
+
+// toggleTagPending flips the row AT tagInputSuggestCursor's membership in
+// m.tagPending -- since D01, the cursor moves over the live-filtered
+// tagInputFiltered (formerly the unfiltered tagItems via m.menu.cursor), so
+// toggling a row narrowed down by typing "toggles what's ON SCREEN", not a
+// now-stale full-list position. I01 (types.go doc-stamp, bean bt-7jr8):
+// clones via cloneBoolMap before writing -- tagPending is COPY-ON-WRITE for
+// every toggle during the picker's (potentially multi-keystroke) open
+// session, same convention as toggleFacet (box_filter_facets.go), even
+// though the map itself is wholesale-replaced fresh on each OPEN
+// (openTagPicker's doc-stamp).
+func (m model) toggleTagPending() model {
+	if m.tagInputSuggestCursor < 0 || m.tagInputSuggestCursor >= len(m.tagInputFiltered) {
+		return m
+	}
+	tag := m.tagInputFiltered[m.tagInputSuggestCursor].tag
+	out := cloneBoolMap(m.tagPending)
+	if out[tag] {
+		delete(out, tag)
+	} else {
+		out[tag] = true
+	}
+	m.tagPending = out
+	return m
+}
+
+// tagPickerEnter is keyTagPicker's enter dispatch (bean bt-9ipw, D01):
+// UNCHANGED from before Typeahead ever existed whenever tagInputFiltered has
+// at least one row -- INCLUDING the empty-query "every tag" state -- it
+// simply applies the pending diff and closes (applyTagPickerDiff, below).
+// The NEW branch only fires when the typed query has NO substring match at
+// all (tagInputFiltered empty) AND something was actually typed: that is
+// D11's create-path, unchanged in spirit from the pre-bt-9ipw free-text
+// sub-mode -- data.ValidTagName gates the submit (invalid -> tagInputErr
+// set, picker STAYS open for a retry), a valid name is appended to tagItems
+// (deduped) and set pending=true. Unlike the old sub-mode, this does NOT
+// close the picker -- it clears the query back to the full (now one-larger)
+// list so the PO can keep toggling/creating more tags in the same session,
+// consistent with space/x's own "keep going" semantics.
+func (m model) tagPickerEnter() (tea.Model, tea.Cmd) {
+	name := strings.TrimSpace(m.tagInput.Value())
+	if len(m.tagInputFiltered) == 0 && name != "" {
+		if !data.ValidTagName(name) {
+			m.tagInputErr = "invalid tag name (a-z0-9, hyphen-separated, lowercase)"
+			return m, nil
+		}
+		m.tagInputErr = ""
+
+		if tagItemIndex(m.tagItems, name) < 0 {
+			items := append([]tagCount(nil), m.tagItems...)
+			// defined: false (zero value) -- B14's free-text new-tag path stays
+			// UNCHANGED (Q03 in the epic body, bt-362n: NOT part of this task,
+			// no Registry-write from here).
+			items = append(items, tagCount{tag: name, count: 0})
+			sortTagCountsDefinedFirst(items)
+			m.tagItems = items
+		}
+		out := cloneBoolMap(m.tagPending)
+		out[name] = true
+		m.tagPending = out
+
+		m.tagInput.SetValue("")
+		m.tagInputFiltered = filterTagItems(m.tagItems, "")
+		if idx := tagItemIndex(m.tagItems, name); idx >= 0 {
+			m.tagInputSuggestCursor = idx
+		} else {
+			m.tagInputSuggestCursor = 0
+		}
+		return m, nil
+	}
+
+	return m.applyTagPickerDiff()
 }
 
 // applyTagPickerDiff computes tagPending's diff against tagOriginal and
@@ -429,26 +413,42 @@ func (m model) applyTagPickerDiff() (tea.Model, tea.Cmd) {
 	return m, mutateCmd(func() error { return client.SetTags(id, add, remove, etag) })
 }
 
-// tagPickerBox renders the floating Tag-Picker overlay -- the checkbox +
-// usage-count row list (same modalPanel + [x]/[ ] convention as
-// treeFilterBox, box_filter_facets.go) when the new-tag input is closed, or
-// the free-text capture prompt when it is open. Each row's marker column
-// (T6, bean bt-pqq3, D10 Suggest-Mode, PF-12 design-spec.md §15) is ALWAYS
-// reserved -- a defined tag renders tagManagementMarkerGlyph (reused
-// verbatim from view_tag_management.go/T2, bean bt-r92i's own explicit
-// "T6 kann diesen Glyph ... wiederverwenden" hand-off -- PF-12-Konsistenz,
-// one "defined" glyph across the whole app, instead of a second bespoke
-// glyph), a free tag renders the SAME-WIDTH blank -- NEVER a conditional
-// omission of the column itself, so neither group's checkbox/name column
-// ever shifts relative to the other.
+// tagPickerBox renders the floating Tag-Picker overlay (bean bt-9ipw, D01):
+// an ALWAYS-visible, always-focused search field (m.tagInput.View()) sits
+// above the checkbox + usage-count row list (same modalPanel + [x]/[ ]
+// convention as treeFilterBox, box_filter_facets.go) -- the two former
+// separate overlay renderings (this function + the old tagInputBox) are now
+// ONE. The row list is driven by tagInputFiltered (the live-filtered
+// subset), NOT the unfiltered tagItems, so typing visibly narrows exactly
+// what's on screen -- the PO-Review 2026-07-17 (US-07) complaint this bean
+// reopened over ("kein visueller Hinweis WAS ich getippt habe"). The hint
+// line is dynamic: the normal toggle/save/discard hint while there is at
+// least one row to show (including the empty-query "every tag" state), or a
+// create-specific hint once typed text has NO substring match at all
+// (mirrors tagPickerEnter's own branch one layer up). Each row's marker
+// column (T6, bean bt-pqq3, D10 Suggest-Mode, PF-12 design-spec.md §15) is
+// ALWAYS reserved -- a defined tag renders tagManagementMarkerGlyph (reused
+// verbatim from view_tag_management.go/T2, bean bt-r92i's own explicit "T6
+// kann diesen Glyph ... wiederverwenden" hand-off -- PF-12-Konsistenz, one
+// "defined" glyph across the whole app, instead of a second bespoke glyph),
+// a free tag renders the SAME-WIDTH blank -- NEVER a conditional omission of
+// the column itself, so neither group's checkbox/name column ever shifts
+// relative to the other.
 func (m model) tagPickerBox() string {
-	if m.tagInputActive {
-		return m.tagInputBox()
-	}
-
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("space/x:toggle  n:new tag  enter:save  esc:discard") + "\n")
-	for i, it := range m.tagItems {
+
+	hint := "type:filter  ↑/↓:nav  space/x:toggle  enter:save  esc:discard"
+	if len(m.tagInputFiltered) == 0 && strings.TrimSpace(m.tagInput.Value()) != "" {
+		hint = "no match — enter:create new tag  esc:discard"
+	}
+	b.WriteString(theme.Muted.Render(hint) + "\n")
+	b.WriteString(m.tagInput.View() + "\n")
+	if m.tagInputErr != "" {
+		b.WriteString(lipgloss.NewStyle().Foreground(theme.Red).Render(m.tagInputErr) + "\n")
+	}
+	b.WriteString("\n")
+
+	for i, it := range m.tagInputFiltered {
 		marker := " "
 		if it.defined {
 			marker = tagManagementMarkerStyle.Render(tagManagementMarkerGlyph)
@@ -459,53 +459,19 @@ func (m model) tagPickerBox() string {
 		}
 		cursor := "  "
 		label := it.tag
-		if i == m.menu.cursor {
+		if i == m.tagInputSuggestCursor {
 			cursor = theme.Accent.Render("▸ ")
 			label = theme.Header.Render(label)
 		}
 		count := theme.Muted.Render(fmt.Sprintf(" (%d)", it.count))
 		b.WriteString(cursor + marker + " " + box + " " + label + count + "\n")
 	}
-	if len(m.tagItems) == 0 {
-		b.WriteString(theme.Muted.Render("(no tags in repo)") + "\n")
-	}
-	return modalPanel("Tags", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
-}
-
-// tagInputBox renders the free-text new-tag/Typeahead capture prompt. The
-// hint line reflects enter's ACTUAL branch (keyTagInput's own doc-stamp):
-// "select" while tagInputFiltered has a suggestion to accept, "create" once
-// it's empty (no substring match). The suggestion list itself (bean
-// bt-9ipw) renders below the input, one line per tagInputFiltered row,
-// mirroring tagPickerBox's row shape (marker column + "▸" cursor + usage
-// count) so the two overlays read as one visual language.
-func (m model) tagInputBox() string {
-	var b strings.Builder
-	hint := "enter:create  esc:cancel"
-	if len(m.tagInputFiltered) > 0 {
-		hint = "up/down:navigate  enter:select  esc:cancel"
-	}
-	b.WriteString(theme.Muted.Render(hint) + "\n\n")
-	b.WriteString(m.tagInput.View() + "\n")
-	if m.tagInputErr != "" {
-		b.WriteString("\n" + lipgloss.NewStyle().Foreground(theme.Red).Render(m.tagInputErr) + "\n")
-	}
-	if len(m.tagInputFiltered) > 0 {
-		b.WriteString("\n")
-		for i, it := range m.tagInputFiltered {
-			marker := " "
-			if it.defined {
-				marker = tagManagementMarkerStyle.Render(tagManagementMarkerGlyph)
-			}
-			cursor := "  "
-			label := it.tag
-			if i == m.tagInputSuggestCursor {
-				cursor = theme.Accent.Render("▸ ")
-				label = theme.Header.Render(label)
-			}
-			count := theme.Muted.Render(fmt.Sprintf(" (%d)", it.count))
-			b.WriteString(cursor + marker + " " + label + count + "\n")
+	if len(m.tagInputFiltered) == 0 {
+		if len(m.tagItems) == 0 {
+			b.WriteString(theme.Muted.Render("(no tags in repo)") + "\n")
+		} else {
+			b.WriteString(theme.Muted.Render("(no match)") + "\n")
 		}
 	}
-	return modalPanel("New tag", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
+	return modalPanel("Tags", b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
 }

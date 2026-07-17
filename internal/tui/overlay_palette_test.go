@@ -456,12 +456,14 @@ func TestDispatchPaletteCreateIgnoredWhileCreateInFlight(t *testing.T) {
 
 // --- create_tag dispatch guard (B14, design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean bt-yqdy) ---
 
-// TestDispatchPaletteCreateTagOpensTagPickerInputMode guards the happy path:
-// with a focused bean, "create tag" opens the Tag-Picker (overlayTagPicker)
-// AND its free-text new-tag sub-mode in the SAME step (m.tagInputActive),
-// mirroring the Tag-Picker's own `n` key (box_picker_tag.go's openTagInput)
-// -- a genuine second entry point, not a parallel implementation.
-func TestDispatchPaletteCreateTagOpensTagPickerInputMode(t *testing.T) {
+// TestDispatchPaletteCreateTagOpensTagPickerReadyToType guards the happy
+// path post-bt-9ipw-consolidation (D01, epic-E12-plan.md »Item 1«): with a
+// focused bean, "create tag" opens the Tag-Picker (overlayTagPicker) with
+// its search field ALREADY focused and ready to type -- since D01 merged
+// the former separate free-text new-tag sub-mode into the Haupt-Picker
+// itself, there is no second "input mode" left to enter; opening the picker
+// IS the ready-to-create state.
+func TestDispatchPaletteCreateTagOpensTagPickerReadyToType(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2")
 	m.paletteOpen = true
@@ -477,19 +479,18 @@ func TestDispatchPaletteCreateTagOpensTagPickerInputMode(t *testing.T) {
 	if mm.overlay != overlayTagPicker {
 		t.Fatalf("overlay = %v, want overlayTagPicker", mm.overlay)
 	}
-	if !mm.tagInputActive {
-		t.Fatal("create_tag must open the Tag-Picker's free-text new-tag sub-mode directly (tagInputActive)")
+	if !mm.tagInput.Focused() {
+		t.Fatal("create_tag must land on the Tag-Picker's search field already focused (D01, no second gate)")
 	}
 }
 
 // TestDispatchPaletteCreateTagNoFocusedBeanNoOp guards the PFLICHT-Guard
 // (bean bt-yqdy's own wording): without a focused bean, "create tag" must be
-// a clean no-op -- NOT just relying on openTagPicker()'s own internal no-op
-// (which leaves m.overlay untouched), because chaining .openTagInput()
-// unconditionally onto that would still set m.tagInputActive=true with NO
-// picker actually open (a latent, unreachable state). The explicit
-// `focusedBean()==nil` guard in dispatchPalette's "create_tag" case must
-// short-circuit BEFORE that chain runs.
+// a clean no-op -- relying on openTagPicker()'s own internal no-op guard
+// (returns m unchanged, overlay untouched, when focusedBean()==nil), the
+// SAME guard the plain "tags" case above relies on -- post-D01 the two
+// actions are the identical handler, so there is no separate chain left to
+// guard here.
 func TestDispatchPaletteCreateTagNoFocusedBeanNoOp(t *testing.T) {
 	beans := append(fixtureBeans(), fixtureOrphanBean())
 	m := fixtureModel(t, beans)
@@ -507,8 +508,5 @@ func TestDispatchPaletteCreateTagNoFocusedBeanNoOp(t *testing.T) {
 	}
 	if mm.overlay != overlayNone {
 		t.Fatalf("overlay = %v, want overlayNone (no focused bean -- must not open the Tag-Picker)", mm.overlay)
-	}
-	if mm.tagInputActive {
-		t.Fatal("tagInputActive must stay false -- no picker opened, so no latent new-tag-input state either")
 	}
 }

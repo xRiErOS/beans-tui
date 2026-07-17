@@ -759,7 +759,8 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			return true, m.openValueMenu("status"), nil
 		}
 		if keybind.Matches(msg, keys.TagAssign) {
-			return true, m.openTagPicker(), nil
+			nm, cmd := m.openTagPicker()
+			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Assign) {
 			return true, m.openParentPicker(), nil
@@ -1398,7 +1399,7 @@ func (m model) activateDetailField(b *data.Bean, f relationField) (tea.Model, te
 		// the tags field opens the SAME Tag-Picker the `t` key opens -- m.
 		// detailFocus stays true, mirroring status/type/priority above (the
 		// overlay is its own capture state).
-		return m.openTagPicker(), nil
+		return m.openTagPicker()
 	case "title":
 		return m.openEditTitleForm(b)
 	default: // "" -- Relations jump, unchanged E2 behavior

@@ -69,12 +69,14 @@ func paletteActions(m model) []paletteItem {
 			paletteItem{kind: paletteKindAction, actionID: "priority", label: "set priority"},
 			paletteItem{kind: paletteKindAction, actionID: "tags", label: "set tags"},
 			// B14 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean
-			// bt-yqdy): "create tag" is a Palette-only entry point to the SAME
-			// openTagPicker().openTagInput() new-tag sub-mode the Tag-Picker's
-			// own `n` key already opens (box_picker_tag.go) -- grouped
-			// directly after "set tags" (both tag-related). Node action, since
-			// its dispatchPalette handler needs a focused bean's ID as the
-			// mutation target -- see that handler's own guard doc-stamp.
+			// bt-yqdy): "create tag" is a Palette-only second entry point to
+			// the SAME Tag-Picker "set tags" opens (box_picker_tag.go) --
+			// since bt-9ipw's D01 consolidation the picker's own always-
+			// focused search field already covers new-tag entry, so both
+			// actions dispatch to the identical handler (dispatchPalette's
+			// own doc-stamp). Grouped directly after "set tags" (both
+			// tag-related). Node action, since its dispatchPalette handler
+			// needs a focused bean's ID as the mutation target.
 			paletteItem{kind: paletteKindAction, actionID: "create_tag", label: "create tag"},
 			paletteItem{kind: paletteKindAction, actionID: "parent", label: "set parent"},
 			paletteItem{kind: paletteKindAction, actionID: "blocking", label: "set blocking"},
@@ -190,25 +192,22 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 		case "priority":
 			return m.openValueMenu("priority"), nil
 		case "tags":
-			return m.openTagPicker(), nil
+			return m.openTagPicker()
 		case "create_tag":
 			// B14 (design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean
-			// bt-yqdy): opens the Tag-Picker AND its free-text new-tag
-			// sub-mode in one step -- m.openTagPicker() (box_picker_tag.go)
-			// is ITSELF already a no-op-safe method (returns m unchanged,
-			// overlay stays overlayNone, when focusedBean()==nil), but
-			// chaining .openTagInput() straight onto that unconditionally
-			// sets m.tagInputActive=true regardless -- a latent, unreachable
-			// state (tagInputActive true while overlay==overlayNone, no
-			// picker actually open). This guard is therefore MANDATORY here
-			// (unlike the plain "tags" case above, which safely no-ops on
-			// its own via openTagPicker's internal guard): it runs BEFORE
-			// the openTagPicker().openTagInput() chain, not relying on the
-			// chain's own internal no-op to cover the .openTagInput() half.
-			if m.focusedBean() == nil {
-				return m, nil
-			}
-			return m.openTagPicker().openTagInput()
+			// bt-yqdy): a Palette-only second entry point to the SAME Tag-
+			// Picker "tags" opens. Pre-bt-9ipw-consolidation this used to
+			// chain straight into a SEPARATE free-text new-tag sub-mode
+			// (openTagPicker().openTagInput()) that "tags" itself did not
+			// reach. bt-9ipw's D01 (epic-E12-plan.md »Item 1«, US-07-Reopen
+			// 2026-07-17) consolidated the Tag-Picker into ONE always-
+			// focused-search mode -- opening the picker ALREADY lands the PO
+			// in a ready-to-type field, so "create tag" and "set tags" are
+			// now the exact same action: both just m.openTagPicker(), which
+			// is itself already a no-op-safe method (returns m unchanged,
+			// overlay untouched, when focusedBean()==nil -- same guard "tags"
+			// above relies on).
+			return m.openTagPicker()
 		case "parent":
 			return m.openParentPicker(), nil
 		case "blocking":

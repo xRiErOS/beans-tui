@@ -72,35 +72,30 @@ func TestContextualLocalHintOverlayTagPickerShowsToggle(t *testing.T) {
 	}
 }
 
-// TestTagPickerLocalBindingsIncludesNewTag guards B14 (design-spec.md §15
-// PF-16, bean bt-ntoz, E8 Task 7, bean bt-yqdy): the Tag-Picker's free-text
-// new-tag sub-mode (`n`, box_picker_tag.go's keyTagPicker) was NOT broken --
-// only undiscoverable, since the OUTER Footer Zone 3 (this file) never
-// listed it, even though the picker's OWN inline hint line already did
-// (tagPickerBox's doc comment). tagPickerLocalBindings() must now include
-// keys.NewTag alongside its existing Up/Down/Toggle/Enter/Back set.
-func TestTagPickerLocalBindingsIncludesNewTag(t *testing.T) {
-	found := false
+// TestTagPickerLocalBindingsOmitsNewTag guards the D01 consolidation (bean
+// bt-9ipw, US-07-Reopen 2026-07-17, epic-E12-plan.md »Item 1«): the former
+// separate `n`-gated free-text new-tag sub-mode is GONE -- the Tag-Picker is
+// now ONE always-focused search field, so "n" is just a literal typeable
+// character, not a picker command. Advertising keys.NewTag in this outer
+// Footer Zone 3 set would now be actively misleading.
+func TestTagPickerLocalBindingsOmitsNewTag(t *testing.T) {
 	for _, b := range tagPickerLocalBindings() {
 		if strings.Join(b.Keys(), ",") == strings.Join(keys.NewTag.Keys(), ",") {
-			found = true
+			t.Fatalf("tagPickerLocalBindings() = %v, want it to OMIT keys.NewTag post-D01 consolidation (bean bt-9ipw)", tagPickerLocalBindings())
 		}
-	}
-	if !found {
-		t.Fatalf("tagPickerLocalBindings() = %v, want it to include keys.NewTag %v", tagPickerLocalBindings(), keys.NewTag.Keys())
 	}
 }
 
-// TestContextualLocalHintOverlayTagPickerShowsNewTag is the same guard at
-// the Footer Zone 3 rendering layer (contextualLocalHint) -- the PO-facing
-// surface B14 actually fixes ("n" was invisible in the outer footer while
-// the Tag-Picker was open).
-func TestContextualLocalHintOverlayTagPickerShowsNewTag(t *testing.T) {
+// TestContextualLocalHintOverlayTagPickerOmitsNewTag is the same guard at
+// the Footer Zone 3 rendering layer (contextualLocalHint) -- the outer
+// footer must not show a "n New tag" hint that no longer means anything
+// post-D01 (bean bt-9ipw).
+func TestContextualLocalHintOverlayTagPickerOmitsNewTag(t *testing.T) {
 	m := model{overlay: overlayTagPicker}
 	got := m.contextualLocalHint(viewLocalStub())
 	got = stripHint(got)
-	if !strings.Contains(got, "n New tag") {
-		t.Errorf("overlayTagPicker: contextualLocalHint = %q, want the New-Tag hint (%q)", got, "n New tag")
+	if strings.Contains(got, "n New tag") {
+		t.Errorf("overlayTagPicker: contextualLocalHint = %q, must NOT contain the stale New-Tag hint post-D01", got)
 	}
 }
 
