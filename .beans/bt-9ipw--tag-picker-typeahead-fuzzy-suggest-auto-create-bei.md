@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: normal
 created_at: 2026-07-16T20:13:14Z
-updated_at: 2026-07-17T06:27:03Z
+updated_at: 2026-07-17T06:45:49Z
 parent: bt-362n
 ---
 
@@ -270,3 +270,38 @@ Fix-Prelude:
   Treffer → Neuanlage-Pfad. Der n-Submodus-Typeahead (df249d7) liefert die
   Filter-/Cursor-Bausteine — ggf. Konsolidierung beider Modi in einen.
 - Quelle: PO-Review E11 Runde 3, 2026-07-17.
+
+
+## Plan-Konkretisierung E12 (2026-07-17)
+
+Plan: `docs/plans/v1-port/epic-E12-plan.md` §„Item 1: Tag-Picker (`t`)
+braucht sichtbares Suchfeld". Reihenfolge: Rang 1 (zusammen mit `bt-81f0`
+PO-mandiert zuerst).
+
+**Root Cause:** `box_picker_tag.go` hat zwei getrennte Overlay-Zustände —
+der Haupt-Picker (`tagPickerBox`/`keyTagPicker`, Zeile 203-229/444-473) hat
+KEIN Textinput, Tippen tut dort nichts. Das sichtbare Suchfeld +
+Live-Filterung existiert nur im separaten `n`-Submodus
+(`tagInputActive`/`openTagInput`/`keyTagInput`/`tagInputBox`, Zeile
+254-389/475-511, aus der ERSTEN `bt-9ipw`-Runde). PO-Zitat beschreibt exakt
+diese Lücke am Haupt-Picker.
+
+**Vorgehen (D01 im Plan):** Repro-first PFLICHT (beide Einstiege `t` direkt
+vs. `t`→`n` im tmux prüfen). Danach EIN konsolidierter Modus: Haupt-Picker
+bekommt ein IMMER sichtbares, fokussiertes Suchfeld (dasselbe
+`m.tagInput`-Widget + `filterTagItems`), Tippen filtert live, Pfeiltasten
+navigieren die gefilterte Liste, space/x togglet Multi-Select UNVERÄNDERT
+(zentraler Unterschied zum alten `n`-Submodus, dessen `enter` sofort
+schloss). `n`/kein Treffer bleibt Eskalationspfad zur Neuanlage (D11
+unverändert). Der zweistufige `tagInputActive`-Einstieg entfällt.
+
+**Akzeptanz:**
+- [ ] Repro-Ergebnis dokumentiert (welcher Einstieg zeigte das Problem)
+- [ ] `t` öffnet Picker MIT sofort sichtbarem, fokussiertem Suchfeld
+- [ ] Tippen filtert sichtbar, Eingabetext ist im Feld zu sehen
+- [ ] Pfeiltasten navigieren gefilterte Liste, space/x toggelt Multi-Select
+      unverändert (mehrere Tags gleichzeitig anhakbar)
+- [ ] `enter` ohne Treffer legt neu an (D11 unverändert)
+- [ ] `view_tag_management.go` UNANGETASTET
+- [ ] Test-Suite grün, Golden-Gegenbeleg falls Overlay-Breite sich ändert
+- [ ] tmux-Smoke: Tippen zeigt Text im Feld, Filterung sichtbar

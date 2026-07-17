@@ -7,7 +7,7 @@ priority: normal
 tags:
     - rejected
 created_at: 2026-07-15T19:21:19Z
-updated_at: 2026-07-16T06:22:49Z
+updated_at: 2026-07-17T06:46:47Z
 parent: bt-tct9
 ---
 
@@ -97,3 +97,36 @@ E8-Abschluss-Smoke (live verifiziert '▷ tags: ● to-review'). Ursachen-Analys
 US-08 im Kern ERFÜLLT — PO sieht Tags in [1] META. Die Rejection bezog sich auf den
 fehlenden tags-Eintrag im Kopfblock-Meta-Strip → getrackt als E9-B05 (bt-tct9).
 Dieses bean wird mit E9-B05 gemeinsam geschlossen.
+
+
+## Plan-Konkretisierung E12 (2026-07-17)
+
+Plan: `docs/plans/v1-port/epic-E12-plan.md` §„Item 5: US-08 Tags-Sichtbarkeit
+— Verifikation, kein erwarteter Fix". Reihenfolge: Rang 5 (Cluster mit
+`bt-se4q`, gemeinsame Datei `view_detail_bean.go`, kein hartes blocked_by).
+
+**Kein Fix ohne neuen Befund.** Historie zeigt die Kernanforderung bereits
+ZWEIFACH gelöst: (1) D01 (Epic `bt-ntoz`, Commit 397a70f) — Tags als
+Meta-Feld (`metaFields`, `view_detail_bean.go`); (2) B05 (Epic `bt-tct9`,
+redefiniert 2026-07-16) — Tags zusätzlich im Kopfblock-Meta-Strip
+(`detailHeaderBlock`, `view_detail_bean.go:193-227`, Zeile 219). US-04
+(Kopfblock-Tags) wurde vom PO in Runde 2 explizit AKZEPTIERT (`bt-tct9`
+Zeile 216). Einziger offener Rest: Q02 (`bt-tct9` Zeile 165-178,
+Reviewer-Finding `bt-mtig`) — bei ~100 Spalten Split-View (`accW≈61`) füllt
+die Kopfblock-Zeile bereits 59/61 Zeichen OHNE Tag-Inhalt, `truncate(
+typeStatusPrio, w)` (`view_detail_bean.go:224`) schneidet die Tag-Spalte
+dann hart ab. PO-Entscheid in `bt-tct9`: „bis zur Antwort keine Nacharbeit".
+
+**Vorgehen:** NUR Bestandsaufnahme, kein Code-Change. Live-Verifikation
+(tmux, `bin/bt`, Standard-Split-View-Breite) bestätigt Tags sichtbar in
+META (5. Feld) UND im Kopfblock. Q02-Zusammenhang explizit referenzieren.
+KEINE Status-/Tag-Änderung an diesem bean — Empfehlung an den PO: `bt-gdkx`
+gemeinsam mit `bt-tct9`s Q02 schließen, sobald diese beantwortet ist (bean
+sagt das bereits selbst: „wird mit E9-B05 gemeinsam geschlossen").
+
+**Akzeptanz:**
+- [ ] Live-Verifikation bestätigt: Tags sichtbar in META UND Kopfblock
+      (Label mindestens, Wert bei ausreichender Breite)
+- [ ] Q02-Zusammenhang (`bt-tct9` Zeile 165-178) im Verifikations-Ergebnis
+      explizit referenziert, kein drittes Parallel-Tracking
+- [ ] KEIN Code-Change, KEIN Status-/Tag-Wechsel an diesem bean
