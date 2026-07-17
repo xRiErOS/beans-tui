@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: low
 created_at: 2026-07-16T21:29:12Z
-updated_at: 2026-07-17T08:16:34Z
+updated_at: 2026-07-17T09:48:59Z
 ---
 
 Bestehender Bug, entdeckt im bt-9ipw-Review (2026-07-16): `keyLobby`
@@ -130,3 +130,8 @@ eigener Test-vs-Smoke-Split.
   durch diesen Fix technisch überholt, aber NICHT angepasst (out of scope:
   Plan grenzt Item 3 explizit auf EINE Datei, `view_lobby.go`, ein; die
   Nachbardatei gehört zu bt-9ipws Scope).
+
+
+## Review 2026-07-17 (E12, US-03)
+
+US-03 · Lobby-Suche verschluckt i/k nicht mehr · r — PO-Begründung betrifft nicht diesen Fix, sondern fehlende Repo-Discovery in der Lobby (PO wörtlich in bt-5uzr Review-Sektion). Fix selbst unstrittig, bean bleibt completed; Nacharbeit → bt-d3ps.
