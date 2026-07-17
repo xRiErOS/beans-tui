@@ -46,12 +46,17 @@ func valueMenuLocalBindings() []keybind.Binding {
 //
 // DEVIATION from epic-E7-plan.md Task 7 Step 6's literal text (which lumps
 // Tag-/Parent-/Blocking-Picker into ONE Toggle-free {Up,Down,Enter,Back}
-// set): keyTagPicker (box_picker_tag.go) actually wires keys.Toggle
-// (space/x, multi-select tag membership -- toggleTagPending). Omitting it
-// here would silently hide a real, working key and leave Q04's own general
-// wording ("wenn ein Form/Overlay aktiv ist ... inkl. 'space:
+// set): keyTagPicker (box_picker_tag.go) actually wires a toggle. Omitting
+// it here would silently hide a real, working key and leave Q04's own
+// general wording ("wenn ein Form/Overlay aktiv ist ... inkl. 'space:
 // select/toggle'") only half addressed -- Q04's PO example (the Filter-Menu)
-// was illustrative, not exhaustive. See this task's Deviations section.
+// was illustrative, not exhaustive.
+//
+// keys.TagToggle, NOT keys.Toggle (ERRATUM/D01-Nachtrag, bean bt-9ipw
+// Review-R1 B01): inside the picker's always-focused search field, "x" is a
+// literal, typeable character -- only space toggles there. Advertising the
+// shared "space/x" Toggle label here would mislead exactly the way the
+// stale NewTag hint (below) would have.
 //
 // keys.NewTag REMOVED (bean bt-9ipw, US-07-Reopen 2026-07-17, D01): the
 // former separate `n`-gated free-text new-tag sub-mode this hint used to
@@ -60,7 +65,7 @@ func valueMenuLocalBindings() []keybind.Binding {
 // (e.g. filtering for a tag containing "n") rather than a picker command.
 // Advertising it here would be actively misleading post-consolidation.
 func tagPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.Enter, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, keys.TagToggle, keys.Enter, keys.Back}
 }
 
 // parentPickerLocalBindings is the Parent-Picker overlay's own footer set

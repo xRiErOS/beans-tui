@@ -258,13 +258,15 @@ type model struct {
 	// "empty query -> full list" contract, view_lobby.go) -- seeded full on
 	// open, recomputed only when the input's value actually changes.
 	// tagInputSuggestCursor is a plain int cursor over tagInputFiltered
-	// (NOT a listState) -- THE Haupt-Picker's own row cursor now (space/x
+	// (NOT a listState) -- THE Haupt-Picker's own row cursor now (space
 	// toggles the row AT this cursor, replacing the old m.menu-driven
 	// cursor over the unfiltered tagItems), reset to 0 whenever
-	// tagInputFiltered is recomputed. Up/Down/space/x are deliberately
-	// intercepted via RAW tea.KeyType/keybind.Matches in keyTagPicker,
+	// tagInputFiltered is recomputed. Up/Down/space are deliberately
+	// intercepted via RAW tea.KeyType/literal-space checks in keyTagPicker,
 	// NEVER via navKey's letter-alias table (keys.Up/keys.Down also bind
-	// "i"/"k") -- this is a free-text capture field, so "i"/"k" must stay
+	// "i"/"k") or keys.Toggle (which also binds "x" -- ERRATUM/D01-
+	// Nachtrag, Review-R1 B01, rationale in keyTagPicker) -- this is a
+	// free-text capture field, so "i"/"k"/"x" must stay
 	// literal, typeable characters (e.g. a tag named "risk"). keyLobby's own
 	// repoQuery filter routes navKey() BEFORE its textinput update and thus
 	// SWALLOWS typed "i"/"k"/"j"/"l" -- that is an EXISTING BUG there (bean

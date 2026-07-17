@@ -15,10 +15,11 @@ package tui
 // there is nothing to "confirm"). The search field mirrors keySearchInput's
 // "one persistent textinput.Model, reset+focused on open, every key but
 // enter/esc belongs to the input" convention (update.go:520-549) -- EXCEPT
-// that here space/x (Toggle) and Up/Down (navigation) ALSO stay intercepted
+// that here space (toggle) and Up/Down (navigation) ALSO stay intercepted
 // ahead of the input, since multi-select must keep working while the field
 // is focused (D01, the very acceptance criterion this bean was reopened
-// for).
+// for). Toggle is space ONLY -- NOT keys.Toggle's "x" alias (ERRATUM/
+// D01-Nachtrag, Review-R1 B01: "x" must stay typeable; see keyTagPicker).
 //
 // ERRATUM vs. the plan's own EARLIER Step-1 test sketch ("+1 Tag, -1 Tag ->
 // 2 Mutationen (tea.Batch)"): superseded by the plan's own "Design-Nachtrag"
@@ -246,12 +247,14 @@ func filterTagItems(items []tagCount, query string) []tagCount {
 // table ("i"/"k" must stay literal, typeable characters here, e.g. a tag
 // named "risk"; keyLobby swallowing them in its repoQuery filter is an
 // EXISTING BUG, bean bt-l8e7, not a precedent -- full rationale in
-// types.go's own doc-stamp). Esc/Toggle/Enter are matched via keybind so a
-// future rebind of any of the three stays correct here automatically; they
-// are intercepted AHEAD of the textinput for the same reason Up/Down are
-// (space/x must keep toggling multi-select while the field is focused, the
-// acceptance criterion this bean was reopened for -- D01 explicitly keeps
-// this "unverändert"). Every other key falls through to
+// types.go's own doc-stamp). Esc/Enter are matched via keybind so a future
+// rebind of either stays correct here automatically; toggle is the literal
+// SPACE character only (ERRATUM/D01-Nachtrag, Review-R1 B01 -- inline
+// rationale at the case below). All three are intercepted AHEAD of the
+// textinput for the same reason Up/Down are (multi-select must keep working
+// while the field is focused, the acceptance criterion this bean was
+// reopened for -- D01 explicitly keeps this "unverändert"). Every other key
+// falls through to
 // m.tagInput.Update(msg); tagInputFiltered/tagInputSuggestCursor are
 // recomputed ONLY when that Update actually changed the input's value
 // (mirrors keyLobby's own prev/current repoQuery-changed guard,
@@ -283,7 +286,19 @@ func (m model) keyTagPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		m.tagInput.Blur()
 		return m, nil
-	case keybind.Matches(msg, keys.Toggle):
+	case keybind.Matches(msg, keys.TagToggle):
+		// ERRATUM/D01-Nachtrag (Review-R1 B01, Supervisor-Entscheid): toggle
+		// is deliberately the space-only keys.TagToggle here -- NOT
+		// keys.Toggle, because keys.Toggle also binds "x" (keymap.go), and
+		// intercepting "x" ahead of the textinput made it a NEVER-typeable
+		// character (tags like nginx/linux/unix/box were silently
+		// unfilterable and uncreatable). Space is safe to reserve:
+		// data.ValidTagName never admits a space, so no tag name is lost.
+		// Same "typeability of a common letter beats alias redundancy"
+		// rationale as the raw-KeyType i/k intercept above. The plan's
+		// "space/x togglet" wording is thereby consciously narrowed to space
+		// for THIS overlay (filter menu/blocking picker keep both) -- full
+		// rationale at keys.TagToggle's own keymap.go doc-stamp.
 		return m.toggleTagPending(), nil
 	case keybind.Matches(msg, keys.Enter):
 		return m.tagPickerEnter()
@@ -336,7 +351,7 @@ func (m model) toggleTagPending() model {
 // (deduped) and set pending=true. Unlike the old sub-mode, this does NOT
 // close the picker -- it clears the query back to the full (now one-larger)
 // list so the PO can keep toggling/creating more tags in the same session,
-// consistent with space/x's own "keep going" semantics.
+// consistent with space-toggle's own "keep going" semantics.
 func (m model) tagPickerEnter() (tea.Model, tea.Cmd) {
 	name := strings.TrimSpace(m.tagInput.Value())
 	if len(m.tagInputFiltered) == 0 && name != "" {
@@ -437,7 +452,7 @@ func (m model) applyTagPickerDiff() (tea.Model, tea.Cmd) {
 func (m model) tagPickerBox() string {
 	var b strings.Builder
 
-	hint := "type:filter  ↑/↓:nav  space/x:toggle  enter:save  esc:discard"
+	hint := "type:filter  ↑/↓:nav  space:toggle  enter:save  esc:discard"
 	if len(m.tagInputFiltered) == 0 && strings.TrimSpace(m.tagInput.Value()) != "" {
 		hint = "no match — enter:create new tag  esc:discard"
 	}

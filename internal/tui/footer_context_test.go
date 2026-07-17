@@ -58,17 +58,22 @@ func TestContextualLocalHintOverlayValueMenu(t *testing.T) {
 // TestContextualLocalHintOverlayTagPickerShowsToggle guards a deliberate
 // DEVIATION from epic-E7-plan.md Task 7 Step 6's literal text (which lumps
 // Tag-/Parent-/Blocking-Picker into one Toggle-free {Up,Down,Enter,Back}
-// set): keyTagPicker (box_picker_tag.go) really wires keys.Toggle
-// (space/x, multi-select tag membership) -- omitting it here would hide a
-// real, working key AND leave Q04's own general wording ("wenn ein
-// Form/Overlay aktiv ist ... inkl. space: select/toggle") only half
-// addressed. See this task's Deviations section / footer_context.go.
+// set): keyTagPicker (box_picker_tag.go) really wires a toggle -- omitting
+// it here would hide a real, working key AND leave Q04's own general
+// wording ("wenn ein Form/Overlay aktiv ist ... inkl. space:
+// select/toggle") only half addressed. Post-Review-R1 B01 (bean bt-9ipw,
+// ERRATUM/D01-Nachtrag) the displayed binding is the SPACE-ONLY
+// keys.TagToggle -- the shared "space/x Toggle facet" label would mislead,
+// since "x" is a literal, typeable search character inside this picker.
 func TestContextualLocalHintOverlayTagPickerShowsToggle(t *testing.T) {
 	m := model{overlay: overlayTagPicker}
 	got := m.contextualLocalHint(viewLocalStub())
 	got = stripHint(got)
-	if !strings.Contains(got, "space/x Toggle facet") {
-		t.Errorf("overlayTagPicker: contextualLocalHint = %q, want the Toggle hint", got)
+	if !strings.Contains(got, "space Toggle tag") {
+		t.Errorf("overlayTagPicker: contextualLocalHint = %q, want the space-only TagToggle hint", got)
+	}
+	if strings.Contains(got, "space/x") {
+		t.Errorf("overlayTagPicker: contextualLocalHint = %q, must NOT show the space/x alias label -- x is typeable text here (B01)", got)
 	}
 }
 

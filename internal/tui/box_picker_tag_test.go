@@ -270,10 +270,15 @@ func TestTagPickerToggleFlipsPendingOnly(t *testing.T) {
 		t.Fatal("tagOriginal must stay unchanged by a pending toggle")
 	}
 
+	// ERRATUM/D01-Nachtrag (Review-R1 B01): "x" no longer toggles here --
+	// it is a literal, typeable search character (keys.TagToggle is
+	// space-only). The second toggle exercises space again on a different
+	// row; "x"'s literal-typing guarantee has its own dedicated test
+	// (TestTagPickerTypedXStaysLiteralNotToggle).
 	m = tagPickerCursorTo(t, m, "backend")
-	m = step(t, m, runeMsg('x'))
+	m = step(t, m, runeMsg(' '))
 	if !m.tagPending["backend"] {
-		t.Fatal("x did not toggle backend ON in tagPending")
+		t.Fatal("space did not toggle backend ON in tagPending")
 	}
 	if m.tagOriginal["backend"] {
 		t.Fatal("tagOriginal must stay unchanged (backend was never original)")
@@ -588,6 +593,59 @@ func TestTagPickerToggleTogglesCursoredSuggestionNotFirst(t *testing.T) {
 		// from this assertion only because it is tk-2's ORIGINAL tag and
 		// thus legitimately pending from the seed).
 		t.Fatalf("space toggled index-0 tag %q instead of the cursored %q", first, cursored)
+	}
+}
+
+// TestTagPickerTypedXStaysLiteralNotToggle is Review-R1 B01 (bt-9ipw
+// Fix-Runde, Supervisor-ERRATUM zu D01): the first consolidation round
+// intercepted keys.Toggle (which binds BOTH " " and "x", keymap.go) ahead of
+// the textinput -- so "x" could NEVER be typed into the search field, making
+// tags like nginx/linux/unix/box silently unfilterable and uncreatable.
+// D01-Nachtrag: toggle is deliberately narrowed to the SPACE character only
+// (space is never part of a valid tag name, data.ValidTagName) -- "x" must
+// fall through to the textinput as a literal, typeable character, same
+// rationale as the i/k raw-KeyType intercept.
+func TestTagPickerTypedXStaysLiteralNotToggle(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('t'))
+	pendingBefore := len(m.tagPending)
+
+	for _, r := range "linux" {
+		m = step(t, m, runeMsg(r))
+	}
+
+	if got := m.tagInput.Value(); got != "linux" {
+		t.Fatalf("tagInput.Value() = %q, want %q -- 'x' must stay a literal, typeable character (B01)", got, "linux")
+	}
+	if len(m.tagPending) != pendingBefore {
+		t.Fatalf("tagPending = %v, want unchanged -- typing 'x' must not toggle a row as a side effect", m.tagPending)
+	}
+}
+
+// TestTagPickerBoxRendersSearchField is Review-R1 I01 (bt-9ipw Fix-Runde):
+// the render layer was unguarded -- a reviewer mutation that deleted the
+// m.tagInput.View() write in tagPickerBox survived the whole suite GREEN.
+// This pins the always-visible search field at the RENDER level: the
+// ANSI-stripped tagPickerBox output must contain the field (placeholder
+// text while empty, the typed value once typing) -- exactly the PO-facing
+// surface US-07 was reopened over.
+func TestTagPickerBoxRendersSearchField(t *testing.T) {
+	m := fixtureModel(t, fixtureBeansTagged())
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('t'))
+
+	out := ansi.Strip(m.tagPickerBox())
+	if !strings.Contains(out, "type to filter or create") {
+		t.Fatalf("tagPickerBox() = %q, want the search field's placeholder rendered while the query is empty", out)
+	}
+
+	for _, r := range "rev" {
+		m = step(t, m, runeMsg(r))
+	}
+	out = ansi.Strip(m.tagPickerBox())
+	if !strings.Contains(out, "rev") {
+		t.Fatalf("tagPickerBox() = %q, want the typed query %q visibly rendered in the search field", out, "rev")
 	}
 }
 

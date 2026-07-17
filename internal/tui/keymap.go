@@ -76,6 +76,19 @@ type keyMap struct {
 	// msg.String() comparison cannot be rendered.
 	NewTag keybind.Binding // n — new tag (Tag-Picker free-text sub-mode)
 
+	// TagToggle (ERRATUM/D01-Nachtrag, bean bt-9ipw Review-R1 B01) is the
+	// Tag-Picker's OWN space-only toggle -- deliberately NOT a reuse of
+	// Toggle (which binds " " AND "x"): inside the picker's always-focused
+	// search field (bt-9ipw D01 consolidation), "x" must stay a literal,
+	// typeable character (nginx/linux/unix/box), so ONLY space toggles
+	// there -- space is safe to reserve because data.ValidTagName never
+	// admits one. Filter menu / Blocking picker keep the full space/x
+	// Toggle. A SEPARATE keybind.Binding (not a narrowed Toggle) mirrors
+	// the RenameTag precedent below: TestHelpGroupsCoverEveryBindingExactly
+	// Once identifies bindings by their OWN key set (" " alone vs " ,x"),
+	// so the two coexist without tripping that drift guard.
+	TagToggle keybind.Binding // space — toggle tag (Tag-Picker, space-only)
+
 	// RenameTag (E10 Task 5, bean bt-y9my, epic bt-362n D13/D14) is a
 	// Tag-Management-page-LOCAL binding on "e" -- the SAME raw key as the
 	// GLOBAL Editor binding ("e"/"ctrl+e"), but a disjoint, mutually
@@ -150,6 +163,8 @@ func newKeyMap() keyMap {
 
 		NewTag: keybind.NewBinding(keybind.WithKeys("n"), keybind.WithHelp("n", "New tag")),
 
+		TagToggle: keybind.NewBinding(keybind.WithKeys(" "), keybind.WithHelp("space", "Toggle tag")),
+
 		RenameTag: keybind.NewBinding(keybind.WithKeys("e"), keybind.WithHelp("e", "Rename")),
 
 		Fullscreen: keybind.NewBinding(keybind.WithKeys("v"), keybind.WithHelp("v", "fullscreen")),
@@ -176,7 +191,7 @@ func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen, k.HistoryBack, k.HistoryForward}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
-		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.Sort, k.NewTag, k.RenameTag}},
+		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.TagToggle, k.Sort, k.NewTag, k.RenameTag}},
 	}
 }
 
