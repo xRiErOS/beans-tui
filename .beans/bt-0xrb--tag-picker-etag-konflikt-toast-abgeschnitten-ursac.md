@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-17T09:43:51Z
-updated_at: 2026-07-17T09:58:26Z
+updated_at: 2026-07-17T10:07:32Z
 parent: bt-5uzr
 ---
 
@@ -51,3 +51,42 @@ Divergiert deterministisch bei jedem bean, dessen Datei kein `priority:`-Feld tr
 1. Upstream-Issue bei hmans/beans wird gefiled (Entwurf → PO-Freigabe → Absenden).
 2. Die 10 betroffenen lean-stack-beans werden sofort geheilt (einmalige kanonische Mutation; außerhalb dieses beans).
 3. KEINE Konflikt-Sonderfall-Mitigation in beans-tui. Scope dieses beans damit final: B01a — Toast wächst dynamisch bis Meldung vollständig (alle Severities), plain-ErrConflict-Zweig befüllt toastCtx mit handlungsleitenden Details (mirrort update.go:290-303-Zweig). Regressionstests overlay_show_toast_test.go + etag_conflict_test.go.
+
+
+## Plan-Konkretisierung E13 (2026-07-17)
+
+Plan: `docs/plans/v1-port/epic-E13-plan.md` §„Item 1: Toast wächst dynamisch
++ toastCtx im plain-ErrConflict-Zweig". Reihenfolge: Rang 1 (Toast-Familie,
+vor `bt-tm4a`, sequenziell in EINEM Worktree).
+
+**Root Cause (file:line, verifiziert gegen Ist-Code 2026-07-17):**
+- `overlay_show_toast.go:146` `const toastBoxWidth = 36` — fixe Breite.
+- `overlay_show_toast.go:156` `ansi.Truncate(t.title, innerW-2, "…")` —
+  innerW-2=30, „Conflict: bean changed externally" (34 Zeichen) wird
+  abgeschnitten.
+- `overlay_show_toast.go:160` dieselbe Truncate-Logik für `context`.
+- `update.go:275-327` (`applyMutationResult`): plain-ErrConflict-Zweig
+  (Zeile 279-303, kein `*conflictWithRecovery`-Match) lässt `toastCtx = ""`
+  (Zeile 290) — `err.Error()` (Bean-ID + CLI-Detail aus
+  `internal/data/mutations.go:63/75`) wird verworfen.
+
+**Vorgehen (Kurzfassung, Details im Plan):** `toastBoxWidth` durch
+content-getriebene Breite ersetzen (geklemmt `[32, min(m.width-4, 70)]`,
+Cap=70 Planner-Entscheidung), `ansi.Truncate("…")` durch Wordwrap ersetzen
+(alle drei `toastKind`-Severities), plain-ErrConflict-Zweig `toastCtx` mit
+`err.Error()` vorbelegen (vor dem `errors.As(&cr)`-Override).
+
+**Akzeptanz (abhakbar, siehe Plan für Volltext):**
+- [ ] `toastBoxWidth` content-getrieben, geklemmt `[32, min(m.width-4, 70)]`
+- [ ] Kein `ansi.Truncate("…")` mehr für Titel/Context — Wordwrap statt
+      Abschneiden
+- [ ] Gilt für alle drei `toastKind`-Severities
+- [ ] Plain-ErrConflict-Zweig setzt nicht-leeren `toastCtx` aus `err.Error()`
+- [ ] Recovery-Pfad-Verhalten (`toastCtx = "Version saved: …"`) unverändert
+- [ ] Test-Suite grün, neue Tests in `overlay_show_toast_test.go` +
+      `etag_conflict_test.go`
+- [ ] tmux-Smoke: Conflict-Repro (`lean-stack-n0ly` via `t`-Picker) zeigt
+      vollständige Meldung + Detailzeile, kein Abschneiden
+
+Scope bleibt final D04-gebunden (siehe eigene „PO-Entscheid Grilling
+2026-07-17"-Sektion oben): NUR B01a, keine Konflikt-Sonderfall-Mitigation.

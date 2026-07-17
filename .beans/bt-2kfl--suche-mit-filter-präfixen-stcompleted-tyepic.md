@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: normal
 created_at: 2026-07-17T06:21:42Z
-updated_at: 2026-07-17T09:58:26Z
+updated_at: 2026-07-17T10:08:09Z
 parent: bt-5uzr
 ---
 
@@ -79,3 +79,47 @@ Bean-Summary dokumentieren.
 
 - **D02 — Sync-Richtung (ehem. Q2): Separater additiver Layer.** Präfixe bleiben Teil der Query, Parser wertet live aus; f-Menü-State (`m.filterStatus` etc.) bleibt unberührt. Filteranzeige im Tree-Kopf (`filterSummary`) zeigt die UNION aus Menü-Facetten und getippten Präfixen. Query löschen = getippte Filter weg.
 - **D03 — Parser-Zeitpunkt (ehem. Q3): Bei jedem Tastendruck.** Parser trennt lokal Präfix-Paare + Rest-Text; NUR der Rest-Text geht den bestehenden Such-Pfad (Bleve ab 3 Zeichen des Rests). Präfixe erreichen Bleve nie.
+
+
+## Plan-Konkretisierung E13 (2026-07-17)
+
+Plan: `docs/plans/v1-port/epic-E13-plan.md` §„Item 3: Suche mit
+Filter-Präfixen". Reihenfolge: Parallel-Welle (mit `bt-d3ps`/`bt-nxuk`,
+disjunkte Dateien), NACH der Toast-Familie (`bt-0xrb`/`bt-tm4a`).
+
+D02/D03 (siehe eigene „PO-Entscheidungen Grilling 2026-07-17"-Sektion oben)
+bleiben final, NICHT neu aufgemacht: additiver Layer (`f`-Menü unberührt),
+Parser bei jedem Tastendruck, nur Rest-Text erreicht Bleve.
+
+**ERRATUM (Zeilen-Drift seit der ursprünglichen Diagnose):**
+`box_filter_facets.go`s `filterSummary` liegt jetzt bei Zeile **500-517**
+(nicht mehr 324-339) — `bt-2p9m`s Querformat-Umbau (Commits `b150c9f`/
+`e3b1701`, nach dieser Diagnose gemerged) hat das File umsortiert.
+`facetHead` liegt jetzt bei Zeile **32-38**. `view_browse_repo.go:251-260`
+(`beanMatchesSearch`) ist UNVERÄNDERT, kein Drift dort.
+
+**Vorgehen (Kurzfassung, Details im Plan):**
+1. Neue Funktion `parseSearchPrefixes(query string) (facets
+   map[string][]string, rest string)` — Kürzel-Set `st`/`ty`/`pr`/`tag`,
+   case-insensitiv, ungültige Präfixe/Werte fallen in `rest`.
+2. `keySearchInput` (`update.go:1588-1607`): pro Tastendruck parsen, Ergebnis
+   in NEUEN Model-Feldern (`m.searchPrefixFacets`/`m.searchPrefixRest`)
+   ablegen, GETRENNT von `m.filterStatus`/etc. `dispatchBleveIfDue` dispatcht
+   gegen `rest`, nicht die volle Query.
+3. `beanMatchesSearch` (`view_browse_repo.go:251-260`): Substring-Abgleich
+   gegen `m.searchPrefixRest`, zusätzliche AND-Bedingung gegen
+   `m.searchPrefixFacets` (Membership-Semantik wie `beanMatchesFacets`).
+4. `filterSummary` (`box_filter_facets.go:500-517`): UNION-Anzeige aus
+   `m.filterStatus`/etc. UND `m.searchPrefixFacets` je Facet-Zeile.
+
+**Akzeptanz (siehe Plan für Volltext, unverändert aus Bean-Entwurf
+übernommen):**
+- [ ] `/st:completed ty:epic foo` filtert AND-verknüpft korrekt
+- [ ] Präfixe case-insensitiv, Reihenfolge egal
+- [ ] Ungültiges Präfix/Wert → normaler Suchtext, kein Fehler
+- [ ] `filterSummary` spiegelt UNION aus Menü-Facetten + getippten Präfixen
+- [ ] Parser bei jedem Tastendruck, nur `rest` erreicht Bleve
+- [ ] `m.filterStatus`/etc. bleibt von getippten Präfixen unberührt
+- [ ] Test-Suite grün, neue Tests für `parseSearchPrefixes` + Union-Anzeige
+- [ ] tmux-Smoke: `/st:completed ty:epic` → Tree-Kopf zeigt
+      `St:completed Ty:epic`, `f`-Menü bleibt beim Öffnen leer
