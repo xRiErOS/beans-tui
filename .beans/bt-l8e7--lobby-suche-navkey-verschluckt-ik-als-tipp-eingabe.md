@@ -1,11 +1,11 @@
 ---
 # bt-l8e7
 title: 'Lobby-Suche: navKey verschluckt i/k als Tipp-Eingabe'
-status: in-progress
+status: completed
 type: bug
 priority: low
 created_at: 2026-07-16T21:29:12Z
-updated_at: 2026-07-17T08:08:31Z
+updated_at: 2026-07-17T08:16:34Z
 ---
 
 Bestehender Bug, entdeckt im bt-9ipw-Review (2026-07-16): `keyLobby`
@@ -48,3 +48,85 @@ fällt weiter zur bestehenden `m.repoSearch.Update(msg)`-Zeile durch.
 - [ ] Regressionstest analog `TestTagInputArrowKeysDoNotLeakIntoTypedText`
       (z. B. `TestLobbyQueryDoesNotSwallowArrowAliasLetters`)
 - [ ] Test-Suite grün
+
+## Summary
+
+Root cause bestätigt (`view_lobby.go:350-359`, Zeilen wie im Plan-Erratum
+erwartet leicht gedriftet, aber identisch adressiert): `keyLobby` prüfte
+`navKey(msg.String())` VOR der Textinput-Weiterleitung. `navKey` (keymap.go)
+aliast `keys.Up`/`keys.Down` auf `i`/`k` (vim-Stil) -- ein Repo-Query, der
+mit `i`/`k` beginnt, wurde als Navigation verschluckt statt ins Suchfeld zu
+gehen.
+
+Fix: `keyLobby`s `switch navKey(msg.String())`-Block durch `switch msg.Type`
+auf `tea.KeyUp`/`tea.KeyDown` ersetzt -- exaktes 1:1-Mirror von
+`keyTagPicker` (`box_picker_tag.go`, bt-9ipw). Jede andere Taste (inkl.
+literal getippter "i"/"k") fällt weiter zur bestehenden
+`m.repoSearch.Update(msg)`-Zeile durch.
+
+## Test-Output
+
+RED (vor Fix, `TestLobbyQueryDoesNotSwallowArrowAliasLetters`):
+
+```
+=== RUN   TestLobbyQueryDoesNotSwallowArrowAliasLetters
+    view_lobby_test.go:90: repoQuery = "de", want "ide" -- i/k must stay literal, not be swallowed as up/down
+--- FAIL: TestLobbyQueryDoesNotSwallowArrowAliasLetters (0.00s)
+```
+
+GREEN (nach Fix, plus Gegen-Test für unveränderte Pfeiltasten-Navigation):
+
+```
+=== RUN   TestLobbyQueryDoesNotSwallowArrowAliasLetters
+--- PASS: TestLobbyQueryDoesNotSwallowArrowAliasLetters (0.00s)
+=== RUN   TestLobbyArrowKeysStillNavigateRepoList
+--- PASS: TestLobbyArrowKeysStillNavigateRepoList (0.00s)
+```
+
+Voller Lauf (ohne -short, Pflicht vor Commit):
+
+```
+ok  	beans-tui	[no test files]
+ok  	beans-tui/cmd	0.725s
+ok  	beans-tui/internal/clip	[no test files]
+ok  	beans-tui/internal/config	0.392s
+ok  	beans-tui/internal/data	3.346s
+ok  	beans-tui/internal/theme	1.469s
+ok  	beans-tui/internal/tui	154.505s
+```
+Gesamtdauer 2:34.97 (real), exit 0. `go vet ./...` clean, `gofmt -l` clean
+(beide berührten Dateien).
+
+## Smoke
+
+tmux (`bin/bt` aus diesem Worktree, eindeutiger Session-Name `btl8e729168`):
+Lobby (`p`) geöffnet, "ide" getippt -- Filterfeld zeigt vollständig `⌕ ide`,
+kein verschlucktes Zeichen:
+
+```
+│                                              ⌕ ide                                               │
+```
+
+Pfeiltasten-Navigation nicht separat live gesmoked (keine Repos im
+Test-config.yaml), aber durch `TestLobbyArrowKeysStillNavigateRepoList`
+(neu) UND die bereits bestehende Test-Suite (`TestLobbyFilterNarrowsBySearch`
+etc.) strukturell abgedeckt -- gleiche Argumentationslinie wie bt-9ipws
+eigener Test-vs-Smoke-Split.
+
+## Deviations/ERRATA
+
+- Plan nennt `view_lobby.go:350-359` als Fix-Zeilen -- Ist-Code stimmte
+  exakt überein, keine Drift.
+- Plan verweist auf `keyTagInput`/`TestTagInputArrowKeysDoNotLeakIntoTypedText`
+  als Vorbild -- durch bt-9ipws eigene Konsolidierung (D01, "EIN
+  konsolidierter Modus statt zwei getrennter") sind Funktion und Test
+  inzwischen umbenannt zu `keyTagPicker`/
+  `TestTagPickerArrowKeysDoNotLeakIntoTypedText` (box_picker_tag.go bzw.
+  box_picker_tag_test.go). Fix-Pattern identisch übernommen, nur die
+  Referenz-Namen sind gedriftet -- dokumentiert wie vom Auftrag verlangt
+  (ERRATUM-Kultur), kein Scope-Abweichung.
+- `box_picker_tag.go`s eigener Doc-Kommentar (Zeile ~248) referenziert
+  bt-l8e7 noch als "EXISTING BUG, not a precedent" -- dieser Kommentar wird
+  durch diesen Fix technisch überholt, aber NICHT angepasst (out of scope:
+  Plan grenzt Item 3 explizit auf EINE Datei, `view_lobby.go`, ein; die
+  Nachbardatei gehört zu bt-9ipws Scope).
