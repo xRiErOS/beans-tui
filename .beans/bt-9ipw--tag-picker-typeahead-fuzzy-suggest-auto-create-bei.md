@@ -1,11 +1,11 @@
 ---
 # bt-9ipw
 title: Tag-Picker Typeahead — Fuzzy-Suggest + Auto-Create bei No-Match
-status: in-progress
+status: completed
 type: feature
 priority: normal
 created_at: 2026-07-16T20:13:14Z
-updated_at: 2026-07-17T06:48:30Z
+updated_at: 2026-07-17T07:16:12Z
 parent: bt-362n
 ---
 
@@ -305,3 +305,197 @@ unverändert). Der zweistufige `tagInputActive`-Einstieg entfällt.
 - [ ] `view_tag_management.go` UNANGETASTET
 - [ ] Test-Suite grün, Golden-Gegenbeleg falls Overlay-Breite sich ändert
 - [ ] tmux-Smoke: Tippen zeigt Text im Feld, Filterung sichtbar
+
+## Summary (Implementer, 2026-07-17, US-07-Reopen Fix)
+
+Konsolidiert `box_picker_tag.go`s zwei getrennte Overlay-Zustände (Haupt-Picker
+ohne Textinput + separater `n`-Submodus mit dem einzigen sichtbaren Suchfeld)
+zu EINEM Modus (D01, epic-E12-plan.md »Item 1«): `t` öffnet den Picker jetzt
+mit einem sofort sichtbaren, fokussierten Suchfeld (`m.tagInput`). Tippen
+filtert `m.tagInputFiltered` live (bestehende `filterTagItems`, case-
+insensitive Substring, YAGNI-Fuzzy weiterhin nicht). Pfeiltasten (raw
+`tea.KeyUp`/`tea.KeyDown`, NICHT `navKey`) navigieren die gefilterte Liste;
+space/x (`keybind.Matches(msg, keys.Toggle)`) togglet weiterhin Multi-Select
+am Cursor — UNVERÄNDERT möglich während das Feld fokussiert ist (zentrale
+Akzeptanz dieses Reopens). `enter` ist jetzt kontextabhängig: mit mindestens
+einem Treffer (inkl. leerer Query = volle Liste) unverändertes
+`applyTagPickerDiff` (Save+Close); ohne Treffer bei nicht-leerem Query ->
+Neuanlage-Pfad (D11 unverändert: reine Zuweisung, kein Registry-Write), der
+Query danach zurücksetzt statt den Picker zu schließen ("weiter geht's").
+
+Der zweistufige `t`→`n`-Einstieg (`tagInputActive`/`openTagInput`/
+`keyTagInput`/`tagInputBox`) ist komplett entfernt — vollständig in
+`tagPickerBox`/`keyTagPicker` aufgegangen (Implementer-Entscheidung aus dem
+Plan-Text: kein Compat-Layer). `openTagPicker()` liefert jetzt
+`(tea.Model, tea.Cmd)` statt nur `model` (mirrort `openSearchInput`) und
+gibt `textinput.Blink` zurück, damit der jetzt immer fokussierte Cursor
+tatsächlich blinkt — betroffene Call-Sites angepasst: `update.go` (zwei
+Stellen: `keyNodeAction`s `t`-Case, `activateDetailField`s `"tags"`-Case)
+und `overlay_palette.go` (`"tags"`-Case). Die Palette-Aktion `"create_tag"`
+war früher ein SEPARATER Chain-Aufruf (`openTagPicker().openTagInput()`
++ eigener `focusedBean()`-Guard) — post-D01 ist sie inhaltlich identisch mit
+`"tags"` (beide landen im selben, sofort tippbaren Picker), daher auf
+`return m.openTagPicker()` vereinfacht.
+
+`footer_context.go`s `tagPickerLocalBindings()` verliert `keys.NewTag`
+("n" ist jetzt ein normaler tippbarer Buchstabe im Suchfeld, kein
+Picker-Kommando mehr) — `keys.NewTag` selbst bleibt im globalen Keymap
+bestehen, da `view_tag_management.go`s eigene "n"-Bindung (Tag-Management-
+Page, UNANGETASTET laut Auftrag) ihn weiterhin nutzt.
+
+## Test-Output (RED -> GREEN)
+
+RED (Compile-Fail, `go vet ./...` nach der Implementierung, VOR der
+Test-Anpassung):
+
+```
+# beans-tui/internal/tui
+vet: internal/tui/box_picker_tag_test.go:365:8: m.tagInputActive undefined (type model has no field or method tagInputActive)
+```
+
+(Der Produktivcode kompilierte bereits fehlerfrei — Repro-first + Design galt
+also erst als bewiesen, nachdem die Tests nachgezogen waren. Nach dem
+Test-Rewrite: RED-Fehler behoben, `go vet ./...` sauber.)
+
+Zielgerichteter Testlauf nach dem vollständigen Rewrite (Tag-Picker +
+Footer + Palette + Keymap):
+
+```
+go test ./internal/tui/... -run 'TagPicker|TagInput|Palette|FooterContext|Keymap|NewTag|Contextual' -v
+...
+ok  	beans-tui/internal/tui	4.149s
+```
+
+Alle 8 alten Typeahead-spezifischen Tests (`TestTagInputOpensWithFiltered...`,
+`TestTagInputFiltersLive...`, `TestTagInputNavigation...`,
+`TestTagInputArrowKeysDoNotLeak...`, `TestTagInputEnterOnSuggestion...`,
+`TestTagInputEnterSelectsCursored...`, `TestTagInputEnterWithNoMatch...`,
+`TestTagInputBoxRenders...`) sowie `TestTagPickerEscFromInputKeepsPickerOpen...`
+und die beiden `create_tag`-Palette-Tests wurden umbenannt/neu geschrieben, da
+ihre Prämisse (getrennter `n`-Submodus) durch D01 wegfällt — Details siehe
+Deviations unten.
+
+Voller Lauf (`go test ./...`, KEIN `-short`) ZWEIMAL in Folge grün (zweiter
+Lauf mit `-count=1` erzwungen, nicht aus dem Cache):
+
+```
+Lauf 1: ok  	beans-tui/internal/tui	142.378s   (+ cmd/config/data/theme grün)
+Lauf 2: ok  	beans-tui/internal/tui	143.159s   (-count=1, kein Cache-Treffer)
+```
+
+`gofmt -l .` leer, `go vet ./...` sauber, `command go build -o bin/bt .`
+sauber.
+
+## Smoke (echt gesmoked via tmux, bin/bt, main-direkt-Repo)
+
+Repro-first (Schritt 2, VOR jeder Code-Änderung, gegen den alten Stand):
+tmux-Session `bt9ipwR2$$`/`btsmoke$$` (Namenskollision mit einer generischen
+`bt9ipw$$`-Session eines anderen parallelen Agents beobachtet — sofort mit
+eindeutigerem Namen neu aufgesetzt, mirrort E11-Lessons-Learned Eintrag 1).
+Ergebnis: `t` (Haupt-Picker) + Tippen "urg" -> KEIN sichtbares Feedback
+(kein Feld, keine Filterung) — bestätigt den PO-Befund exakt. `t`→`n`
+(alter Submodus) + Tippen "urg" -> Feld UND Text sichtbar ("urg" im
+`New tag`-Panel). Root Cause damit am Haupt-Picker (nicht am Submodus)
+bestätigt, wie im Plan diagnostiziert.
+
+Nach der Implementierung, neuer Build, echtes `bin/bt` gegen dieses Repo
+(Bean `bt-apmy` als Test-Target, tags vorher `{to-review, smoke}`):
+
+1. `t` -> Picker öffnet MIT sofort sichtbarem, fokussiertem Suchfeld
+   (Platzhaltertext "type to filter or create...").
+2. Tippen "rev" -> Feld zeigt "rev", Liste filtert live auf "to-review"
+   (rejected/accepted/smoke verschwinden) — PO-Wortlaut exakt widerlegt.
+3. Backspace ×3, Tippen "e" -> alle 4 Zeilen wieder sichtbar (alle
+   enthalten "e") — Live-Filter bestätigt in beide Richtungen.
+4. Backspace, Pfeil runter ×2 -> Cursor sichtbar auf "accepted" (volle,
+   ungefilterte Liste nach Leerung).
+5. space auf "accepted" -> `[x]`; Pfeil hoch, "x" auf "rejected" -> `[x]`
+   — Multi-Select über BEIDE Toggle-Tasten (space UND x) bestätigt,
+   während das Suchfeld fokussiert bleibt (kein Leck in den Feldtext).
+6. Tippen "zzz-brandnew" (kein Treffer) -> Hint wechselt auf
+   "no match — enter:create new tag", Zeile "(no match)".
+7. enter -> "zzz-brandnew (0)" neu angelegt, sofort `[x]`, Query geleert,
+   Picker BLEIBT offen (D01: "weiter geht's", kein Auto-Close mehr).
+8. enter (jetzt leere Query = Treffer-Zustand) -> Picker schließt, Detail-
+   Panel zeigt `tags: to-review, smoke, accepted, rejected, zzz-brandnew`
+   — Save+Close-Pfad bestätigt, echte `beans update`-Mutation griff.
+9. Rückgängig gemacht (Picker erneut geöffnet, die drei Zusätze
+   abgewählt, enter) -> `git diff` zeigt wieder exakt `{to-review, smoke}`
+   (nur `updated_at` geändert -> per `git checkout --` zurückgesetzt,
+   `git status --short .beans/` danach leer).
+10. esc-Test: toggle + esc -> Picker schließt OHNE Mutation, Tags
+    unverändert (`git status --short .beans/` weiterhin leer).
+11. `q` im Picker -> KEIN Quit, `q` landet als Text im Suchfeld (bestätigt
+    Capture-Order + die neue "q ist jetzt Filtertext"-Semantik).
+
+Real gesmoked: Suchfeld-Sichtbarkeit/Echo, Live-Filter (Tippen+Backspace),
+Multi-Select (space+x) während Filterung, Neuanlage-Pfad, Save+Close-Pfad,
+esc-Discard, Capture-Order. NICHT separat im tmux gesmoked (nur Unit-Level):
+`tagPickerBox`s exakte Spalten-/Marker-Rendering-Details (PF-12,
+`TestTagPickerBoxReservesMarkerColumnRegardlessOfDefined` etc.) und die
+Vanished-Target-/nil-Client-Randfälle — beide rein datengetrieben, tmux hätte
+keinen zusätzlichen Beweiswert geliefert.
+
+## Commits
+
+- `7eb736c` — `fix(tui): consolidate Tag-Picker into one always-searchable mode` (Refs: bt-9ipw)
+
+## Deviations/ERRATA
+
+- **Enter-Semantik bei Treffer nicht explizit im Bean-/Plan-Text benannt:**
+  Plan/D01 sagt nur "enter ohne Treffer -> Neuanlage-Pfad", lässt aber offen,
+  was `enter` bei EINEM Treffer (oder leerer Query) tun soll. Implementer-
+  Entscheidung (konsistent mit "`space/x` togglet Multi-Select unverändert
+  (zentraler Unterschied zum alten n-Submodus, dessen enter sofort schloss)"):
+  `enter` behält bei jedem Nicht-Leer-Zustand von `tagInputFiltered` seine
+  ALTE, prä-Typeahead-Bedeutung (Save+Close via `applyTagPickerDiff`) —
+  Tag-AUSWAHL läuft ausschließlich über space/x, nicht mehr über enter. Das
+  ist die einzige Lesart, die den zitierten Kontrastsatz überhaupt erfüllbar
+  macht (sonst gäbe es keinen Unterschied zum alten Submodus-Verhalten).
+- **Space/x werden vor dem Suchfeld abgefangen (space und "x" sind damit NICHT
+  als Zeichen in den Suchtext tippbar):** notwendige Konsequenz aus der
+  Akzeptanz "space/x togglet Multi-Select unverändert" bei gleichzeitig
+  immer-fokussiertem Feld — beide Tasten können nicht gleichzeitig "Toggle"
+  UND "Text" bedeuten. `data.ValidTagName` verbietet Leerzeichen ohnehin
+  (kein Verlust dort); "x" als Tag-Namensbestandteil (z. B. "nginx", "box")
+  ist dadurch beim Tippen NICHT eingebbar — dieselbe bewusste Abwägung wie
+  Up/Down vs. i/k, nur auf die explizit geforderten Toggle-Tasten übertragen.
+  Nicht eigenständig als Frage eskaliert, da es die direkte, einzig
+  konsistente Umsetzung der bindenden Akzeptanzkriterien ist (keine
+  Spec-Änderung, sondern deren Anwendung).
+- **`openTagPicker()`-Signaturänderung** (`model` -> `(tea.Model, tea.Cmd)`,
+  liefert `textinput.Blink`): nicht explizit im Plan gefordert, aber
+  notwendig, damit der jetzt immer fokussierte Cursor tatsächlich blinkt
+  (mirrort `openSearchInput`s Konvention) — drei Call-Sites entsprechend
+  angepasst (siehe Summary). Rein additiv, kein bestehender Aufrufer verlor
+  Funktionalität.
+- **Palette-Aktion `"create_tag"` vereinfacht auf `"tags"`-Äquivalent:** war
+  vor D01 ein eigener Chain-Aufruf mit eigenem Guard; nach der Konsolidierung
+  inhaltlich identisch — Implementer-Entscheidung, kein Scope-Creep (rein
+  Compile-Notwendigkeit durch das Entfernen von `openTagInput()`).
+- **Test-Umbenennungen/-Ersetzungen statt reiner Löschung:** die 8
+  Typeahead-Submodus-Tests + 2 `create_tag`-Palette-Tests wurden NICHT
+  ersatzlos gestrichen, sondern auf die neue Semantik ummodelliert (space/x
+  statt enter für Auswahl, kein `n`-Gate mehr) — Testabdeckung bleibt
+  äquivalent oder höher (zusätzlich: `TestTagPickerEnterWithFilteredMatchSavesAndClosesPicker`
+  als expliziter neuer Test für den "enter bei Treffer"-Pfad, der vorher nur
+  implizit über den leeren-Query-Fall abgedeckt war).
+- **`TestOverlayCaptureSwallowsQuitKeysWhileTagPickerOpen`** musste inhaltlich
+  angepasst werden (nicht nur mechanisch): "q" liefert jetzt legitim einen
+  nicht-nil Cmd (textinput-eigener Blink-Restart), das ist kein Quit-Leck.
+  Test prüft jetzt explizit `cmd().(tea.QuitMsg)` statt pauschal `cmd != nil`.
+
+## Notes for bt-81f0
+
+Nächster Task laut `epic-E12-plan.md` (Item 2, PO-mandiert Rang 2, direkt
+nach diesem hier): Notifications vereinheitlichen (Toast als einziger Kanal).
+Berührt laut Plan U. a. `box_picker_tag.go:425`
+(`applyTagPickerDiff`s `m.err = "Bean no longer exists — selection discarded"`)
+— das ist jetzt Zeile **409** in der konsolidierten Datei (Zeilennummern haben
+sich durch diesen Task verschoben, ERRATUM-Hinweis für den nächsten
+Implementer: nicht blind auf alte Zeilenangaben verlassen, `applyTagPickerDiff`
+selbst ist inhaltlich UNVERÄNDERT). Ansonsten keine Überschneidung: `bt-81f0`
+arbeitet an einer anderen Funktion (`m.err`-Rendering-Anbindung entfernen,
+`showToast` ergänzen) in derselben Datei-Nachbarschaft — kein Zeilen-Konflikt
+erwartet, aber dieselbe Datei, also nacheinander statt parallel bearbeiten
+(wie im Plan bereits vorgesehen).
