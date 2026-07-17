@@ -1,11 +1,11 @@
 ---
 # bt-0xrb
 title: 'Tag-Picker: ETag-Konflikt-Toast abgeschnitten, Ursache unklar'
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-07-17T09:43:51Z
-updated_at: 2026-07-17T10:07:32Z
+updated_at: 2026-07-17T10:53:21Z
 parent: bt-5uzr
 ---
 
