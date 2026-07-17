@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-17T06:15:28Z
+updated_at: 2026-07-17T06:21:42Z
 parent: bt-apmy
 ---
 
@@ -231,3 +231,9 @@ PO-Abnahme des Epics steht aus (Tag to-review bleibt).
 - US-01 · META zeigt 5 Felder, created/modified nur in HISTORY (bt-lg68) · a
 - US-02 · META default zu, öffnet nur bei Auswahl, Meta-Strip trägt Infos (PF-18, bt-98cb) · a
 - US-03 · RELATIONS scrollt mit Cursor-Fenster + ↑/↓/L n–m/total-Indikator (bt-b0w0/NB-2, US-05-Reopen bestanden) · a
+
+
+## Review 2026-07-17 (E11-Nacharbeit, Runde 2 — Browse-Tree)
+
+- US-04 · Archiv-Platzhalter "N archiviert — f→Archive", Cursor-Skip, Klick-No-Op, Archive-Toggle zeigt echte Children (bt-39cl) · a — PO: "das ist sehr nachvollziehbar gelöst."
+- NB · Filter-Menü Querformat/Tabs → bt-5uzr-Kind (feature) · NB · Such-Filter-Präfixe st:/ty: → bt-5uzr-Kind (feature)
