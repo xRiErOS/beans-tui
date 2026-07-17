@@ -5,6 +5,8 @@ package tui
 // invariant at the model layer.
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -44,6 +46,44 @@ func TestLobbyShowsConfiguredRepos(t *testing.T) {
 	}
 	if !strings.Contains(out, "/tmp/repo-beta") {
 		t.Errorf("viewLobby() output missing repo-beta:\n%s", out)
+	}
+}
+
+// TestRepoPickerBodyShowsSlugAndPath guards bt-d3ps (epic-E13-plan.md Item
+// 4, PO-Redefinition Grilling 2026-07-17): each row renders
+// "<slug> — <path>", not just the raw path -- the slug comes from
+// data.RepoSlug (beans.prefix trimmed, or the dir basename fallback).
+func TestRepoPickerBodyShowsSlugAndPath(t *testing.T) {
+	dir := t.TempDir()
+	yml := "beans:\n    prefix: lt-\n"
+	if err := os.WriteFile(filepath.Join(dir, ".beans.yml"), []byte(yml), 0o644); err != nil {
+		t.Fatalf("write .beans.yml: %v", err)
+	}
+	m := lobbyFixtureModel(t, []string{dir})
+	// A generous content width (bypassing repoPickerWidth's own 72-cell
+	// production cap, view_lobby.go's own doc-stamp) -- this test targets
+	// repoPickerBody's LABEL CONSTRUCTION, not its truncation behavior
+	// (macOS t.TempDir() paths routinely exceed the production cap, which
+	// would make this assertion width-flaky for reasons unrelated to what
+	// it guards).
+	out := m.repoPickerBody(300)
+	want := "lt — " + dir
+	if !strings.Contains(out, want) {
+		t.Errorf("repoPickerBody() missing %q:\n%s", want, out)
+	}
+}
+
+// TestRepoPickerBodySlugFallsBackToDirBaseWithoutBeansYML guards the
+// fallback half: a config-registered repo with no (readable) .beans.yml
+// still renders a row, using data.RepoSlug's dir-basename fallback -- a
+// stale/misconfigured entry must never blank the row.
+func TestRepoPickerBodySlugFallsBackToDirBaseWithoutBeansYML(t *testing.T) {
+	dir := t.TempDir() // no .beans.yml written
+	m := lobbyFixtureModel(t, []string{dir})
+	out := m.repoPickerBody(300) // see TestRepoPickerBodyShowsSlugAndPath's own doc-stamp
+	want := filepath.Base(dir) + " — " + dir
+	if !strings.Contains(out, want) {
+		t.Errorf("repoPickerBody() missing %q:\n%s", want, out)
 	}
 }
 

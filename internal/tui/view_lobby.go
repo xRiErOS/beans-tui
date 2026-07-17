@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"beans-tui/internal/config"
+	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -184,7 +185,16 @@ func (m model) repoPickerBody(w int) string {
 		if nameW < 8 {
 			nameW = 8
 		}
-		left := cursor + nameStyle.Render(truncate(r, nameW))
+		// bt-d3ps (epic-E13-plan.md Item 4, PO-Redefinition Grilling
+		// 2026-07-17): label is "slug — path", not the raw path alone --
+		// data.RepoSlug reads .beans.yml's beans.prefix (Dir-Basename
+		// fallback). ONE combined truncate call (not slug/path budgeted
+		// separately) -- ansi.Truncate cuts from the right, so on a narrow
+		// terminal the SLUG (short, always first) stays visible and the
+		// PATH (long, always last) is what gets clipped -- the more useful
+		// priority, since the slug alone already disambiguates the row.
+		label := data.RepoSlug(r) + " — " + r
+		left := cursor + nameStyle.Render(truncate(label, nameW))
 		b.WriteString(pickerRowFill(left, metric, w) + "\n")
 	}
 	if len(filtered) == 0 && len(m.settings.Repos) > 0 {
