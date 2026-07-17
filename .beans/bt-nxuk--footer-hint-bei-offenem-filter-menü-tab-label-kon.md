@@ -1,11 +1,11 @@
 ---
 # bt-nxuk
 title: 'Footer-Hint bei offenem Filter-Menü: tab-Label kontextfalsch'
-status: todo
+status: in-progress
 type: task
 priority: low
 created_at: 2026-07-17T08:44:12Z
-updated_at: 2026-07-17T10:08:09Z
+updated_at: 2026-07-17T11:29:54Z
 parent: bt-5uzr
 ---
 

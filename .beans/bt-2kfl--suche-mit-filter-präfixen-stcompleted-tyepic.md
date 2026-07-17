@@ -1,11 +1,11 @@
 ---
 # bt-2kfl
 title: Suche mit Filter-Präfixen (st:completed ty:epic)
-status: todo
+status: in-progress
 type: feature
 priority: normal
 created_at: 2026-07-17T06:21:42Z
-updated_at: 2026-07-17T10:08:09Z
+updated_at: 2026-07-17T11:29:54Z
 parent: bt-5uzr
 ---
 

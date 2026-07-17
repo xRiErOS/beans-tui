@@ -1,11 +1,11 @@
 ---
 # bt-d3ps
 title: 'Lobby: automatische Repo-Discovery statt nur config-Registrierung'
-status: todo
+status: in-progress
 type: feature
 priority: normal
 created_at: 2026-07-17T09:48:21Z
-updated_at: 2026-07-17T10:08:09Z
+updated_at: 2026-07-17T11:29:54Z
 parent: bt-5uzr
 ---
 
