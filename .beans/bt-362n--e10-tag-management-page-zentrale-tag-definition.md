@@ -7,7 +7,7 @@ priority: high
 tags:
     - rejected
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-17T07:38:14Z
+updated_at: 2026-07-17T09:43:51Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
@@ -335,3 +335,10 @@ Beim nächsten PO-Review von US-07 bitte explizit bestätigen lassen:
 - **Enter-Semantik im konsolidierten Tag-Picker:** `enter` mit Treffer = speichern+schließen; Tag-AUSWAHL läuft ausschließlich über `space` (Multi-Select). Der ursprüngliche Runde-1-PO-Wortlaut („diese mit Enter übernehme") legte anderes nahe — Plan-seitig gedeckt (epic-E12-plan.md D01), aber PO-Bestätigung ausstehend.
 - **ERRATUM space-only-Toggle:** „space/x togglet" wurde im Tag-Picker bewusst auf `space` verengt, damit `x` tippbar bleibt (nginx/linux/…); Filter-Menü/Blocking-Picker behalten space/x. Supervisor-Entscheid, Details in bt-9ipw R1-Sektion.
 - **I02 Won't-fix:** Palette-Einträge „set tags"/„create tag" dispatchen jetzt identisch — Zusammenlegung wäre Änderung der PO-abgenommenen B14-Oberfläche, braucht PO-Freigabe.
+
+
+## Review 2026-07-17 (E12-Runde 1)
+
+US-01 · Tag-Picker `t`: sichtbares Suchfeld, Live-Filter, space-Multi-Select, enter speichert/legt an, esc verwirft · a (mit Einschränkung → bt-5uzr-NB)
+
+PO wörtlich: „Ich habe ein Teils-Teils-Ergebnis. Ich habe im lean-stack-n0ly versucht ein tag hinzuzufügen (smoke, smoke3). Erhalte aber die Meldung 'Conflict: bean changed extern...' a) Die Meldung schein abgekürzt => sollte aber vollständing gezeigt werden && mir sagen, warum das Tagging nicht klappt b) Wenn ich lean-stack-o4c4 mit 't' taggen möchte, dann klappt es. Also grundsätzlich accepted - aber mit Einschränkung" — Diagnose läuft (/ce-diagnose), NB-bean im Follow-up-Epic.
