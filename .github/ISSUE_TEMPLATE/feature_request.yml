@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a new view, keybinding, or capability for bt
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: The PO-cockpit workflow or friction point this would address — not the solution yet.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should bt do? If it touches a keybinding, note which key and whether it collides with anything in the Help-Overlay (`?`).
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approach you thought about, and why this one's better.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Where does this fit?
+      options:
+        - Browse (Tree + Detail)
+        - Backlog
+        - Command-Center
+        - Lobby / Repo-Picker
+        - Settings
+        - Something else / cross-cutting
+    validations:
+      required: true

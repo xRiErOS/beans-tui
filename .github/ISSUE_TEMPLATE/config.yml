@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: beans CLI issues (data layer / .beans/ semantics)
+    url: https://github.com/hmans/beans/issues
+    about: Bugs in `beans` itself (the CLI/data layer bt shells out to) belong upstream, not here.

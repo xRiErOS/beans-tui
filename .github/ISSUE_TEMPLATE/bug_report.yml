@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in bt doesn't work as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Screenshots/terminal recordings help a lot for TUI issues.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact keypresses/commands, in order.
+      placeholder: |
+        1. `bt` in a repo with ...
+        2. Press `tab` to focus Detail
+        3. Press `v`
+        4. ...
+    validations:
+      required: true
+
+  - type: input
+    id: bt-version
+    attributes:
+      label: bt version
+      description: Output of `bt --version` (or the git commit if built from source)
+    validations:
+      required: true
+
+  - type: input
+    id: beans-version
+    attributes:
+      label: beans CLI version
+      description: Output of `beans --version`
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version (only if built from source)
+      description: Output of `go version`
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal + OS
+      description: e.g. "iTerm2 3.5 / macOS 15" or "WezTerm / Fedora 41". For wrap/render bugs, also note the terminal width in columns.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output / stack trace
+      description: Paste anything printed to stderr, or a panic trace. Will be formatted as code automatically.
+      render: shell
