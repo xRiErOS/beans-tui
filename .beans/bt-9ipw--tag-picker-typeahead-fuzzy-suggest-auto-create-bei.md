@@ -1,11 +1,11 @@
 ---
 # bt-9ipw
 title: Tag-Picker Typeahead — Fuzzy-Suggest + Auto-Create bei No-Match
-status: todo
+status: in-progress
 type: feature
 priority: normal
 created_at: 2026-07-16T20:13:14Z
-updated_at: 2026-07-17T06:45:49Z
+updated_at: 2026-07-17T06:48:30Z
 parent: bt-362n
 ---
 
