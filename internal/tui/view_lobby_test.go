@@ -71,6 +71,49 @@ func TestLobbyFilterNarrowsBySearch(t *testing.T) {
 	}
 }
 
+// TestLobbyQueryDoesNotSwallowArrowAliasLetters guards bean bt-l8e7 (E12
+// Item 3, found in bt-9ipw's own review): keyLobby's nav intercept must key
+// off the raw tea.KeyUp/tea.KeyDown KeyType, NOT navKey's letter-alias table
+// (keys.Up binds "i", keys.Down binds "k", vim-style) -- otherwise a repo
+// query starting with "i"/"k" (e.g. "ide") could never be typed, exactly
+// mirroring TestTagPickerArrowKeysDoNotLeakIntoTypedText's own rationale
+// (box_picker_tag_test.go, bt-9ipw). Typing the literal runes must land in
+// repoQuery untouched.
+func TestLobbyQueryDoesNotSwallowArrowAliasLetters(t *testing.T) {
+	m := lobbyFixtureModel(t, []string{"/tmp/repo-alpha", "/tmp/repo-beta"})
+
+	for _, r := range "ide" {
+		nm, _ := m.keyLobby(runeMsg(r))
+		m = nm.(model)
+	}
+	if got := m.repoQuery; got != "ide" {
+		t.Fatalf("repoQuery = %q, want %q -- i/k must stay literal, not be swallowed as up/down", got, "ide")
+	}
+}
+
+// TestLobbyArrowKeysStillNavigateRepoList is the fix's own counter-guard:
+// the raw-KeyType switch (replacing navKey's alias table) must keep moving
+// m.repoList.cursor exactly as before -- the fix must not regress the
+// acceptance criterion it did NOT touch.
+func TestLobbyArrowKeysStillNavigateRepoList(t *testing.T) {
+	m := lobbyFixtureModel(t, []string{"/tmp/repo-alpha", "/tmp/repo-beta"})
+	if m.repoList.cursor != 0 {
+		t.Fatalf("setup: repoList.cursor = %d, want 0", m.repoList.cursor)
+	}
+
+	nm, _ := m.keyLobby(tea.KeyMsg{Type: tea.KeyDown})
+	m = nm.(model)
+	if m.repoList.cursor != 1 {
+		t.Fatalf("after KeyDown: repoList.cursor = %d, want 1", m.repoList.cursor)
+	}
+
+	nm, _ = m.keyLobby(tea.KeyMsg{Type: tea.KeyUp})
+	m = nm.(model)
+	if m.repoList.cursor != 0 {
+		t.Fatalf("after KeyUp: repoList.cursor = %d, want 0", m.repoList.cursor)
+	}
+}
+
 func TestLobbySelectSwitchesRepoAndView(t *testing.T) {
 	fakeBeansOnPath(t, "#!/bin/sh\necho '[]'\n")
 	repoA := newTestRepoTUI(t)
