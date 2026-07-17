@@ -352,3 +352,17 @@ neue Sektion). Jeder Eintrag hat exakt drei Felder:
 - **Was lief nicht rund:** `beans update <id> --body-append -d -` → "accepts 1 arg(s), received 2" (zwei Body-Flags, "-" wird Positional).
 - **Wie gefixt:** `--body-append -` liest selbst stdin.
 - **Forward-Guard:** Dispatch-Prompt-Standardzeile (bereits in allen Vorlagen dieser Runde): "`--body-append -` liest stdin. NICHT `--body-file -`, NICHT mit `-d -` kombinieren."
+
+## 2026-07-17 — E12-Nacharbeitsrunde (Quellen: bt-9ipw R1, bt-2p9m-Deviation, Reviews Welle 1+2)
+
+### 1. TrueColor-Terminal bricht lipgloss-Auto-Wrap mid-word (unit-unsichtbar)
+
+- **Was lief nicht rund:** Modal-Hint-Zeile (bt-2p9m) renderte unter `go test` sauber (kein TTY → keine ANSI-Bytes), im echten TrueColor-Terminal splittete `rebaseBg`s Reset-Rewriting den Auto-Wrap hart mid-word („X:cl"/„ear") — Token OHNE inneren Space, NBSP (Eintrag E8/4) hätte nichts geschützt. Eigene Fehlerklasse neben der NBSP-Falle.
+- **Wie gefixt:** Hint hand-gebrochen in zwei explizite `"\n"`-Zeilen — Wrap-Entscheidung eliminiert statt repariert (Commit b150c9f). Zeichenbudget je Zeile gegen Modal-Innenbreite gezählt.
+- **Forward-Guard:** Konvention: Modal-/Hint-Zeilen NIE auf lipgloss-Auto-Wrap verlassen — explizite Umbrüche + Zeichenbudget-Zählung im Code-Kommentar. tmux-Smoke im echten TrueColor-Terminal bleibt Pflicht-Gate für jedes neue/geänderte Overlay (Unit-Ebene sieht diese Klasse strukturell nicht).
+
+### 2. Toggle-Binding verschluckt tippbare Zeichen vor dem Textinput (bt-9ipw B01)
+
+- **Was lief nicht rund:** Konsolidierter Tag-Picker fing `keys.Toggle` (space UND `x`) VOR `m.tagInput.Update(msg)` ab — `x` war im Suchfeld nie tippbar (nginx/linux/unix…), stiller Funktionsverlust; Implementer hatte die Kollision als „bewusste Abwägung" fehlklassifiziert, Reviewer-Mutations-Test + tmux fingen sie.
+- **Wie gefixt:** Eigenes space-only Binding `keys.TagToggle` (Space ist laut `data.ValidTagName` nie Teil eines Tagnamens), `x` fällt zum Textinput durch; Footer-Hint nachgezogen (Commit 0ae4463).
+- **Forward-Guard:** Review-Checklisten-Punkt für jedes Overlay mit fokussiertem Textinput: JEDES vor dem Textinput abgefangene Binding gegen Zeichen-Tippbarkeit prüfen (Buchstaben-/Zeichen-Keys nur abfangen, wenn sie in gültigen Eingaben nicht vorkommen können); Regressionstest „Wort mit dem Binding-Zeichen tippen → Value vollständig".
