@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: normal
 created_at: 2026-07-17T06:21:42Z
-updated_at: 2026-07-17T06:46:47Z
+updated_at: 2026-07-17T09:58:26Z
 parent: bt-5uzr
 ---
 
@@ -73,3 +73,9 @@ Bean-Summary dokumentieren.
       Q2-Antwort)
 - [ ] Q2/Q3-Antworten oder dokumentierte Annahme im Bean-Summary
 - [ ] Test-Suite grün, neue Tests für `parseSearchPrefixes`
+
+
+## PO-Entscheidungen Grilling 2026-07-17 (D02/D03, final)
+
+- **D02 — Sync-Richtung (ehem. Q2): Separater additiver Layer.** Präfixe bleiben Teil der Query, Parser wertet live aus; f-Menü-State (`m.filterStatus` etc.) bleibt unberührt. Filteranzeige im Tree-Kopf (`filterSummary`) zeigt die UNION aus Menü-Facetten und getippten Präfixen. Query löschen = getippte Filter weg.
+- **D03 — Parser-Zeitpunkt (ehem. Q3): Bei jedem Tastendruck.** Parser trennt lokal Präfix-Paare + Rest-Text; NUR der Rest-Text geht den bestehenden Such-Pfad (Bleve ab 3 Zeichen des Rests). Präfixe erreichen Bleve nie.

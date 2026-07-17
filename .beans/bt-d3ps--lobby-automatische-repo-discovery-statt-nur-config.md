@@ -3,8 +3,9 @@
 title: 'Lobby: automatische Repo-Discovery statt nur config-Registrierung'
 status: todo
 type: feature
+priority: normal
 created_at: 2026-07-17T09:48:21Z
-updated_at: 2026-07-17T09:48:21Z
+updated_at: 2026-07-17T09:58:26Z
 parent: bt-5uzr
 ---
 
@@ -18,3 +19,13 @@ Offene Designfragen für Planner (vor Umsetzung PO klären):
 - Discovery-Wurzel(n): fest (~/Obsidian/tools?), konfigurierbar, oder $HOME-weit mit Tiefenlimit?
 - Gefundene Repos automatisch in config.yaml persistieren oder nur Session-flüchtig anzeigen?
 - Performance: Scan bei Lobby-Öffnen (Latenz!) vs. Hintergrund/Cache.
+
+
+## PO-Redefinition Grilling 2026-07-17 (ersetzt Discovery-Scan-Ansatz)
+
+**KEIN automatischer Scan** (discovery_roots-Ansatz verworfen — „passt nur für mich, muss für andere Nutzende auch passen"). Stattdessen:
+1. Lobby zeigt weiterhin genau die Repos aus der config (zentrales Register); Darstellung je Eintrag: `slug — Pfad`.
+2. NEU: Command-Palette-Befehl `register project` — registriert das aktuell geöffnete Repo mit einem Griff im zentralen Register (config schreiben + Lobby-Liste aktualisieren).
+3. Einmalig, außerhalb dieses beans: Eriks persönliche config.yaml wird um seine bestehenden Projekte ergänzt (Supervisor-Task, nicht Teil der Implementierung).
+
+Damit obsolet: Scan-Wurzeln, Fund-Persistenz, Scan-Timing.

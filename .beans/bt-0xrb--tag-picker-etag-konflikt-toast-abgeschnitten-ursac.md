@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-17T09:43:51Z
-updated_at: 2026-07-17T09:52:16Z
+updated_at: 2026-07-17T09:58:26Z
 parent: bt-5uzr
 ---
 
@@ -44,3 +44,10 @@ Divergiert deterministisch bei jedem bean, dessen Datei kein `priority:`-Feld tr
 2. Upstream-Issue bei hmans/beans filen (Update-Validierung muss dieselbe Repräsentation hashen wie list/ETag()).
 3. Optional Mitigation in bt (Konflikt-Sonderfall erkennen, handlungsleitende Meldung) — Diagnose-Empfehlung: eher nicht (Komplexität vs. self-healing Quirk).
 4. Sofort-Heilung Daten-Seite: betroffene lean-stack-beans einmal kanonisch durchschreiben (trivial, außerhalb bt).
+
+
+## PO-Entscheid Grilling 2026-07-17 (D04)
+
+1. Upstream-Issue bei hmans/beans wird gefiled (Entwurf → PO-Freigabe → Absenden).
+2. Die 10 betroffenen lean-stack-beans werden sofort geheilt (einmalige kanonische Mutation; außerhalb dieses beans).
+3. KEINE Konflikt-Sonderfall-Mitigation in beans-tui. Scope dieses beans damit final: B01a — Toast wächst dynamisch bis Meldung vollständig (alle Severities), plain-ErrConflict-Zweig befüllt toastCtx mit handlungsleitenden Details (mirrort update.go:290-303-Zweig). Regressionstests overlay_show_toast_test.go + etag_conflict_test.go.
