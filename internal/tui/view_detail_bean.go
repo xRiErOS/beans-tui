@@ -86,8 +86,8 @@ func beanSections(idx *data.Index, b *data.Bean, bodyW int, focused bool, active
 	// relocating WHERE the marker renders (per-row instead of a separate
 	// strip), per this task's own "Pfeiltasten-Navigation ändert KEINEN
 	// Code, nur die Visualisierung wechselt" scope.
-	rel, fields := relationsSectionBody(idx, b, bodyW, focused && activeIdx == relationsSectionIdx, fieldIdx)
-	secs = append(secs, accordionSection{title: sectionTitleRelations, body: rel, fields: fields})
+	rel, fields, relActiveLine := relationsSectionBody(idx, b, bodyW, focused && activeIdx == relationsSectionIdx, fieldIdx)
+	secs = append(secs, accordionSection{title: sectionTitleRelations, body: rel, fields: fields, activeLine: relActiveLine})
 	secs = append(secs, accordionSection{title: sectionTitleHistory, body: historieSectionBody(b, bodyW)})
 	return secs
 }
@@ -323,7 +323,16 @@ func relationRow(rel *data.Bean, marker string, w int) string {
 // width handed to relationRow's hangingIndentWrap. nextIdx is startIdx plus
 // the number of rows this call renders, letting the caller chain it into the
 // NEXT group's startIdx.
-func resolveSorted(idx *data.Index, ids []string, startIdx int, active bool, fieldIdx, w int) (lines []string, fields []relationField, nextIdx int) {
+// activeOffset (bt-se4q, bt-b0w0-Review Follow-up B01) is the DISPLAY-LINE
+// offset of the active row within this call's own `lines` slice (0-based,
+// counting each row's own hangingIndentWrap-produced line count -- NOT a
+// row/relation count), or -1 if none of this group's rows is the active one.
+// Threaded up through relationsSectionBody (below) into its own `activeLine`
+// return value -- replaces the removed activeRelationLine's post-render
+// "▶"-glyph rescan (view_browse_repo.go) with an index known exactly at
+// construction time, so a relation TITLE that happens to contain "▶"/"▷"
+// can never be mistaken for the real cursor.
+func resolveSorted(idx *data.Index, ids []string, startIdx int, active bool, fieldIdx, w int) (lines []string, fields []relationField, nextIdx, activeOffset int) {
 	var resolved []*data.Bean
 	var unresolved []string
 	for _, id := range ids {
@@ -335,9 +344,16 @@ func resolveSorted(idx *data.Index, ids []string, startIdx int, active bool, fie
 	}
 	data.SortBeans(resolved)
 	rowIdx := startIdx
+	activeOffset = -1
+	lineOffset := 0
 	for _, rel := range resolved {
-		lines = append(lines, relationRow(rel, relationRowMarker(active, fieldIdx, rowIdx), w))
+		line := relationRow(rel, relationRowMarker(active, fieldIdx, rowIdx), w)
+		if active && fieldIdx == rowIdx {
+			activeOffset = lineOffset
+		}
+		lines = append(lines, line)
 		fields = append(fields, relationField{beanID: rel.ID, label: theme.Key.Render(rel.ID) + " " + rel.Title})
+		lineOffset += strings.Count(line, "\n") + 1
 		rowIdx++
 	}
 	for _, id := range unresolved {
@@ -350,25 +366,39 @@ func resolveSorted(idx *data.Index, ids []string, startIdx int, active bool, fie
 		// kept byte-identical to its pre-B04 contract for any future reader/
 		// reuse, e.g. TestBeanSectionsRelationsDanglingReferenceShowsUnresolvedNotJumpable).
 		text := theme.Dim.Render("(unresolved: " + id + ")")
-		lines = append(lines, relationRowMarker(active, fieldIdx, rowIdx)+text)
+		line := relationRowMarker(active, fieldIdx, rowIdx) + text
+		if active && fieldIdx == rowIdx {
+			activeOffset = lineOffset
+		}
+		lines = append(lines, line)
 		fields = append(fields, relationField{beanID: "", label: text})
+		lineOffset++ // unresolved rows never wrap (fixed short text, see comment above)
 		rowIdx++
 	}
-	return lines, fields, rowIdx
+	return lines, fields, rowIdx, activeOffset
 }
 
 // beanListRow renders an already-resolved bean list (e.g. idx.Children,
 // pre-sorted -- no dangling references possible there) the same way
 // resolveSorted renders its resolved half. startIdx/active/fieldIdx/w mirror
-// resolveSorted's own B04 parameters.
-func beanListRow(beans []*data.Bean, startIdx int, active bool, fieldIdx, w int) (lines []string, fields []relationField, nextIdx int) {
+// resolveSorted's own B04 parameters; activeOffset mirrors resolveSorted's
+// own bt-se4q addition (display-line offset of the active row within this
+// call's `lines`, -1 if not present here).
+func beanListRow(beans []*data.Bean, startIdx int, active bool, fieldIdx, w int) (lines []string, fields []relationField, nextIdx, activeOffset int) {
 	rowIdx := startIdx
+	activeOffset = -1
+	lineOffset := 0
 	for _, rel := range beans {
-		lines = append(lines, relationRow(rel, relationRowMarker(active, fieldIdx, rowIdx), w))
+		line := relationRow(rel, relationRowMarker(active, fieldIdx, rowIdx), w)
+		if active && fieldIdx == rowIdx {
+			activeOffset = lineOffset
+		}
+		lines = append(lines, line)
 		fields = append(fields, relationField{beanID: rel.ID, label: theme.Key.Render(rel.ID) + " " + rel.Title})
+		lineOffset += strings.Count(line, "\n") + 1
 		rowIdx++
 	}
-	return lines, fields, rowIdx
+	return lines, fields, rowIdx, activeOffset
 }
 
 // relationsSectionBody builds the Beziehungen section body + its jump-only
@@ -396,52 +426,81 @@ func beanListRow(beans []*data.Bean, startIdx int, active bool, fieldIdx, w int)
 // their own per-row prefix width. wrapText is no longer needed for the
 // short, fixed subheader strings either (Parent/Children/Blocking/Blocked
 // By never realistically overflow bodyW).
-func relationsSectionBody(idx *data.Index, b *data.Bean, bodyW int, active bool, fieldIdx int) (string, []relationField) {
+//
+// activeLine (3rd return value, bt-se4q, bt-b0w0-Review Follow-up B01)
+// carries the DISPLAY-LINE index (0-based, into strings.Split(body, "\n"))
+// of the active row's own marker line within the returned body -- accumulated
+// as the groups are built (subheader lines + each row's own hangingIndentWrap
+// line count + the blank-line separator strings.Join(groups, "\n\n") inserts
+// between groups all count), Default 0 when no row is active (mirrors the
+// removed activeRelationLine's own "no active marker -> top" default).
+// Replaces windowRelationsSection's post-render activeRelationLine glyph
+// rescan (view_browse_repo.go) -- the caller now has the exact index instead
+// of re-deriving it from already-rendered text, which could be fooled by a
+// "▶"/"▷" character living inside a relation's own TITLE (Reviewer-Beleg,
+// bt-b0w0-Review).
+func relationsSectionBody(idx *data.Index, b *data.Bean, bodyW int, active bool, fieldIdx int) (string, []relationField, int) {
 	var groups []string
 	var fields []relationField
 	gi := 0
+	displayLine := 0
+	activeLine := 0
 
-	appendGroup := func(title string, lines []string, fs []relationField) {
+	appendGroup := func(title string, lines []string, fs []relationField, activeOffset int) {
 		if len(lines) == 0 {
 			return
+		}
+		if len(groups) > 0 {
+			displayLine++ // strings.Join(groups, "\n\n")'s own blank-line separator
+		}
+		displayLine++ // this group's subheader line ("Parent"/"Children"/...)
+		if activeOffset >= 0 {
+			activeLine = displayLine + activeOffset
+		}
+		for _, l := range lines {
+			displayLine += strings.Count(l, "\n") + 1
 		}
 		groups = append(groups, theme.Muted.Render(title)+"\n"+strings.Join(lines, "\n"))
 		fields = append(fields, fs...)
 	}
 
 	if b.Parent != "" {
+		parentActiveOffset := -1
+		if active && fieldIdx == gi {
+			parentActiveOffset = 0
+		}
 		if parent, ok := idx.ByID[b.Parent]; ok {
 			line := relationRow(parent, relationRowMarker(active, fieldIdx, gi), bodyW)
-			appendGroup("Parent", []string{line}, []relationField{{beanID: parent.ID, label: theme.Key.Render(parent.ID) + " " + parent.Title}})
+			appendGroup("Parent", []string{line}, []relationField{{beanID: parent.ID, label: theme.Key.Render(parent.ID) + " " + parent.Title}}, parentActiveOffset)
 		} else {
 			text := theme.Dim.Render("(unresolved: " + b.Parent + ")")
-			appendGroup("Parent", []string{relationRowMarker(active, fieldIdx, gi) + text}, []relationField{{beanID: "", label: text}})
+			appendGroup("Parent", []string{relationRowMarker(active, fieldIdx, gi) + text}, []relationField{{beanID: "", label: text}}, parentActiveOffset)
 		}
 		gi++
 	}
 
 	if children := idx.Children[b.ID]; len(children) > 0 {
-		lines, fs, next := beanListRow(children, gi, active, fieldIdx, bodyW)
-		appendGroup("Children", lines, fs)
+		lines, fs, next, activeOffset := beanListRow(children, gi, active, fieldIdx, bodyW)
+		appendGroup("Children", lines, fs, activeOffset)
 		gi = next
 	}
 
 	if len(b.Blocking) > 0 {
-		lines, fs, next := resolveSorted(idx, b.Blocking, gi, active, fieldIdx, bodyW)
-		appendGroup("Blocking", lines, fs)
+		lines, fs, next, activeOffset := resolveSorted(idx, b.Blocking, gi, active, fieldIdx, bodyW)
+		appendGroup("Blocking", lines, fs, activeOffset)
 		gi = next
 	}
 
 	if len(b.BlockedBy) > 0 {
-		lines, fs, next := resolveSorted(idx, b.BlockedBy, gi, active, fieldIdx, bodyW)
-		appendGroup("Blocked By", lines, fs)
+		lines, fs, next, activeOffset := resolveSorted(idx, b.BlockedBy, gi, active, fieldIdx, bodyW)
+		appendGroup("Blocked By", lines, fs, activeOffset)
 		gi = next
 	}
 
 	if len(groups) == 0 {
-		return theme.Dim.Render("(no relations)"), nil
+		return theme.Dim.Render("(no relations)"), nil, 0
 	}
-	return strings.Join(groups, "\n\n"), fields
+	return strings.Join(groups, "\n\n"), fields, activeLine
 }
 
 // fmtTime formats a nullable timestamp for display: a muted placeholder for

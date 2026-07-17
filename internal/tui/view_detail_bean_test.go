@@ -764,7 +764,7 @@ func TestRelationsSectionBodyShowsCursorMarkerOnActiveRow(t *testing.T) {
 	idx := data.NewIndex(beans)
 	main := idx.ByID["rsb-main"]
 
-	body, fields := relationsSectionBody(idx, main, 60, true, 1) // fieldIdx 1 -> the Child row
+	body, fields, _ := relationsSectionBody(idx, main, 60, true, 1) // fieldIdx 1 -> the Child row
 	if len(fields) != 2 {
 		t.Fatalf("setup: expected 2 relationFields (Parent + Child), got %d", len(fields))
 	}
@@ -785,7 +785,7 @@ func TestRelationsSectionBodyShowsCursorMarkerOnActiveRow(t *testing.T) {
 		t.Errorf("▶ marker not on the Child row: %q", childLine)
 	}
 
-	inactive, _ := relationsSectionBody(idx, main, 60, false, 1)
+	inactive, _, _ := relationsSectionBody(idx, main, 60, false, 1)
 	if strings.Contains(ansi.Strip(inactive), "▶") {
 		t.Error("inactive relationsSectionBody must show no ▶ marker anywhere")
 	}
@@ -803,7 +803,7 @@ func TestRelationsSectionBodyNoLongerRendersFieldsStripLine(t *testing.T) {
 	main := idx.ByID["nofs-main"]
 
 	for _, active := range []bool{true, false} {
-		body, _ := relationsSectionBody(idx, main, 60, active, 0)
+		body, _, _ := relationsSectionBody(idx, main, 60, active, 0)
 		if strings.Contains(body, "Fields:") {
 			t.Errorf("active=%v: relationsSectionBody must never render a 'Fields:' strip line (B04, removed): %q", active, body)
 		}
@@ -827,7 +827,7 @@ func TestRelationsSectionBodyLongTitleAlignsContinuationUnderTitleStartNotColumn
 	main := idx.ByID["wrp-main"]
 
 	const bodyW = 40
-	body, _ := relationsSectionBody(idx, main, bodyW, false, 0)
+	body, _, _ := relationsSectionBody(idx, main, bodyW, false, 0)
 	stripped := ansi.Strip(body)
 
 	groups := strings.Split(stripped, "\n\n")
@@ -848,5 +848,75 @@ func TestRelationsSectionBodyLongTitleAlignsContinuationUnderTitleStartNotColumn
 		if indent != titleCol {
 			t.Errorf("continuation line %d indent = %d, want %d (aligned under the title's own start)", i, indent, titleCol)
 		}
+	}
+}
+
+// --- bt-se4q (bt-b0w0-Review Follow-up, B01): numeric active-line index
+// instead of activeRelationLine's post-render "▶" glyph rescan ---
+
+// TestRelationsSectionBodyActiveLineIgnoresGlyphEmbeddedInTitle is the RED-
+// anchor: a relation whose TITLE itself contains the "▶" active-marker
+// glyph, rendered BEFORE the actually active row, must not fool the
+// cursor-centering. The OLD activeRelationLine (view_browse_repo.go)
+// rescanned the ALREADY-RENDERED lines for the first "▶" substring -- a
+// title containing that glyph would win over the real marker.
+// relationsSectionBody now hands back the numeric display-line index of the
+// active row directly (accumulated while the groups are built, never
+// rediscovered by scanning rendered text), so a glyph anywhere inside a
+// title can never be mistaken for the marker.
+func TestRelationsSectionBodyActiveLineIgnoresGlyphEmbeddedInTitle(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "gl-parent", Title: "Parent Bean", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: "gl-main", Title: "Main Bean", Status: "todo", Type: "task", Priority: "normal", Parent: "gl-parent"},
+		// Sorts BEFORE gl-child-b (Title ascending, data.SortBeans) -- its
+		// title carries the "▶" glyph the old glyph-rescan keyed on, and it
+		// renders as an INACTIVE (▷) row, one line above the real cursor.
+		{ID: "gl-child-a", Title: "AAA Glyph ▶ Title", Status: "todo", Type: "task", Priority: "normal", Parent: "gl-main"},
+		{ID: "gl-child-b", Title: "BBB Real Child", Status: "todo", Type: "task", Priority: "normal", Parent: "gl-main"},
+	}
+	idx := data.NewIndex(beans)
+	main := idx.ByID["gl-main"]
+
+	// fieldIdx 2 -> GLOBAL row order Parent=0, Children=1(child-a)/2(child-b):
+	// the REAL active row is child-b, not the glyph-titled child-a.
+	body, fields, activeLine := relationsSectionBody(idx, main, 80, true, 2)
+	if len(fields) != 3 {
+		t.Fatalf("setup: expected 3 relationFields (Parent + 2 Children), got %d", len(fields))
+	}
+
+	lines := strings.Split(body, "\n")
+	if activeLine < 0 || activeLine >= len(lines) {
+		t.Fatalf("activeLine %d out of range for %d body lines:\n%s", activeLine, len(lines), ansi.Strip(body))
+	}
+	gotLine := ansi.Strip(lines[activeLine])
+	if !strings.HasPrefix(gotLine, "▶ ") {
+		t.Fatalf("activeLine %d does not carry the real active marker, got %q\nfull body:\n%s", activeLine, gotLine, ansi.Strip(body))
+	}
+	if !strings.Contains(gotLine, "BBB Real Child") {
+		t.Fatalf("activeLine %d must be the REAL active row (child-b), got %q", activeLine, gotLine)
+	}
+
+	// Guard the trap itself: a DIFFERENT, EARLIER line must contain "▶" too
+	// (embedded in child-a's title) WITHOUT being marked active -- this is
+	// exactly the line the old strings.Contains(l, "▶") scan would have
+	// (wrongly) returned first.
+	trapLineIdx := -1
+	for i, l := range lines {
+		if i == activeLine {
+			continue
+		}
+		if strings.Contains(ansi.Strip(l), "▶") {
+			trapLineIdx = i
+			break
+		}
+	}
+	if trapLineIdx == -1 {
+		t.Fatalf("setup: expected an EARLIER line containing the glyph inside a title (the old scan's trap), found none:\n%s", ansi.Strip(body))
+	}
+	if trapLineIdx >= activeLine {
+		t.Fatalf("setup: the glyph-in-title trap line (%d) must render BEFORE the real active line (%d) to prove the old first-match scan would have failed", trapLineIdx, activeLine)
+	}
+	if strings.HasPrefix(ansi.Strip(lines[trapLineIdx]), "▶ ") {
+		t.Fatalf("setup: trap line %q must NOT itself start with the active marker (must be the inactive ▷ row)", ansi.Strip(lines[trapLineIdx]))
 	}
 }

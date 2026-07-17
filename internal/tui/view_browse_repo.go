@@ -654,7 +654,7 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 		// section (Meta/Body/History) is untouched, renderPane's existing cap
 		// still applies to them unchanged.
 		if open == relationsSectionIdx+1 {
-			secs[relationsSectionIdx].body = windowRelationsSection(secs[relationsSectionIdx].body, h)
+			secs[relationsSectionIdx].body = windowRelationsSection(secs[relationsSectionIdx].body, h, secs[relationsSectionIdx].activeLine)
 		}
 		acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
 		rows = append(rows, strings.Split(acc, "\n")...)
@@ -673,6 +673,23 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 // indicator, view.go) slices the window AND formats the "L n–m/total" hint in
 // one call.
 //
+// activeLine (bt-se4q, bt-b0w0-Review Follow-up B01) is the display-line
+// index of the active row, computed by relationsSectionBody
+// (view_detail_bean.go) while it BUILDS the body and threaded straight
+// through here via accordionSection.activeLine (renderAccordionPane, above)
+// -- REPLACES the former activeRelationLine helper, which rescanned the
+// ALREADY-RENDERED `body` for the first line containing relationRowMarker's
+// "▶" glyph. That rescan was unanchored: a relation whose own TITLE happens
+// to contain "▶"/"▷" (Reviewer-Beleg, bt-b0w0-Review) could win over the
+// real marker, in the worst case centering the window on the wrong row
+// entirely and pushing the true cursor out of view. Default 0 (top) when no
+// row is active mirrors the removed helper's own default (e.g. RELATIONS is
+// open, accOpen==3 persisting across a FocusOut per PF-18's Prelude doc
+// note, but focus sits elsewhere -- no real cursor to center on, 0 is the
+// deterministic, jitter-free fallback windowStart's own doc comment
+// requires) -- relationsSectionBody's activeLine already defaults to 0 the
+// same way, so no extra guard is needed here.
+//
 // avail is the body's own line budget: h (the pane's full content height)
 // minus the FIXED chrome that always surrounds it -- detailHeaderBlock
 // (5 lines, constant, view_detail_bean.go) plus exactly one header line per
@@ -690,7 +707,7 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 // pre-NB-2 behavior (renderPane's plain line cap) unchanged, matching the
 // bean's Root-Cause section ("Betroffene Funktionen: renderAccordionPane...
 // renderPane bleibt UNVERÄNDERT für andere Fälle").
-func windowRelationsSection(body string, h int) string {
+func windowRelationsSection(body string, h, activeLine int) string {
 	avail := h - 5 - beanSectionCount
 	if avail <= 0 {
 		return body
@@ -703,28 +720,9 @@ func windowRelationsSection(body string, h int) string {
 	if winH < 1 {
 		winH = 1
 	}
-	cursor := activeRelationLine(lines)
-	start := windowStart(len(lines), winH, cursor)
+	start := windowStart(len(lines), winH, activeLine)
 	win, ind := scrollView(body, winH, start)
 	return win + "\n" + theme.Muted.Render(ind)
-}
-
-// activeRelationLine finds the line carrying relationRowMarker's active glyph
-// ("▶", view_detail_bean.go) -- the only row-start line that can ever contain
-// it (a hanging-indent-wrapped title's continuation lines carry plain padding
-// spaces, never the marker, hangingIndentWrap's own doc comment). Returns 0
-// (top) when no row is active -- e.g. RELATIONS is open (accOpen==3,
-// PF-18/the Prelude doc note: accOpen persists across a FocusOut) but focus
-// sits elsewhere, so there is no real cursor to center the window on; 0 is
-// the deterministic, jitter-free default (same "no hidden state" property
-// windowStart's own doc comment requires).
-func activeRelationLine(lines []string) int {
-	for i, l := range lines {
-		if strings.Contains(l, "▶") {
-			return i
-		}
-	}
-	return 0
 }
 
 // searchShield is the search head row's glyph (U+2315 TELEPHONE RECORDER,
