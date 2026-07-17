@@ -7,7 +7,7 @@ priority: high
 tags:
     - rejected
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-17T06:27:29Z
+updated_at: 2026-07-17T07:38:14Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
@@ -327,3 +327,11 @@ low). Voll-Suite auf integriertem main grün. PO-Abnahme steht aus (to-review).
 - US-05 · Warn-Toast bei e/d auf freiem Tag (bt-ct3k) · a
 - US-06 · n registriert freien Tag direkt, Erfolgs-Toast, Cursor folgt (bt-idm1) · a
 - US-07 · Tag-Picker Typeahead · r: "kein visueller Hinweis darauf, WAS ich getippt habe … tags-overlay [soll] ein Suchfeld haben … Liste durch meine Suche gefiltert" → bt-9ipw (reopened, Fix-Prelude im bean)
+
+
+## PO-Review-Hinweis (2026-07-17, Supervisor, aus bt-9ipw-Review R0/R1)
+
+Beim nächsten PO-Review von US-07 bitte explizit bestätigen lassen:
+- **Enter-Semantik im konsolidierten Tag-Picker:** `enter` mit Treffer = speichern+schließen; Tag-AUSWAHL läuft ausschließlich über `space` (Multi-Select). Der ursprüngliche Runde-1-PO-Wortlaut („diese mit Enter übernehme") legte anderes nahe — Plan-seitig gedeckt (epic-E12-plan.md D01), aber PO-Bestätigung ausstehend.
+- **ERRATUM space-only-Toggle:** „space/x togglet" wurde im Tag-Picker bewusst auf `space` verengt, damit `x` tippbar bleibt (nginx/linux/…); Filter-Menü/Blocking-Picker behalten space/x. Supervisor-Entscheid, Details in bt-9ipw R1-Sektion.
+- **I02 Won't-fix:** Palette-Einträge „set tags"/„create tag" dispatchen jetzt identisch — Zusammenlegung wäre Änderung der PO-abgenommenen B14-Oberfläche, braucht PO-Freigabe.

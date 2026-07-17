@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: normal
 created_at: 2026-07-17T06:27:18Z
-updated_at: 2026-07-17T06:45:49Z
+updated_at: 2026-07-17T07:38:14Z
 parent: bt-5uzr
 ---
 
@@ -76,3 +76,9 @@ Planner-Empfehlung: erstere Variante, außer PO bestätigt den größeren Umbau.
       `-run TestTreeGolden -update`, `-run TestBacklogGolden -update`
       (Diff sichten vor Commit)
 - [ ] tmux-Smoke: Bleve-Syntax-Fehler zeigt NUR noch Toast
+
+
+## Prelude (2026-07-17, Supervisor, aus bt-9ipw-Abschluss + Q1-Entscheid)
+
+- **Zeilendrift:** `box_picker_tag.go` wurde durch bt-9ipw konsolidiert — die `m.err = "Bean no longer exists — selection discarded"`-Stelle liegt jetzt bei ~Zeile 409 (nicht 425 wie im E12-Plan-Inventar). Alte Zeilennummern des Plans generell gegen Ist-Code prüfen.
+- **Q1-Annahme (Supervisor-Entscheid, PO-Antwort ausstehend):** Planner-Empfehlung Variante 1 umsetzen — NUR die Fehler-Anbindung von `statusBar`/`ErrNote` kappen, die Zeile bleibt als Scroll-Indikator-Slot bestehen. KEINE dynamische Footer-Höhe. Als dokumentierte Annahme im Abschluss festhalten; PO kann am Review-Gate widersprechen.
