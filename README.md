@@ -34,6 +34,10 @@ Release history: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Screenshots
 
+| Lobby / Repo-Picker |
+|---|
+| ![Lobby — multi-repo picker](docs/screenshots/lobby.png) |
+
 | Browse | Backlog |
 |---|---|
 | ![Browse — Tree + Detail-Accordion](docs/screenshots/browse.png) | ![Backlog with sort/filter](docs/screenshots/backlog.png) |
@@ -42,9 +46,9 @@ Release history: [`CHANGELOG.md`](CHANGELOG.md).
 |---|---|
 | ![Command-Center — fuzzy actions + bean search](docs/screenshots/command-center.png) | ![Detail-Vollbild](docs/screenshots/detail-fullscreen.png) |
 
-| Lobby / Repo-Picker |
-|---|
-| ![Lobby — multi-repo picker](docs/screenshots/lobby.png) |
+### Demo
+
+![beans-tui walkthrough — Browse, Detail-Accordion, Yank, Command-Center, quit-confirm](docs/screenshots/beans-tui-demo.gif)
 
 ## Review workflow
 
