@@ -43,6 +43,28 @@ func TestContextualLocalHintFilterOpen(t *testing.T) {
 	}
 }
 
+// TestFilterMenuFooterHintShowsCategoryLabel is bt-nxuk's own regression
+// guard (Reviewer-Finding B04 aus bt-2p9m-Review 2026-07-17): while the
+// Filter-Menu is open, tab/shift+tab actually switch the active facet
+// category (keyFilterMenu, box_filter_facets.go) -- NOT the global
+// Tree<->Detail focus-swap keys.FocusIn/keys.FocusOut label the outer
+// footer used to leak through (footer_context.go's filterMenuLocalBindings
+// used to return the SAME keybind.Binding values keymap.go defines with
+// WithHelp("tab","focus in")/WithHelp("shift+tab","focus out")). The
+// Filter-Menu's own inline hint (treeFilterBox, box_filter_facets.go) has
+// always said "tab/shift+tab:category" -- Footer Zone 3 must say the same
+// thing, not the stale global label.
+func TestFilterMenuFooterHintShowsCategoryLabel(t *testing.T) {
+	m := model{filterOpen: true}
+	got := stripHint(m.contextualLocalHint(viewLocalStub()))
+	if !strings.Contains(got, "tab/shift+tab category") {
+		t.Errorf("filterOpen: contextualLocalHint = %q, want it to contain the filter-menu-local \"tab/shift+tab category\" hint (bt-nxuk)", got)
+	}
+	if strings.Contains(got, "focus in") || strings.Contains(got, "focus out") {
+		t.Errorf("filterOpen: contextualLocalHint = %q, must NOT contain the global FocusIn/FocusOut \"focus in\"/\"focus out\" label (bt-nxuk)", got)
+	}
+}
+
 func TestContextualLocalHintOverlayValueMenu(t *testing.T) {
 	m := model{overlay: overlayValueMenu}
 	got := m.contextualLocalHint(viewLocalStub())
