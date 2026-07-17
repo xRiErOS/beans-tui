@@ -1,13 +1,13 @@
 ---
 # bt-gdkx
 title: 'US-08: Tags nicht sichtbar in Tree/Detail (nur Filter-Facette)'
-status: in-progress
+status: todo
 type: bug
 priority: normal
 tags:
     - rejected
 created_at: 2026-07-15T19:21:19Z
-updated_at: 2026-07-17T08:12:21Z
+updated_at: 2026-07-17T08:12:57Z
 parent: bt-tct9
 ---
 
