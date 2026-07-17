@@ -1,11 +1,11 @@
 ---
 # bt-2kfl
 title: Suche mit Filter-Präfixen (st:completed ty:epic)
-status: in-progress
+status: completed
 type: feature
 priority: normal
 created_at: 2026-07-17T06:21:42Z
-updated_at: 2026-07-17T11:29:54Z
+updated_at: 2026-07-17T11:44:39Z
 parent: bt-5uzr
 ---
 
@@ -123,3 +123,126 @@ Parser bei jedem Tastendruck, nur Rest-Text erreicht Bleve.
 - [ ] Test-Suite grün, neue Tests für `parseSearchPrefixes` + Union-Anzeige
 - [ ] tmux-Smoke: `/st:completed ty:epic` → Tree-Kopf zeigt
       `St:completed Ty:epic`, `f`-Menü bleibt beim Öffnen leer
+
+## Summary
+
+Such-Präfixe `st:`/`ty:`/`pr:`/`tag:` in der `/`-Suche implementiert, gemäß
+D02 (separater additiver Layer)/D03 (Parser bei jedem Tastendruck), final
+gemäß PO-Entscheidungen Grilling 2026-07-17 — nicht neu aufgemacht.
+
+**Neue Datei `internal/tui/search_prefix.go`** (Implementer-Wahl, hält
+`view_browse_repo.go`/`box_filter_facets.go`-Diffs klein, Datei-Disziplin
+Parallel-Welle):
+- `parseSearchPrefixes(query) (facets map[string][]string, rest string)` —
+  whitespace-Tokenizer, `<prefix>:<value>` mit `prefix` ∈ {st,ty,pr,tag}
+  case-insensitiv (Kürzel→Facet-Mapping analog `facetHead` minus `archive`).
+  Ungültige/unvollständige Tokens (kein Doppelpunkt, leerer Präfix, leerer
+  Wert, unbekanntes Präfix) fallen unverändert in `rest`. Werte werden
+  lower-cased gespeichert (Implementer-Entscheidung — Konsistenz mit den
+  bereits lowercase Status/Type/Priority-Enum-Werten, siehe Deviations).
+- `applySearchPrefixes()` — re-derived beide neuen Model-Felder aus
+  `m.searchQuery`, einziger Schreib-Call (`keySearchInput`, alle drei
+  Zweige: Tastendruck/Enter/Esc).
+- `beanMatchesSearchPrefixFacets`/`searchPrefixFacetHit`/`containsFold` —
+  AND über Facetten, OR innerhalb einer Facette (Membership-Semantik wie
+  `beanMatchesFacets`), case-insensitiv (EqualFold).
+
+**Geänderte Dateien:**
+- `types.go`: zwei neue Felder `m.searchPrefixFacets map[string][]string`,
+  `m.searchPrefixRest string` — GETRENNT von `m.filterStatus`/etc. (D02).
+- `update.go`: `keySearchInput` ruft `applySearchPrefixes()` in allen drei
+  Zweigen; `maybeBleveCmd`/`applyBleveResult` laufen jetzt gegen
+  `m.searchPrefixRest` statt der vollen `m.searchQuery` (D03); Reset-Stellen
+  (`applyRepoSwitched`, esc-cascade Rung 2 in `keyTree`) räumen die beiden
+  neuen Felder mit auf.
+- `view_browse_repo.go`: `beanMatchesSearch` prüft zuerst
+  `beanMatchesSearchPrefixFacets`, dann den Text-Pfad gegen
+  `m.searchPrefixRest` (statt `m.searchQuery`).
+- `box_filter_facets.go`: NUR `filterSummary` angefasst (Datei-Disziplin) —
+  lokale `union`-Closure (kein neuer Top-Level-Func) zeigt pro Facet-Zeile
+  die Union aus `m.filterStatus`/etc. UND `m.searchPrefixFacets`; ohne
+  getippte Präfixe byte-identisch zum Vorzustand (golden-safe).
+- `messages.go`: Doc-Kommentar von `searchBleveResultMsg` auf
+  `m.searchPrefixRest` aktualisiert (war `m.searchQuery`).
+
+## Test-Output
+
+RED (vor Implementierung, `go vet` schlug fehl):
+```
+vet: internal/tui/search_prefix_test.go:103:20: undefined: parseSearchPrefixes
+```
+
+GREEN (nach Implementierung, neue + angepasste Tests):
+```
+=== RUN   TestParseSearchPrefixes (12 Subtests) ... PASS
+=== RUN   TestSearchPrefixMatchingAndsAcrossFacetsOrsWithinFacet --- PASS
+=== RUN   TestSearchPrefixCombinesWithTextRest --- PASS
+=== RUN   TestSearchPrefixInvalidTokenTreatedAsPlainText --- PASS
+=== RUN   TestSearchPrefixDoesNotMutateFilterMenuState --- PASS
+=== RUN   TestFilterSummaryShowsUnionOfMenuFacetsAndTypedPrefixes --- PASS
+=== RUN   TestFilterSummaryUnchangedWithoutTypedPrefixes --- PASS
+=== RUN   TestFilterSummaryClearingQueryDropsTypedFilters --- PASS
+=== RUN   TestBlevePrefixExcludedFromDispatchedQuery --- PASS
+=== RUN   TestBleveNotDispatchedBelowThresholdWhenOnlyPrefixesTyped --- PASS
+PASS
+```
+
+Voller Lauf (`go test ./... -count=1`, ohne `-short`): **GREEN**, 148.3s
+(internal/tui), Gesamtlaufzeit 2:28.74.
+
+Golden ×2 (`go test ./internal/tui/... -run Golden -count=1`, zweimal
+hintereinander): beide GREEN, `git status --short internal/tui/testdata/`
+leer nach beiden Läufen — byte-identisch, keine Regen nötig (`filterSummary`
+degradiert ohne getippte Präfixe exakt auf den Vorzustand).
+
+`go vet ./...`: clean. `gofmt -l .`: clean (ein Formatierungs-Delta in
+`box_filter_facets_test.go` durch den Auto-Formatter beim Speichern
+korrigiert, keine funktionale Änderung).
+
+## Smoke
+
+tmux-Session `bt2kfl$$` (worktree-Binary `bin/bt` gegen die
+Worktree-`.beans/`-Kopie):
+1. `/st:completed ty:epic` getippt → Tree filtert live (0 Treffer korrekt,
+   keine `completed`-Beans im Fixture-Repo), Kopf zeigt `St:completed
+   Ty:epic` exakt.
+2. Query committed (Enter), `f` geöffnet → Filter-Menü zeigt `[ ] completed`
+   UNCHECKED trotz aktivem `St:completed` im Kopf — kein Mit-Togglen (D02
+   bestätigt).
+3. `/st:completed foo` getippt → Kopf zeigt `St:completed` (Text-Rest `foo`
+   geht separat in die Bleve-Schwelle, nicht in die Facet-Anzeige).
+4. Doppel-Esc → Query+Filter vollständig geleert, voller Tree wieder
+   sichtbar.
+5. `git status --short .beans/` nach dem Smoke: leer (clean).
+
+## Deviations/ERRATA
+
+- Q2/Q3 aus der E12-Konkretisierung sind bereits durch D02/D03 (Grilling
+  2026-07-17) final beantwortet — nicht erneut aufgemacht, wie im Bean
+  vorgegeben.
+- **Implementer-Entscheidung (nicht in D02/D03/Plan spezifiziert):**
+  Präfix-WERTE (nicht die Präfix-Keywords) werden beim Parsen lower-cased
+  gespeichert. Begründung: Status/Type/Priority-Enum-Werte sind im gesamten
+  Code bereits durchgängig lowercase (`data.StatusValues()` etc.,
+  `buildFilterItems`); ohne diese Normalisierung hätte `St:Epic` in der
+  Union-Anzeige inkonsistent neben dem Menü-eigenen `epic` gestanden. Das
+  Matching selbst ist ohnehin case-insensitiv (`strings.EqualFold`) und wäre
+  auch ohne die Normalisierung korrekt gewesen — der Lowercase-Schritt dient
+  ausschließlich der Anzeige-Konsistenz.
+- **Bestehende Tests angepasst (14 Stellen, 6 Dateien):** Tests, die
+  `m.searchQuery` bisher direkt setzten (ohne echten `tea.Update`-Rundlauf),
+  mussten auf einen neuen Test-Helfer `setSearchQuery(m, q)`
+  (`update_test.go`) umgestellt werden, der `m.searchPrefixRest`/
+  `m.searchPrefixFacets` synchron mithält — sonst hätten diese Tests (keine
+  Präfix-Syntax enthalten) durch den Wechsel von `beanMatchesSearch` auf
+  `m.searchPrefixRest` fälschlich 0 Treffer gesehen. Rein mechanische
+  Anpassung, keine Verhaltensänderung der jeweiligen Testfälle.
+- Ein neuer Test (`TestBleveNotDispatchedBelowThresholdWhenOnlyPrefixesTyped`)
+  musste nach der ersten (zu strengen) Fassung angepasst werden: eine
+  transiente Zwischen-Eingabe wie `"st:"` (3 Zeichen, unvollständiger Wert)
+  fällt laut Spec korrekterweise als Klartext in `rest` und darf legitim
+  einen Bleve-Dispatch auslösen — das ist kein Bug, sondern exakt die
+  PO-Akzeptanz "ungültiges Präfix/Wert → normaler Suchtext". Der Test prüft
+  jetzt den AKTUELLEN Dispatch-Entscheid (`maybeBleveCmd() == nil`) für die
+  fertig getippte reine Präfix-Query, nicht das (durch einen früheren
+  Zwischenzustand potenziell noch gesetzte) `searchBleveLoading`-Flag.
