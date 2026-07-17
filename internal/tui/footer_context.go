@@ -25,23 +25,31 @@ package tui
 // different overlay had full input capture).
 import keybind "github.com/charmbracelet/bubbles/key"
 
+// filterMenuCategoryHint is the Filter-Menu's OWN local tab/shift+tab
+// binding (bt-nxuk, Reviewer-Finding B04 aus bt-2p9m-Review 2026-07-17):
+// inside the open filter menu, tab/shift+tab switch the active facet
+// category (keyFilterMenu, box_filter_facets.go) -- a DIFFERENT,
+// filter-menu-local meaning from keys.FocusIn/keys.FocusOut's global
+// Tree<->Detail focus-swap (keymap.go). filterMenuLocalBindings USED TO
+// reuse keys.FocusIn/keys.FocusOut directly here, which meant Footer Zone 3
+// rendered the stale global label ("tab focus in · shift+tab focus out")
+// even though the Filter-Menu's own inline hint (treeFilterBox,
+// box_filter_facets.go) already said "tab/shift+tab:category". This is a
+// deliberately standalone keybind.Binding (NOT a keyMap struct field --
+// see keymap_test.go's TestHelpGroupsCoverEveryBindingExactlyOnce, which
+// reflects ONLY over keyMap fields and would flag an unreferenced field;
+// staying local here keeps that guard, and
+// TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList (scoped to
+// browseRepoLocalBindings/backlogLocalBindings only), both untouched)
+// mirroring treeFilterBox's own wording exactly.
+var filterMenuCategoryHint = keybind.NewBinding(keybind.WithKeys("tab", "shift+tab"), keybind.WithHelp("tab/shift+tab", "category"))
+
 // filterMenuLocalBindings is the Facet-Filter-Menu's own footer set
 // (epic-E7-plan.md Task 7 Step 6, literal): keys.Toggle is exactly the
 // "space: select/toggle" hint Q04 asked for, at the concrete overlay (the
 // Filter-Menu) whose absence the PO actually noticed.
-//
-// keys.FocusIn/keys.FocusOut (bt-2p9m, Querformat Tab-Kategorien) ADDED
-// here -- inside the open filter menu tab/shift+tab switch the category
-// tab (keyFilterMenu's own doc comment has the Full-Capture safety
-// argument), a DIFFERENT, filter-menu-local meaning from their global
-// Tree<->Detail focus-swap binding elsewhere. Reusing the SAME
-// keybind.Binding values (not a duplicate literal) keeps the underlying
-// key set single-source (keymap.go) even though the effective action
-// differs by context -- exactly the same "same keys, context-dependent
-// meaning" precedent keys.Back/keys.Enter already establish across every
-// other *LocalBindings function in this file.
 func filterMenuLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.FocusIn, keys.FocusOut, keys.Toggle, keys.FilterClear, keys.Enter, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, filterMenuCategoryHint, keys.Toggle, keys.FilterClear, keys.Enter, keys.Back}
 }
 
 // valueMenuLocalBindings is the Value-Menu overlay's own footer set
