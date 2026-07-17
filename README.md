@@ -301,6 +301,12 @@ TDD (`superpowers:test-driven-development`), run via `make test`
 file-naming scheme, theme tokens, commit/review flow) →
 [`CLAUDE.md`](CLAUDE.md).
 
+## Contributing
+
+Bug reports, feature requests and PRs are welcome — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for build/test setup, conventions and
+the PR flow.
+
 ## License
 
 Apache-2.0 (see [`LICENSE`](LICENSE)) — matching the license of
