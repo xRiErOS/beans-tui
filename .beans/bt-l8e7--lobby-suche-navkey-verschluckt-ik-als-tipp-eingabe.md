@@ -1,11 +1,11 @@
 ---
 # bt-l8e7
 title: 'Lobby-Suche: navKey verschluckt i/k als Tipp-Eingabe'
-status: todo
+status: in-progress
 type: bug
 priority: low
 created_at: 2026-07-16T21:29:12Z
-updated_at: 2026-07-17T06:46:09Z
+updated_at: 2026-07-17T08:08:31Z
 ---
 
 Bestehender Bug, entdeckt im bt-9ipw-Review (2026-07-16): `keyLobby`

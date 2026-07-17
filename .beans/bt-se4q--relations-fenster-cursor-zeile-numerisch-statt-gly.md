@@ -1,11 +1,11 @@
 ---
 # bt-se4q
 title: 'Relations-Fenster: Cursor-Zeile numerisch statt Glyph-Rescan'
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-07-16T22:21:31Z
-updated_at: 2026-07-17T06:46:09Z
+updated_at: 2026-07-17T08:08:31Z
 parent: bt-tct9
 ---
 

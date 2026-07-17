@@ -1,11 +1,11 @@
 ---
 # bt-2p9m
 title: Filter-Menü als Querformat mit Tab-Kategorien
-status: todo
+status: in-progress
 type: feature
 priority: normal
 created_at: 2026-07-17T06:21:42Z
-updated_at: 2026-07-17T06:46:47Z
+updated_at: 2026-07-17T08:08:31Z
 parent: bt-5uzr
 ---
 
