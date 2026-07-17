@@ -1,11 +1,11 @@
 ---
 # bt-9ipw
 title: Tag-Picker Typeahead — Fuzzy-Suggest + Auto-Create bei No-Match
-status: completed
+status: todo
 type: feature
 priority: normal
 created_at: 2026-07-16T20:13:14Z
-updated_at: 2026-07-16T21:36:06Z
+updated_at: 2026-07-17T06:27:03Z
 parent: bt-362n
 ---
 
@@ -246,3 +246,27 @@ Review APPROVED mit zwei non-blocking Findings, beide behoben (Commit 9a42af6):
 
 Gates: voller Lauf ohne `-short` grün (`ok beans-tui/internal/tui 139.135s`),
 gofmt leer, go vet sauber, working tree clean.
+
+
+## Review 2026-07-17 — US-07 REJECTED
+
+PO verbatim: "Ich sehe, dass der Selektor wandert, wenn ich Tippe. Aber ich
+habe kein visuellen Hinweis darauf, WAS ich getippt habe. Daher sollte das
+tags-overlay ein Suchfeld haben, in welchem ich sehe, was ich getippt habe.
+Ferner soll die angezeigte Liste durch meine Suche gefiltert werden, damit ich
+nur passende Elemente angezeigt bekomme."
+
+Fix-Prelude:
+- Schwere: medium (Feature unbenutzbar ohne Sichtbarkeit der Eingabe, Kern-UX)
+- Fundort: internal/tui/box_picker_tag.go — tagInputBox/tagPickerBox; klären,
+  in WELCHEM Sub-Modus der PO getippt hat: Typeahead lebt im n-Input-Submodus
+  (tagInputBox rendert textinput + Vorschläge), aber der Befund ("Selektor
+  wandert beim Tippen, kein Eingabe-Echo") klingt nach dem Haupt-Picker (t),
+  wo Tippen evtl. als Navigation/Filter wirkt ohne sichtbares Suchfeld.
+  Repro-first: beide Einstiege (t-Picker direkt tippen vs. t→n) im tmux prüfen.
+- Fix-Rezept (Soll): Tag-Overlay bekommt ein IMMER sichtbares Suchfeld (Echo
+  der Eingabe) direkt im Picker (t) — Tippen filtert die angezeigte Liste
+  live; Pfeiltasten navigieren die gefilterte Liste; enter übernimmt; kein
+  Treffer → Neuanlage-Pfad. Der n-Submodus-Typeahead (df249d7) liefert die
+  Filter-/Cursor-Bausteine — ggf. Konsolidierung beider Modi in einen.
+- Quelle: PO-Review E11 Runde 3, 2026-07-17.

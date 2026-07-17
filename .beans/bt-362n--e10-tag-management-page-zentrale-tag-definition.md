@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-16T22:47:53Z
+updated_at: 2026-07-17T06:27:03Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus
@@ -320,3 +320,10 @@ auf freiem Tag, 2da5ef9) · bt-idm1 (n-Adopt direkt, b9ed10b + ValidTagName-
 Fix-Runde d83c50a) · bt-9ipw (Tag-Picker Typeahead, df249d7 + Cursor-Test-
 Fix-Runde 9a42af6). Nebenfund als eigenes bean: bt-l8e7 (Lobby i/k-Alias-Leak,
 low). Voll-Suite auf integriertem main grün. PO-Abnahme steht aus (to-review).
+
+
+## Review 2026-07-17 (E11-Nacharbeit, Runde 3 — Tag-Workflows)
+
+- US-05 · Warn-Toast bei e/d auf freiem Tag (bt-ct3k) · a
+- US-06 · n registriert freien Tag direkt, Erfolgs-Toast, Cursor folgt (bt-idm1) · a
+- US-07 · Tag-Picker Typeahead · r: "kein visueller Hinweis darauf, WAS ich getippt habe … tags-overlay [soll] ein Suchfeld haben … Liste durch meine Suche gefiltert" → bt-9ipw (reopened, Fix-Prelude im bean)
