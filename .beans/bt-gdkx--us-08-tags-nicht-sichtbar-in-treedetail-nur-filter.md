@@ -7,7 +7,7 @@ priority: normal
 tags:
     - rejected
 created_at: 2026-07-15T19:21:19Z
-updated_at: 2026-07-17T08:08:31Z
+updated_at: 2026-07-17T08:12:21Z
 parent: bt-tct9
 ---
 
@@ -130,3 +130,56 @@ sagt das bereits selbst: „wird mit E9-B05 gemeinsam geschlossen").
 - [ ] Q02-Zusammenhang (`bt-tct9` Zeile 165-178) im Verifikations-Ergebnis
       explizit referenziert, kein drittes Parallel-Tracking
 - [ ] KEIN Code-Change, KEIN Status-/Tag-Wechsel an diesem bean
+
+## Verifikation E12 Item 5 (2026-07-17)
+
+Reine Bestandsaufnahme (kein Code-Change), per docs/plans/v1-port/epic-E12-plan.md
+Item 5. Build: `command go build -o bin/bt .` (frisch, exit 0). tmux-Smoke
+(Session `btgdkx$$`, echtes Binary gegen dieses Repo, Guards docs/
+LESSONS-LEARNED.md E11-Sektion Nr. 1/5 beachtet). Filter (f) auf Tag
+`rejected` → Tree bis bt-gdkx aufgeklappt (bt-apmy > bt-tct9 > bt-gdkx),
+Detail-Pane von bt-gdkx inspiziert.
+
+(a) META als Feld — BESTÄTIGT. Bei 100 Spalten Terminalbreite, META-Sektion
+    (`[1]`) aufgeklappt zeigt 5. Feld:
+    `▷ tags:     ● rejected`
+    (metaFields, view_detail_bean.go:135-151 — Code-Lesung deckungsgleich
+    mit Live-Render).
+
+(b) Kopfblock-Meta-Strip-Label — BESTÄTIGT sichtbar bei ausreichender
+    Breite. Bei 180 Spalten Terminalbreite (rechtes Pane ~140 Spalten):
+    `type: bug          status: in-progress    prio: ·    tags: ● rejected`
+    — Label UND Wert vollständig sichtbar (detailHeaderBlock,
+    view_detail_bean.go:193-228, Zeile 216-219 Zusammenbau, Zeile 224
+    `truncate(typeStatusPrio, w)`).
+
+(c) Kopfblock bei Standard-/Split-Breite (100 Spalten gesamt, rechtes
+    Pane ~54-61 Spalten) — Q02-Effekt BESTÄTIGT, sogar sichtbar
+    verschärft: Zeile zeigt
+    `type: bug          status: in-progress    prio: ·   …`
+    — der `truncate()`-Schnitt (Zeile 224) trifft hier VOR dem
+    `tags:`-Label selbst (nicht nur vor dem Wert wie im bt-tct9-Reviewer-
+    Befund bei accW≈61 beschrieben) — je nach genauer Pane-Breite kappt
+    es mal das Label, mal nur den Wert, in jedem Fall bleibt der Tag-
+    Inhalt im Kopfblock bei Normalbreite nicht lesbar. META (a) bleibt
+    davon unberührt — dort ist der Tag-Wert unabhängig von der
+    Terminalbreite immer vollständig sichtbar (wrapText statt truncate).
+
+## Q02-Verweis
+
+bt-tct9, Abschnitt "Review-Finding T1/F01 (2026-07-16, Reviewer bt-mtig)
+— offene PO-Frage Q02" (Zeile ~165-178 im bean-Body): Reviewer-Befund zu
+genau diesem Kopfblock-Truncate-Verhalten bei ~100 Spalten Gesamtbreite,
+PO-Entscheid dort "bis zur Antwort keine Nacharbeit" (Sperre). Diese
+Live-Verifikation bestätigt den dort dokumentierten Zustand unverändert
+und reproduziert ihn zusätzlich bei etwas schmalerer Pane-Breite (Label
+selbst betroffen). Kein neues/drittes Tracking — Q02 bleibt die alleinige
+offene Frage.
+
+## Empfehlung an PO
+
+Kernanforderung US-08 bleibt laut Live-Befund zweifach erfüllt (D01 META-
+Feld + B05 Kopfblock-Label/Wert bei ausreichender Breite). Kein Fix in
+diesem bean nötig oder empfohlen — bt-gdkx gemeinsam mit bt-tct9s Q02
+schließen, sobald der PO dort entschieden hat (Tag-Vorrang vor Ellipse
+vs. zweizeiliger Umbruch vs. akzeptierte Grenze).
