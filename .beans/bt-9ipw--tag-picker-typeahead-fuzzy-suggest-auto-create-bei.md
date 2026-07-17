@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-07-16T20:13:14Z
-updated_at: 2026-07-17T07:16:12Z
+updated_at: 2026-07-17T07:34:43Z
 parent: bt-362n
 ---
 
@@ -499,3 +499,80 @@ arbeitet an einer anderen Funktion (`m.err`-Rendering-Anbindung entfernen,
 `showToast` ergänzen) in derselben Datei-Nachbarschaft — kein Zeilen-Konflikt
 erwartet, aber dieselbe Datei, also nacheinander statt parallel bearbeiten
 (wie im Plan bereits vorgesehen).
+
+## Fix-Runde R1 (2026-07-17, Review CHANGES_REQUIRED)
+
+### B01 (high, Pflicht) — "x" nie tippbar im Suchfeld: BEHOBEN
+
+Root Cause bestätigt: `keybind.Matches(msg, keys.Toggle)` in `keyTagPicker`
+fing "x" vor `m.tagInput.Update(msg)` ab (`keys.Toggle` bindet " " UND "x").
+
+**ERRATUM / D01-Nachtrag (Supervisor-Entscheid):** Toggle im Tag-Picker ist
+bewusst auf das SPACE-Zeichen verengt — die Plan-Formulierung "space/x
+togglet Multi-Select unverändert" gilt für dieses Overlay nur noch für
+space. Begründung: Tippbarkeit des häufigen Buchstabens "x" (nginx/linux/
+unix/box/proxy) schlägt Alias-Redundanz; space ist gefahrlos reservierbar,
+da `data.ValidTagName` nie ein Leerzeichen zulässt — analog zur i/k-RAW-
+KeyType-Lösung. Filter-Menü und Blocking-Picker behalten space/x
+unverändert.
+
+Umsetzung: neues Keymap-Binding `keys.TagToggle` (space-only, `keymap.go`
+bleibt Single Source, mirrort das dokumentierte RenameTag-Präzedenz-Muster
+"separates Binding statt verengter Reuse", Drift-Guard
+`TestHelpGroupsCoverEveryBindingExactlyOnce` deckt es ab — in helpGroups
+Actions ergänzt). `keyTagPicker` dispatcht `keybind.Matches(msg,
+keys.TagToggle)`; "x" fällt zum Textinput durch. Inline-Hint
+(`tagPickerBox`) jetzt "space:toggle"; Footer Zone 3
+(`tagPickerLocalBindings`) zeigt `keys.TagToggle` ("space Toggle tag")
+statt des irreführenden "space/x Toggle facet"-Labels.
+
+Regressionstest `TestTagPickerTypedXStaysLiteralNotToggle` — RED-Beweis
+gegen den unfixierten Stand:
+
+    === RUN   TestTagPickerTypedXStaysLiteralNotToggle
+        box_picker_tag_test.go:614: tagInput.Value() = "linu", want "linux"
+        -- 'x' must stay a literal, typeable character (B01)
+    --- FAIL
+
+Nach Fix: PASS (Value == "linux", tagPending unverändert — keine
+Toggle-Nebenwirkung).
+
+### I01 (medium, Pflicht) — Render-Ebene ungeschützt: BEHOBEN
+
+Neuer Test `TestTagPickerBoxRendersSearchField`: ANSI-gestrippter
+`tagPickerBox()`-Output MUSS das Suchfeld enthalten (Platzhalter "type to
+filter or create" bei leerem Query, getippter Wert "rev" nach Eingabe).
+
+Mutations-Selbstbeweis durchgeführt: `b.WriteString(m.tagInput.View() +
+"\n")` lokal entfernt →
+
+    --- FAIL: TestTagPickerBoxRendersSearchField
+        tagPickerBox() = "...│ Tags │...│ ▸   [x] urgent (2) │..." ,
+        want the search field's placeholder rendered while the query is empty
+
+→ Zeile byte-identisch wiederhergestellt (git diff des Files danach leer
+gegen den Zwischenstand), Test PASS.
+
+### I02 (low, optional) — Palette-Doppeleintrag "set tags"/"create tag": WON'T-FIX (bewusst)
+
+Beide Einträge dispatchen seit der D01-Konsolidierung identisch auf
+`m.openTagPicker()`. Bewusst NICHT zusammengeführt: "create tag" ist ein
+PO-sichtbarer Palette-Eintrag aus B14 (bean bt-yqdy, PO-abgenommen in E8) —
+ihn zu entfernen wäre eine Änderung der abgenommenen Command-Center-
+Oberfläche ohne PO-Freigabe und über den Reopen-Auftrag hinaus. Der
+Eintrag bleibt als benanntes Alias nützlich (Nutzer, der "create" tippt,
+findet ihn; "set tags" matcht auf diese Fuzzy-Query nicht). Follow-up-
+Kandidat fürs nächste PO-Review: entweder PO segnet die Zusammenführung ab
+oder der Alias bleibt dauerhaft. Kein stiller Zustand mehr — hiermit
+dokumentiert (Doc-Kommentare in overlay_palette.go benennen die Identität
+der beiden Dispatches bereits explizit).
+
+### Gates R1
+
+Voller Lauf `go test ./... -count=1` (ohne -short) grün, `go vet` sauber,
+`gofmt -l` leer, `command go build -o bin/bt .` sauber. tmux-Pflicht-Check
+(Session `bt9ipwR1fix$$`, echtes bin/bt): "linux" vollständig tippbar und
+im Feld sichtbar (vorher: "linu" + ungewolltes Toggle), space togglet
+weiterhin sichtbar am Cursor ([x]-Wechsel), space landet NICHT als Zeichen
+im Feld, Hint zeigt "space:toggle". esc-Discard, keine bean-Mutationen
+(`git status --short .beans/` leer).
