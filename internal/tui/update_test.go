@@ -57,6 +57,18 @@ func step(t *testing.T, m model, msg tea.Msg) model {
 func keyMsg(k tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: k} }
 func runeMsg(r rune) tea.KeyMsg       { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
 
+// setSearchQuery is the test-side counterpart of keySearchInput's per-
+// keystroke prefix parse (bt-2kfl, D03): tests across this package set
+// m.searchQuery directly (no real tea.Update keystroke round-trip), so this
+// keeps m.searchPrefixFacets/m.searchPrefixRest in sync the same way a real
+// keystroke would via applySearchPrefixes -- beanMatchesSearch/filterSummary
+// read the derived fields, not m.searchQuery itself, so a test that skips
+// this call would see an empty rest/facets regardless of what it typed.
+func setSearchQuery(m model, q string) model {
+	m.searchQuery = q
+	return m.applySearchPrefixes()
+}
+
 // stripHint is renderBindings' own test-side counterpart (view.go): strips
 // ANSI (ansi.Strip) AND normalizes the nbsp (U+00A0) renderBindings glues a
 // binding's key+desc together with (D06 regression fix, view.go's own doc

@@ -437,7 +437,7 @@ func TestTreeCombinesSearchAndFacetsWithAnd(t *testing.T) {
 		{ID: "b", Title: "Alpha Bug", Status: "todo", Type: "bug", Priority: "normal"},
 	}
 	m := fixtureModel(t, beans)
-	m.searchQuery = "alpha"                     // matches both by title
+	m = setSearchQuery(m, "alpha")              // matches both by title
 	m.filterType = map[string]bool{"bug": true} // excludes "a"
 
 	nodes := m.visibleNodes()

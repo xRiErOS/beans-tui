@@ -239,6 +239,8 @@ func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
 	m.searchActive = false
 	m.searchInput.SetValue("")
 	m.searchQuery = ""
+	m.searchPrefixFacets = nil // bt-2kfl: a stale typed prefix from the OLD repo must not leak through either
+	m.searchPrefixRest = ""
 	m.searchBleveIDs = nil
 	m.searchBleveFor = ""
 	m.searchBleveLoading = false
@@ -850,11 +852,14 @@ func (m model) keyOverlay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // bt-4ep2) -- discarded if the query has moved on since the request was
 // dispatched (staleness guard, chosen over a debounce timer: every
 // qualifying keystroke dispatches its own beans-CLI subprocess, but only the
-// response tagged for the CURRENT searchQuery is ever applied; see
+// response tagged for the CURRENT search rest text is ever applied; see
 // messages.go's searchBleveResultMsg doc comment for the full rationale).
+// bt-2kfl D03: compared against m.searchPrefixRest, not the raw
+// m.searchQuery -- msg.query was itself dispatched against rest
+// (maybeBleveCmd), so staleness must be judged against the same value.
 func (m model) applyBleveResult(msg searchBleveResultMsg) (tea.Model, tea.Cmd) {
-	if msg.query != m.searchQuery {
-		return m, nil // stale -- searchQuery has moved on since this request was sent
+	if msg.query != m.searchPrefixRest {
+		return m, nil // stale -- rest has moved on since this request was sent
 	}
 	m.searchBleveLoading = false
 	if msg.err != nil {
@@ -1531,6 +1536,8 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.Back):
 		if m.treeActive() { // esc-cascade Rung 2: committed query AND/OR active facets -> clear both in one step (Task 4 generalizes Task 3's search-only rung, devd parity view_browse_project.go:725-736)
 			m.searchQuery = ""
+			m.searchPrefixFacets = nil // bt-2kfl D02: typed prefixes are part of the query being cleared here
+			m.searchPrefixRest = ""
 			m.searchBleveIDs = nil
 			m.searchBleveFor = ""
 			m = m.clearFacets()
@@ -1598,6 +1605,7 @@ func (m model) keySearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchActive = false
 		m.searchInput.Blur()
 		m.searchQuery = strings.TrimSpace(m.searchInput.Value())
+		m = m.applySearchPrefixes() // bt-2kfl D03: reparse on every commit too
 		m = m.resetCursorToFirstVisible()
 		return m.dispatchBleveIfDue(nil)
 	case tea.KeyEsc:
@@ -1605,12 +1613,14 @@ func (m model) keySearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchInput.Blur()
 		m.searchInput.SetValue("")
 		m.searchQuery = ""
+		m = m.applySearchPrefixes() // bt-2kfl D02: clearing the query drops typed prefixes too
 		return m.resetCursorToFirstVisible(), nil
 	}
 
 	var inputCmd tea.Cmd
 	m.searchInput, inputCmd = m.searchInput.Update(msg)
 	m.searchQuery = strings.TrimSpace(m.searchInput.Value())
+	m = m.applySearchPrefixes() // bt-2kfl D03: parser runs on EVERY keystroke
 	m = m.resetCursorToFirstVisible()
 	return m.dispatchBleveIfDue(inputCmd)
 }
@@ -1643,17 +1653,20 @@ func (m model) dispatchBleveIfDue(extra tea.Cmd) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(extra, bleve)
 }
 
-// maybeBleveCmd returns a searchCmd dispatch when the current searchQuery
-// has reached the Bleve threshold (>=3 chars, design-spec.md §6 V2) and
-// differs from the query the current searchBleveIDs answer (searchBleveFor)
-// -- nil below the threshold, or when nothing has changed since the last
-// dispatch. Deliberately NOT debounced (E2 Task 3 commit rationale, bean
-// bt-4ep2): the plan's own design (and the bean's Akzeptanz criteria) choose
-// a staleness guard on the RESPONSE (applyBleveResult) over delaying the
-// REQUEST with a timer -- every qualifying keystroke may dispatch its own
-// beans-CLI subprocess, but only the freshest response is ever applied.
+// maybeBleveCmd returns a searchCmd dispatch when the current search rest
+// text (m.searchPrefixRest -- bt-2kfl D03, typed `st:`/`ty:`/`pr:`/`tag:`
+// tokens stripped out) has reached the Bleve threshold (>=3 chars,
+// design-spec.md §6 V2) and differs from the query the current
+// searchBleveIDs answer (searchBleveFor) -- nil below the threshold, or when
+// nothing has changed since the last dispatch. Deliberately NOT debounced
+// (E2 Task 3 commit rationale, bean bt-4ep2): the plan's own design (and the
+// bean's Akzeptanz criteria) choose a staleness guard on the RESPONSE
+// (applyBleveResult) over delaying the REQUEST with a timer -- every
+// qualifying keystroke may dispatch its own beans-CLI subprocess, but only
+// the freshest response is ever applied. bt-2kfl D03: prefix tokens
+// themselves never reach Bleve -- only rest is ever passed to searchCmd.
 func (m model) maybeBleveCmd() tea.Cmd {
-	q := m.searchQuery
+	q := m.searchPrefixRest
 	if len(q) < 3 || q == m.searchBleveFor {
 		return nil
 	}

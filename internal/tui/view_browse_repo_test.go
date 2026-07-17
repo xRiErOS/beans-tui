@@ -156,7 +156,7 @@ func TestTreeSearchLineSortSuffixAppendsInActiveSearchBranch(t *testing.T) {
 // the treeActive (committed search/facet) branch.
 func TestTreeSearchLineSortSuffixAppendsInTreeActiveBranch(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
-	m.searchQuery = "task"
+	m = setSearchQuery(m, "task")
 	got := m.treeSearchLine(60, "sort created")
 	plain := ansi.Strip(got)
 	if !strings.HasSuffix(plain, "sort created") {

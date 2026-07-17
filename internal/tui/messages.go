@@ -299,11 +299,13 @@ func createCmd(c *data.Client, opts data.CreateOpts) tea.Cmd {
 
 // searchBleveResultMsg carries the result of an async data.Client.Search
 // call (E2 Task 3, bean bt-4ep2), tagged with the query it answers. Update
-// (applyBleveResult, update.go) discards it if m.searchQuery has moved on in
-// the meantime -- staleness guard chosen over a debounce timer (E2 Task 3
-// commit rationale, keySearchInput/dispatchBleveIfDue doc comments): every
-// qualifying (>=3 char) keystroke dispatches its own beans-CLI subprocess,
-// but only the response matching the CURRENT query is ever applied.
+// (applyBleveResult, update.go) discards it if m.searchPrefixRest (bt-2kfl
+// D03: the query MINUS any typed `st:`/`ty:`/`pr:`/`tag:` prefix tokens,
+// search_prefix.go) has moved on in the meantime -- staleness guard chosen
+// over a debounce timer (E2 Task 3 commit rationale, keySearchInput/
+// dispatchBleveIfDue doc comments): every qualifying (>=3 char) keystroke
+// dispatches its own beans-CLI subprocess, but only the response matching
+// the CURRENT rest text is ever applied.
 type searchBleveResultMsg struct {
 	query string
 	ids   []string

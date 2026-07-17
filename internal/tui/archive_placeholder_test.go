@@ -153,7 +153,7 @@ func TestFilteredBeanNodePlaceholderCases(t *testing.T) {
 		// pre-existing (placeholder-less) path applies unchanged.
 		m := fixtureModel(t, placeholderFixtureBeans())
 		m.expanded["ep-full"] = true
-		m.searchQuery = "Epic Full Archive"
+		m = setSearchQuery(m, "Epic Full Archive")
 
 		nodes := m.visibleNodes()
 		if _, ok := findPlaceholder(nodes, "ep-full"); ok {

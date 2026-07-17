@@ -28,7 +28,7 @@ func TestLocalSearchFiltersTreeByTitleSubstringCaseInsensitive(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.expanded["ms-1"] = true
 	m.expanded["ep-1"] = true
-	m.searchQuery = "TWO" // case-insensitive, matches "Task Two" (tk-2) only
+	m = setSearchQuery(m, "TWO") // case-insensitive, matches "Task Two" (tk-2) only
 
 	nodes := m.visibleNodes()
 	if got := nodeIDs(nodes); !equalStrings(got, []string{"ms-1", "ep-1", "tk-2"}) {
@@ -42,7 +42,7 @@ func TestLocalSearchFiltersTreeByTitleSubstringCaseInsensitive(t *testing.T) {
 // here explicitly, so it gets its own dedicated coverage.
 func TestLocalSearchMatchesBeanIDSubstring(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
-	m.searchQuery = "ms-1" // ID substring -- "Milestone One" the TITLE does not contain "ms-1"
+	m = setSearchQuery(m, "ms-1") // ID substring -- "Milestone One" the TITLE does not contain "ms-1"
 
 	nodes := m.visibleNodes()
 	if got := nodeIDs(nodes); !equalStrings(got, []string{"ms-1"}) {
@@ -60,7 +60,7 @@ func TestLocalSearchPreservesAncestorPathOfMatch(t *testing.T) {
 	}
 	m := fixtureModel(t, beans)
 	m.expanded["root-1"] = true
-	m.searchQuery = "findme"
+	m = setSearchQuery(m, "findme")
 
 	nodes := m.visibleNodes()
 	if got := nodeIDs(nodes); !equalStrings(got, []string{"root-1", "leaf-1"}) {
@@ -80,7 +80,7 @@ func TestLocalSearchCollapsedAncestorHidesMatchingDescendant(t *testing.T) {
 		{ID: "leaf-1", Title: "Findme", Status: "todo", Type: "task", Priority: "normal", Parent: "root-1"},
 	}
 	m := fixtureModel(t, beans) // root-1 NOT expanded
-	m.searchQuery = "findme"
+	m = setSearchQuery(m, "findme")
 
 	nodes := m.visibleNodes()
 	if got := nodeIDs(nodes); !equalStrings(got, []string{"root-1"}) {
@@ -98,7 +98,7 @@ func TestLocalSearchOrphanBucketOmittedWhenNoMatch(t *testing.T) {
 	})
 	m := fixtureModel(t, beans)
 	m.expanded[orphanRootID] = true
-	m.searchQuery = "zzz-no-match-anywhere"
+	m = setSearchQuery(m, "zzz-no-match-anywhere")
 
 	for _, n := range m.visibleNodes() {
 		if n.orphan {
@@ -116,7 +116,7 @@ func TestLocalSearchOrphanBucketShowsMatchingOrphan(t *testing.T) {
 	})
 	m := fixtureModel(t, beans)
 	m.expanded[orphanRootID] = true
-	m.searchQuery = "findable"
+	m = setSearchQuery(m, "findable")
 
 	found := false
 	for _, n := range m.visibleNodes() {
@@ -281,7 +281,7 @@ func TestSearchCmdTagsResultWithQuery(t *testing.T) {
 // CURRENT searchQuery must be a no-op, not a panic.
 func TestSearchBleveStaleResultDiscardedWhenQueryChangedMeanwhile(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
-	m.searchQuery = "abcd" // query has already moved on past "abc"
+	m = setSearchQuery(m, "abcd") // query has already moved on past "abc"
 
 	m = step(t, m, searchBleveResultMsg{query: "abc", ids: []string{"tk-1"}})
 
@@ -307,7 +307,7 @@ func TestSearchIDSubstringHitStaysVisibleAfterBleveResultArrives(t *testing.T) {
 		{ID: "tk-1", Title: "Something Else Entirely", Status: "todo", Type: "task", Priority: "normal"},
 	}
 	m := fixtureModel(t, beans)
-	m.searchQuery = "tk-1" // matches the ID substring only, NOT the title
+	m = setSearchQuery(m, "tk-1") // matches the ID substring only, NOT the title
 	if !m.beanMatchesSearch(m.idx.ByID["tk-1"]) {
 		t.Fatal("setup: ID-substring match must hold before any Bleve response arrives")
 	}
@@ -329,7 +329,7 @@ func TestSearchIDSubstringHitStaysVisibleAfterBleveResultArrives(t *testing.T) {
 // counterpart: a result tagged for the model's current query is applied.
 func TestSearchBleveResultAppliedWhenQueryStillCurrent(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
-	m.searchQuery = "abc"
+	m = setSearchQuery(m, "abc")
 	m.searchBleveLoading = true
 
 	m = step(t, m, searchBleveResultMsg{query: "abc", ids: []string{"tk-1"}})

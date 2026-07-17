@@ -501,19 +501,47 @@ func (m model) treeFilterBox() string {
 // (treeSearchLine, view_browse_repo.go) -- port devd filterSummary
 // (view_browse_project.go:1035-1060), generalized to beans-tui's 4-facet
 // shared state (no "Art" facet here, see the file doc comment above).
+//
+// bt-2kfl (D02, "eine Wahrheit mit Facetten-State" as a UNION display, NOT a
+// write-merge): each facet row shows the UNION of the f-menu's own map
+// (m.filterStatus et al.) AND whatever the user has typed as a search
+// prefix (m.searchPrefixFacets, search_prefix.go) -- READ-only here, this
+// function itself never writes to m.filterStatus/etc. (D02's own
+// invariant). `union` is a local closure (not a new top-level func) so this
+// stays the ONLY box_filter_facets.go edit for bt-2kfl (file discipline,
+// parallel worktree wave); it reuses the existing joinFilterKeys unchanged.
+// With no typed prefixes (m.searchPrefixFacets empty/nil, the pre-bt-2kfl
+// default), union(mp, nil) degrades to exactly mp's own keys -- this
+// function's output is byte-identical to the pre-bt-2kfl version whenever
+// no prefix is typed (golden-safe).
 func (m model) filterSummary() string {
+	union := func(mp map[string]bool, extra []string) map[string]bool {
+		if len(mp) == 0 && len(extra) == 0 {
+			return nil
+		}
+		out := make(map[string]bool, len(mp)+len(extra))
+		for k, v := range mp {
+			if v {
+				out[k] = true
+			}
+		}
+		for _, v := range extra {
+			out[v] = true
+		}
+		return out
+	}
 	var parts []string
-	if len(m.filterStatus) > 0 {
-		parts = append(parts, "St:"+joinFilterKeys(m.filterStatus))
+	if st := union(m.filterStatus, m.searchPrefixFacets["status"]); len(st) > 0 {
+		parts = append(parts, "St:"+joinFilterKeys(st))
 	}
-	if len(m.filterType) > 0 {
-		parts = append(parts, "Ty:"+joinFilterKeys(m.filterType))
+	if ty := union(m.filterType, m.searchPrefixFacets["type"]); len(ty) > 0 {
+		parts = append(parts, "Ty:"+joinFilterKeys(ty))
 	}
-	if len(m.filterPriority) > 0 {
-		parts = append(parts, "Pr:"+joinFilterKeys(m.filterPriority))
+	if pr := union(m.filterPriority, m.searchPrefixFacets["priority"]); len(pr) > 0 {
+		parts = append(parts, "Pr:"+joinFilterKeys(pr))
 	}
-	if len(m.filterTag) > 0 {
-		parts = append(parts, "Tags:"+joinFilterKeys(m.filterTag))
+	if tg := union(m.filterTag, m.searchPrefixFacets["tag"]); len(tg) > 0 {
+		parts = append(parts, "Tags:"+joinFilterKeys(tg))
 	}
 	return strings.Join(parts, " ")
 }
