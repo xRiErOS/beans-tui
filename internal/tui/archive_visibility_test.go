@@ -183,7 +183,7 @@ func TestArchivedBeanExcludedFromBleveHitByDefault(t *testing.T) {
 		{ID: "tk-done", Title: "Refactor the done task", Status: "completed", Type: "task", Priority: "normal"},
 	}
 	m := fixtureModel(t, beans)
-	m.searchQuery = "refactor"
+	m = setSearchQuery(m, "refactor")
 	m.searchBleveFor = "refactor"
 	m.searchBleveIDs = map[string]bool{"tk-done": true}
 

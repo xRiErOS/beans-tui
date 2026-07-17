@@ -73,14 +73,14 @@ func TestBacklogVisibleNilIndexReturnsNil(t *testing.T) {
 // second, parallel filter implementation.
 func TestBacklogAppliesSharedSearchAndFacetFilters(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
-	m.searchQuery = "One" // matches only "Backlog Task One"
+	m = setSearchQuery(m, "One") // matches only "Backlog Task One"
 
 	vis := m.backlogVisible()
 	if len(vis) != 1 || vis[0].ID != "bk-tsk1" {
 		t.Fatalf("backlogVisible() with searchQuery=One = %v, want [bk-tsk1]", vis)
 	}
 
-	m.searchQuery = ""
+	m = setSearchQuery(m, "")
 	m.filterStatus = map[string]bool{"draft": true}
 	vis = m.backlogVisible()
 	if len(vis) != 1 || vis[0].ID != "bk-tsk2" {

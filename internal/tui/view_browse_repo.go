@@ -248,12 +248,23 @@ func (m model) treeSearchActive() bool {
 // only matched the query by ID would otherwise flicker OUT of the tree the
 // instant the async Bleve response for the same query lands, even though
 // the user's query still substring-matches its ID exactly as it did before.
+//
+// bt-2kfl (D02/D03, search_prefix.go): the text half runs against
+// m.searchPrefixRest, NOT the raw m.searchQuery -- typed `st:`/`ty:`/`pr:`/
+// `tag:` tokens are stripped out by applySearchPrefixes (keySearchInput,
+// update.go) before this ever sees the query, so they never enter the
+// substring/Bleve match below. The AND-combined prefix-facet half
+// (beanMatchesSearchPrefixFacets) is checked FIRST -- a facet miss short-
+// circuits before touching the text path at all.
 func (m model) beanMatchesSearch(b *data.Bean) bool {
-	q := strings.ToLower(strings.TrimSpace(m.searchQuery))
+	if !m.beanMatchesSearchPrefixFacets(b) {
+		return false
+	}
+	q := strings.ToLower(strings.TrimSpace(m.searchPrefixRest))
 	if q == "" {
 		return true
 	}
-	if len(q) >= 3 && m.searchBleveFor == m.searchQuery {
+	if len(q) >= 3 && m.searchBleveFor == m.searchPrefixRest {
 		return m.searchBleveIDs[b.ID] || strings.Contains(strings.ToLower(b.ID), q)
 	}
 	return strings.Contains(strings.ToLower(b.Title), q) || strings.Contains(strings.ToLower(b.ID), q)

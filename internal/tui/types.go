@@ -183,6 +183,20 @@ type model struct {
 	searchBleveFor     string
 	searchBleveLoading bool
 
+	// Such-Präfixe `st:`/`ty:`/`pr:`/`tag:` (bt-2kfl, D02/D03 final,
+	// epic-E13-plan.md »Item 3«): searchPrefixFacets/searchPrefixRest are
+	// applySearchPrefixes' (search_prefix.go) output, recomputed from
+	// searchQuery on EVERY keystroke (keySearchInput, D03) -- a SEPARATE
+	// additive layer from filterStatus/filterType/filterPriority/filterTag
+	// below (D02: the f-menu is never written by typed prefixes).
+	// searchPrefixRest is what beanMatchesSearch's text half AND the Bleve
+	// dispatch (maybeBleveCmd/applyBleveResult) run against instead of the
+	// raw searchQuery -- typed prefix tokens themselves never reach Bleve.
+	// filterSummary (box_filter_facets.go) reads searchPrefixFacets to render
+	// the UNION with the f-menu's own facet maps.
+	searchPrefixFacets map[string][]string
+	searchPrefixRest   string
+
 	// Facetten-Filter `f`/`X` (E2 Task 4, bean bt-9ldr, design-spec.md §6
 	// US-05): ONE shared filter state for Tree (this task) AND Backlog (Task
 	// 5 reuses it unchanged, same view-agnostic pattern as focusedBean()).
