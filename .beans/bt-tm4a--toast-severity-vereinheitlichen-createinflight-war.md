@@ -1,11 +1,11 @@
 ---
 # bt-tm4a
 title: 'Toast-Severity vereinheitlichen: createInFlight warn vs error'
-status: todo
+status: in-progress
 type: task
 priority: low
 created_at: 2026-07-17T08:08:31Z
-updated_at: 2026-07-17T10:07:32Z
+updated_at: 2026-07-17T11:16:47Z
 parent: bt-5uzr
 ---
 
