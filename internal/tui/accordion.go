@@ -49,10 +49,19 @@ type relationField struct {
 // accordionSection mirrors devd's shape minus the editor-specific parts.
 // fields == nil for every section except Beziehungen (Meta/Body/Historie are
 // pure display, no field-level navigation in E2).
+//
+// activeLine (bt-se4q, bt-b0w0-Review Follow-up B01) is RELATIONS-only: the
+// display-line index of the active row within `body`, as computed by
+// relationsSectionBody (view_detail_bean.go) while it builds the section --
+// zero-value (0) for every other section, unused by renderAccordion itself,
+// only read by windowRelationsSection's caller (renderAccordionPane,
+// view_browse_repo.go) so it no longer has to re-derive the cursor position
+// by rescanning the ALREADY-RENDERED body text for a "▶" glyph.
 type accordionSection struct {
-	title  string
-	body   string
-	fields []relationField
+	title      string
+	body       string
+	fields     []relationField
+	activeLine int
 }
 
 // renderAccordion rendert die Sektions-Header (`> [n] Title`) und klappt die

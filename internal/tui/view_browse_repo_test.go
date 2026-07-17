@@ -232,30 +232,28 @@ func fixtureBeanWithManyChildren(n int) (parentID string, all []data.Bean) {
 func TestWindowRelationsSectionNoopWhenBodyFitsBudget(t *testing.T) {
 	body := "line0\nline1\nline2"
 	h := 20 // avail = 20 - 5 (headerBlock) - 4 (beanSectionCount headers) = 11 >> 3
-	if got := windowRelationsSection(body, h); got != body {
+	if got := windowRelationsSection(body, h, 0); got != body {
 		t.Fatalf("windowRelationsSection must be a no-op when body fits the budget,\ngot:\n%s\nwant (unchanged):\n%s", got, body)
 	}
 }
 
-// TestWindowRelationsSectionWindowsAroundActiveMarkerLine is the RED-anchor
-// for the actual windowing: 20 synthetic rows, row 15 carries the active ▶
-// marker (relationRowMarker's own glyph, view_detail_bean.go) -- the window
-// must contain that row PLUS a trailing "L n–m/total" indicator line
-// (scrollView's own format), never just the first h rows (the old blunt
-// renderPane line-cap this bean's Root-Cause section describes).
-func TestWindowRelationsSectionWindowsAroundActiveMarkerLine(t *testing.T) {
+// TestWindowRelationsSectionWindowsAroundActiveLine is the RED-anchor for the
+// actual windowing: 20 synthetic rows, activeLine=15 passed in numerically
+// (bt-se4q, bt-b0w0-Review Follow-up B01 -- windowRelationsSection no longer
+// derives the cursor by rescanning `body` for a "▶" glyph, the caller hands
+// it the exact display-line index instead) -- the window must contain that
+// row PLUS a trailing "L n–m/total" indicator line (scrollView's own
+// format), never just the first h rows (the old blunt renderPane line-cap
+// this bean's Root-Cause section describes).
+func TestWindowRelationsSectionWindowsAroundActiveLine(t *testing.T) {
 	var lines []string
 	for i := 0; i < 20; i++ {
-		marker := "▷ "
-		if i == 15 {
-			marker = "▶ "
-		}
-		lines = append(lines, fmt.Sprintf("%srow-%02d", marker, i))
+		lines = append(lines, fmt.Sprintf("row-%02d", i))
 	}
 	body := strings.Join(lines, "\n")
 	h := 15 // avail = 15-5-4 = 6, winH = 5 (1 reserved for the indicator)
 
-	got := windowRelationsSection(body, h)
+	got := windowRelationsSection(body, h, 15)
 	if !strings.Contains(got, "row-15") {
 		t.Fatalf("window must contain the active row (row-15), got:\n%s", got)
 	}
@@ -269,18 +267,47 @@ func TestWindowRelationsSectionWindowsAroundActiveMarkerLine(t *testing.T) {
 	}
 }
 
+// TestWindowRelationsSectionIgnoresGlyphInsideUnrelatedLine guards the same
+// bt-se4q contract one layer up: a body line UNRELATED to the real cursor
+// happens to contain a literal "▶" character (e.g. a relation title with
+// that glyph) at an EARLIER index than the numeric activeLine passed in --
+// the window must still center on activeLine, never on the earlier glyph
+// occurrence (the exact class of bug the removed activeRelationLine's
+// strings.Contains(l, "▶") rescan was exposed to).
+func TestWindowRelationsSectionIgnoresGlyphInsideUnrelatedLine(t *testing.T) {
+	var lines []string
+	for i := 0; i < 20; i++ {
+		text := fmt.Sprintf("row-%02d", i)
+		if i == 2 {
+			text = "row-02 ▶ glyph inside an unrelated title"
+		}
+		lines = append(lines, text)
+	}
+	body := strings.Join(lines, "\n")
+	h := 15 // avail = 15-5-4 = 6, winH = 5
+
+	got := windowRelationsSection(body, h, 15) // real cursor is row-15, NOT row-02's embedded glyph
+	if !strings.Contains(got, "row-15") {
+		t.Fatalf("window must center on the passed activeLine (row-15), got:\n%s", got)
+	}
+	if strings.Contains(got, "row-02") {
+		t.Fatalf("window must NOT center on the earlier glyph-in-title line (row-02), got:\n%s", got)
+	}
+}
+
 // TestWindowRelationsSectionDefaultsTopWhenNoActiveMarker covers the
 // accOpen-persists-without-focus case (Prelude doc note, design-spec.md
 // §15 PF-18): RELATIONS can be open with NO row active (focus elsewhere) --
 // there is no cursor to center on, so the window must deterministically
-// default to the top instead of an arbitrary/stale position.
+// default to the top instead of an arbitrary/stale position. activeLine=0
+// is relationsSectionBody's own default in that case (view_detail_bean.go).
 func TestWindowRelationsSectionDefaultsTopWhenNoActiveMarker(t *testing.T) {
 	var lines []string
 	for i := 0; i < 20; i++ {
-		lines = append(lines, fmt.Sprintf("▷ row-%02d", i))
+		lines = append(lines, fmt.Sprintf("row-%02d", i))
 	}
 	body := strings.Join(lines, "\n")
-	got := windowRelationsSection(body, 15)
+	got := windowRelationsSection(body, 15, 0)
 	gotLines := strings.Split(got, "\n")
 	if !strings.Contains(gotLines[0], "row-00") {
 		t.Fatalf("with no active marker, window must default to the top (row-00 first), first line got %q", gotLines[0])
