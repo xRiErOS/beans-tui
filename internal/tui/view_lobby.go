@@ -348,11 +348,17 @@ func (m model) openLobby() (tea.Model, tea.Cmd) {
 // sets it immediately after tea.NewProgram, strictly before p.Run() is ever
 // called, and no key can be dispatched before that).
 func (m model) keyLobby(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch navKey(msg.String()) {
-	case "up":
+	// bt-l8e7 fix (E12 Item 3): intercept the RAW tea.KeyUp/tea.KeyDown
+	// KeyType here, NOT navKey()'s letter-alias table (keys.Up binds "i",
+	// keys.Down binds "k", vim-style) -- mirrors keyTagPicker's own raw-
+	// KeyType intercept (box_picker_tag.go, bt-9ipw), which exists for the
+	// exact same reason: a repoQuery starting with "i"/"k" (e.g. "ide") must
+	// reach the textinput below untouched, not be swallowed as navigation.
+	switch msg.Type {
+	case tea.KeyUp:
 		m.repoList.move(-1)
 		return m, nil
-	case "down":
+	case tea.KeyDown:
 		m.repoList.setLen(len(m.filteredRepos()))
 		m.repoList.move(1)
 		return m, nil
