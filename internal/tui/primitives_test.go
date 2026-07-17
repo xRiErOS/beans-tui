@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
-	"beans-tui/internal/theme"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 )
 
 // TestBreadcrumbFormat guards the beans-tui breadcrumb format `> repo: Title`

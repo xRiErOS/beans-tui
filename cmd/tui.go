@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"beans-tui/internal/config"
-	"beans-tui/internal/data"
-	"beans-tui/internal/tui"
+	"github.com/xRiErOS/beans-tui/internal/config"
+	"github.com/xRiErOS/beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/tui"
 
 	"github.com/spf13/cobra"
 )

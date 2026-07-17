@@ -20,7 +20,7 @@ package tui
 import (
 	"strings"
 
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/data"
 )
 
 // searchPrefixKeys maps a search-prefix token's keyword (case-insensitive,

@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"beans-tui/internal/config"
-	"beans-tui/internal/theme"
+	"github.com/xRiErOS/beans-tui/internal/config"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )

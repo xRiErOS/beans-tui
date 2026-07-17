@@ -15,7 +15,7 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"beans-tui/internal/theme"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 

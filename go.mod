@@ -1,4 +1,4 @@
-module beans-tui
+module github.com/xRiErOS/beans-tui
 
 go 1.26.5
 

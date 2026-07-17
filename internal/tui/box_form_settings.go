@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"strings"
 
-	"beans-tui/internal/config"
+	"github.com/xRiErOS/beans-tui/internal/config"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"

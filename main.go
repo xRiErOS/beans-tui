@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"beans-tui/cmd"
+	"github.com/xRiErOS/beans-tui/cmd"
 )
 
 func main() {

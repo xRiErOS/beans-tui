@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"beans-tui/internal/theme"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"

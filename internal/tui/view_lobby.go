@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"strings"
 
-	"beans-tui/internal/config"
-	"beans-tui/internal/data"
-	"beans-tui/internal/theme"
+	"github.com/xRiErOS/beans-tui/internal/config"
+	"github.com/xRiErOS/beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )

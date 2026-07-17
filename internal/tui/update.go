@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"beans-tui/internal/clip"
-	"beans-tui/internal/config"
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/clip"
+	"github.com/xRiErOS/beans-tui/internal/config"
+	"github.com/xRiErOS/beans-tui/internal/data"
 
 	keybind "github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"

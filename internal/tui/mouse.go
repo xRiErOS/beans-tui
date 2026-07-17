@@ -28,7 +28,7 @@ package tui
 // (mouse_test.go) is the regression guard for this exact ordering.
 
 import (
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )

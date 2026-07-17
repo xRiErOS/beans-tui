@@ -17,8 +17,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"beans-tui/internal/config"
-	"beans-tui/internal/theme"
+	"github.com/xRiErOS/beans-tui/internal/config"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"

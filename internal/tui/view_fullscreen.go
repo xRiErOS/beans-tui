@@ -11,7 +11,7 @@ package tui
 // fullscreenNone.
 
 import (
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/data"
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )

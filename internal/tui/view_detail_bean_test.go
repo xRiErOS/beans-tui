@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/data"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"

@@ -47,6 +47,20 @@ done) → `accepted`/`rejected` (PO decides in chat or via `beans update
 --tag`), discoverable like any other tag via Tree/Detail/Filter/Search — no
 dedicated TUI interaction for it.
 
+## Screenshots
+
+| Browse | Backlog |
+|---|---|
+| ![Browse — Tree + Detail-Accordion](docs/screenshots/browse.png) | ![Backlog with sort/filter](docs/screenshots/backlog.png) |
+
+| Command-Center | Detail (fullscreen, `v`) |
+|---|---|
+| ![Command-Center — fuzzy actions + bean search](docs/screenshots/command-center.png) | ![Detail-Vollbild](docs/screenshots/detail-fullscreen.png) |
+
+| Lobby / Repo-Picker |
+|---|
+| ![Lobby — multi-repo picker](docs/screenshots/lobby.png) |
+
 ## Glyph legend
 
 Type, Status and Priority render as a single colored letter/glyph each
@@ -89,9 +103,9 @@ support (affects Priority only — Type/Status letters are already ASCII).
 ## Installation
 
 ```sh
+go install github.com/xRiErOS/beans-tui@latest
+# or, from a clone:
 make build          # → bin/bt
-# or
-command go install .
 ```
 
 ## Start
@@ -286,3 +300,10 @@ TDD (`superpowers:test-driven-development`), run via `make test`
 (`command go test ./...`). Conventions (always build with `command go …`,
 file-naming scheme, theme tokens, commit/review flow) →
 [`CLAUDE.md`](CLAUDE.md).
+
+## License
+
+Apache-2.0 (see [`LICENSE`](LICENSE)) — matching the license of
+[hmans/beans](https://github.com/hmans/beans), the CLI/data layer this TUI
+sits on top of. `beans-tui` is an independent client; it is not affiliated
+with or endorsed by the beans project.

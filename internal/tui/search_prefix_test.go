@@ -9,7 +9,7 @@ package tui
 import (
 	"testing"
 
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/data"
 )
 
 // --- parseSearchPrefixes (pure tokenizer) ---

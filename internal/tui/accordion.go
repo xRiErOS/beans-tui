@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"strings"
 
-	"beans-tui/internal/theme"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"

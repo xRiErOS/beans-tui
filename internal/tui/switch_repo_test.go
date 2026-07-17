@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/data"
 )
 
 // newTestRepoTUI creates a minimal beans repo dir (just the .beans/ subdir

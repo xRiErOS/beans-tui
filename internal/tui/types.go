@@ -9,8 +9,8 @@ package tui
 import (
 	"time"
 
-	"beans-tui/internal/config"
-	"beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/config"
+	"github.com/xRiErOS/beans-tui/internal/data"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
