@@ -1478,6 +1478,12 @@ func (m model) openFilterMenu() (tea.Model, tea.Cmd) {
 	m.filterItems = m.buildFilterItems()
 	m.filterMenu = listState{}
 	m.filterMenu.setLen(len(m.filterItems))
+	// bt-2p9m (Querformat Tab-Kategorien): always reopen on tab 0 (Status)
+	// -- PO-Klickpfad step 1, "f für Filter, erster tab aktiviert". Combined
+	// with the listState{} reset above (cursor 0), this lands on Status'
+	// own first row -- the "erstes Element vorselektiert" half of the same
+	// step, since buildFilterItems always emits Status first.
+	m.filterTab = 0
 	m.filterOpen = true
 	return m, nil
 }

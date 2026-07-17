@@ -29,8 +29,19 @@ import keybind "github.com/charmbracelet/bubbles/key"
 // (epic-E7-plan.md Task 7 Step 6, literal): keys.Toggle is exactly the
 // "space: select/toggle" hint Q04 asked for, at the concrete overlay (the
 // Filter-Menu) whose absence the PO actually noticed.
+//
+// keys.FocusIn/keys.FocusOut (bt-2p9m, Querformat Tab-Kategorien) ADDED
+// here -- inside the open filter menu tab/shift+tab switch the category
+// tab (keyFilterMenu's own doc comment has the Full-Capture safety
+// argument), a DIFFERENT, filter-menu-local meaning from their global
+// Tree<->Detail focus-swap binding elsewhere. Reusing the SAME
+// keybind.Binding values (not a duplicate literal) keeps the underlying
+// key set single-source (keymap.go) even though the effective action
+// differs by context -- exactly the same "same keys, context-dependent
+// meaning" precedent keys.Back/keys.Enter already establish across every
+// other *LocalBindings function in this file.
 func filterMenuLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.FilterClear, keys.Enter, keys.Back}
+	return []keybind.Binding{keys.Up, keys.Down, keys.FocusIn, keys.FocusOut, keys.Toggle, keys.FilterClear, keys.Enter, keys.Back}
 }
 
 // valueMenuLocalBindings is the Value-Menu overlay's own footer set

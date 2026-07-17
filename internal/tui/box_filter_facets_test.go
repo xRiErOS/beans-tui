@@ -225,6 +225,207 @@ func TestFilterMenuXClearsWithoutClosing(t *testing.T) {
 	}
 }
 
+// --- Querformat Tab-Kategorien (bt-2p9m, PO-Review E11 Runde 2,
+// epic-E12-plan.md Item 7) ---
+
+// TestFilterMenuOpensWithFirstTabActiveAndFirstElementSelected guards the
+// PO-Klickpfad's first step verbatim: "f für Filter, erster tab aktiviert"
+// -- opening the menu selects tab 0 (Status, facetHead order) with its
+// first row already under the cursor.
+func TestFilterMenuOpensWithFirstTabActiveAndFirstElementSelected(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('f'))
+
+	if !m.filterOpen {
+		t.Fatal("f did not open the filter menu")
+	}
+	if m.filterTab != 0 {
+		t.Fatalf("filterTab after open = %d, want 0 (first tab active)", m.filterTab)
+	}
+	if m.filterMenu.cursor != 0 {
+		t.Fatalf("filterMenu.cursor after open = %d, want 0 (first element pre-selected)", m.filterMenu.cursor)
+	}
+	if m.filterItems[0].facet != "status" {
+		t.Fatalf("filterItems[0].facet = %q, want %q (Status is the first facetHead tab)", m.filterItems[0].facet, "status")
+	}
+}
+
+// TestFilterMenuTabSwitchesCategoryAndSelectsFirstElement guards the
+// PO-Klickpfad's second+third step: "mit tab/shift-tab andere Filter
+// wählen" then "im fokussierten Tab ist das erste Element immer aktiv".
+func TestFilterMenuTabSwitchesCategoryAndSelectsFirstElement(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('f'))
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if m.filterTab != 1 {
+		t.Fatalf("filterTab after tab = %d, want 1 (Type)", m.filterTab)
+	}
+	wantFacet := m.filterItems[m.filterMenu.cursor].facet
+	if wantFacet != "type" {
+		t.Fatalf("active facet after tab = %q, want %q", wantFacet, "type")
+	}
+	start, _ := filterFacetRange(m.filterItems, "type")
+	if m.filterMenu.cursor != start {
+		t.Fatalf("filterMenu.cursor after tab = %d, want %d (Type's first element)", m.filterMenu.cursor, start)
+	}
+
+	// shift+tab from tab 1 (Type) goes back to tab 0 (Status).
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	if m.filterTab != 0 {
+		t.Fatalf("filterTab after shift+tab = %d, want 0 (Status)", m.filterTab)
+	}
+
+	// shift+tab from tab 0 wraps around to the LAST tab (Archive).
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	facets := filterFacetOrder(m.filterItems)
+	lastIdx := len(facets) - 1
+	if m.filterTab != lastIdx {
+		t.Fatalf("filterTab after wrap-around shift+tab = %d, want %d (last tab)", m.filterTab, lastIdx)
+	}
+	if facets[m.filterTab] != "archive" {
+		t.Fatalf("wrapped-to facet = %q, want %q", facets[m.filterTab], "archive")
+	}
+}
+
+// TestFilterMenuArrowsStayWithinActiveTabBounds guards the PO-Klickpfad's
+// own explicit scope limit: "Pfeil-rauf/runter direkt die Auswahl
+// navigieren" INSIDE the focused tab only -- up/down must never cross into
+// a neighboring facet's rows.
+func TestFilterMenuArrowsStayWithinActiveTabBounds(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('f'))
+
+	_, end := filterFacetRange(m.filterItems, "status")
+
+	// Down past the last Status row must clamp at the last Status row, not
+	// spill into Type.
+	for i := 0; i < end+5; i++ {
+		m = step(t, m, keyMsg(tea.KeyDown))
+	}
+	if got := m.filterItems[m.filterMenu.cursor].facet; got != "status" {
+		t.Fatalf("cursor facet after overshooting down = %q, want %q (must not cross tabs)", got, "status")
+	}
+	if m.filterMenu.cursor != end-1 {
+		t.Fatalf("filterMenu.cursor after overshooting down = %d, want %d (clamped at last Status row)", m.filterMenu.cursor, end-1)
+	}
+
+	// Up past the first Status row must clamp at 0, not go negative.
+	for i := 0; i < 10; i++ {
+		m = step(t, m, keyMsg(tea.KeyUp))
+	}
+	if m.filterMenu.cursor != 0 {
+		t.Fatalf("filterMenu.cursor after overshooting up = %d, want 0 (clamped at first Status row)", m.filterMenu.cursor)
+	}
+}
+
+// TestFilterMenuTabDoesNotLeakToGlobalFocusToggle guards the plan's own
+// verified claim (epic-E12-plan.md Item 7 "Kein Tastenkonflikt"):
+// handleKey checks m.filterOpen (Full-Capture) BEFORE the global
+// FocusIn/FocusOut case, so tab/shift+tab inside the open filter menu must
+// change the CATEGORY tab, never m.detailFocus.
+func TestFilterMenuTabDoesNotLeakToGlobalFocusToggle(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.detailFocus = false
+	m = step(t, m, runeMsg('f'))
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if m.detailFocus {
+		t.Fatal("tab inside the open filter menu leaked into the global FocusIn toggle (m.detailFocus)")
+	}
+	if !m.filterOpen {
+		t.Fatal("tab inside the open filter menu unexpectedly closed it")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	if m.detailFocus {
+		t.Fatal("shift+tab inside the open filter menu leaked into the global FocusOut toggle (m.detailFocus)")
+	}
+}
+
+// TestFilterMenuSpaceTogglesCorrectFacetAfterTabSwitch guards that toggling
+// (space/x, unchanged toggleFacet) after switching categories still writes
+// to the RIGHT facet map -- a regression here would mean the Querformat
+// rendering changed but the underlying facet semantics silently broke.
+func TestFilterMenuSpaceTogglesCorrectFacetAfterTabSwitch(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('f'))
+	m = step(t, m, keyMsg(tea.KeyTab)) // -> Type tab, cursor on Type's first row
+
+	it := m.filterItems[m.filterMenu.cursor]
+	if it.facet != "type" {
+		t.Fatalf("setup: active facet = %q, want %q", it.facet, "type")
+	}
+	m = step(t, m, keyMsg(tea.KeySpace))
+	if !m.facetOn(it) {
+		t.Fatalf("space after tab-switch did not toggle %+v on", it)
+	}
+	if len(m.filterStatus) != 0 {
+		t.Fatalf("toggling the Type row leaked into filterStatus: %v", m.filterStatus)
+	}
+}
+
+// TestFilterMenuEnterAppliesUnchangedAcrossTabs guards that enter still
+// closes the menu without clearing state, regardless of which tab was
+// active when pressed (PO-Klickpfad step 5, "mit enter den Filter
+// anwenden").
+func TestFilterMenuEnterAppliesUnchangedAcrossTabs(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('f'))
+	m = step(t, m, keyMsg(tea.KeyTab)) // Type tab
+	it := m.filterItems[m.filterMenu.cursor]
+	m = step(t, m, keyMsg(tea.KeySpace))
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	if m.filterOpen {
+		t.Fatal("enter did not close the filter menu")
+	}
+	if !m.facetOn(it) {
+		t.Fatal("enter cleared the toggled facet -- applying must not clear filter state")
+	}
+}
+
+// --- Querformat rendering (treeFilterBox) ---
+
+// TestTreeFilterBoxShowsTabBarAndOnlyActiveFacetRows guards the actual
+// Querformat rendering contract: a tab bar naming every category, but the
+// row list below shows ONLY the active tab's items -- Type/Priority/Tag/
+// Archive values must not appear while Status is active.
+//
+// Uses a beans set WITH a tag (fixtureBeans() itself has none, so the Tag
+// facet would be legitimately absent -- filterFacetOrder deliberately never
+// reports a phantom tab for a zero-row facet, see its own doc comment) so
+// this test genuinely exercises all five tabs, matching real-world usage.
+func TestTreeFilterBoxShowsTabBarAndOnlyActiveFacetRows(t *testing.T) {
+	beans := []data.Bean{
+		{ID: "tk-1", Title: "Task One", Status: "todo", Type: "task", Priority: "normal", Tags: []string{"backend"}},
+	}
+	m := fixtureModel(t, beans)
+	m = step(t, m, runeMsg('f'))
+	out := stripHint(m.treeFilterBox())
+
+	for _, tabLabel := range []string{"Status", "Type", "Priority", "Tags", "Archive"} {
+		if !strings.Contains(out, tabLabel) {
+			t.Errorf("treeFilterBox() tab bar missing %q:\n%s", tabLabel, out)
+		}
+	}
+	if !strings.Contains(out, "todo") {
+		t.Errorf("treeFilterBox() with Status active must show its own rows (todo):\n%s", out)
+	}
+	if strings.Contains(out, "milestone") {
+		t.Errorf("treeFilterBox() with Status active must NOT show Type rows (milestone):\n%s", out)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyTab)) // -> Type
+	out = stripHint(m.treeFilterBox())
+	if !strings.Contains(out, "milestone") {
+		t.Errorf("treeFilterBox() with Type active must show its own rows (milestone):\n%s", out)
+	}
+	if strings.Contains(out, "todo") {
+		t.Errorf("treeFilterBox() with Type active must NOT show Status rows (todo):\n%s", out)
+	}
+}
+
 // --- Combined search + facet AND (beanMatches / visibleNodes) ---
 
 // TestTreeCombinesSearchAndFacetsWithAnd guards that an active search AND an

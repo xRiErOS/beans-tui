@@ -193,10 +193,28 @@ type model struct {
 	// filterMenu is its cursor (listState, first non-test consumer since
 	// E1). filterOpen mirrors searchActive's "floating overlay fully
 	// captures input" precedent (handleKey).
+	//
+	// filterTab (bt-2p9m, PO-Review E11 Runde 2, Plan-Konkretisierung E12
+	// Item 7) is the Querformat tab cursor -- WHICH facet group
+	// (Status/Type/Priority/Tags/Archive, facetHead order) currently has
+	// focus. Deliberately a SEPARATE field from filterMenu.cursor, not a
+	// second listState: filterMenu.cursor keeps its existing meaning (a
+	// GLOBAL index into the flattened filterItems slice, unchanged --
+	// TestFilterMenuUpDownMovesCursorSpaceTogglesRow and toggleFacet's own
+	// m.filterItems[m.filterMenu.cursor] lookup both rely on that), while
+	// filterTab only narrows which contiguous sub-range of filterItems
+	// up/down is allowed to move the cursor within (filterMenuMoveCursor,
+	// box_filter_facets.go). tab/shift+tab (keys.FocusIn/FocusOut, reused
+	// inside keyFilterMenu -- see that function's own doc comment for the
+	// verified Full-Capture precedence over the global FocusIn/FocusOut
+	// case in handleKey) change filterTab and jump filterMenu.cursor to the
+	// new tab's first element (PO-Klickpfad step 3, epic-E12-plan.md Item
+	// 7).
 	filterStatus, filterType, filterPriority, filterTag map[string]bool
 	filterOpen                                          bool
 	filterItems                                         []ffItem
 	filterMenu                                          listState
+	filterTab                                           int
 
 	// Backlog `b` (E2 Task 5, bean bt-gzu6, design-spec.md §6 V3): backlogList
 	// is the Backlog master pane's cursor (index-based, listState -- unlike
