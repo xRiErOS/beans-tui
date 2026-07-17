@@ -14,6 +14,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"beans-tui/internal/data"
@@ -140,6 +141,70 @@ func TestToastHitTest(t *testing.T) {
 	}
 	if m.toastHit(0, m.height-1) {
 		t.Error("toastHit far outside the box (bottom-left corner) should be false")
+	}
+}
+
+// TestToastBoxGrowsForLongTitleAcrossAllSeverities guards bt-0xrb (D04, PO
+// Grilling 2026-07-17: "Toast wächst dynamisch größer" -- gilt für ALLE
+// toastKind-Severities, not just Conflict/toastError): a title/context that
+// exceeds the old fixed 36-col toastBoxWidth must NOT be hard-truncated with
+// "…" anymore -- the box grows (width and/or wraps to more lines) so the
+// FULL message stays readable, for every severity.
+func TestToastBoxGrowsForLongTitleAcrossAllSeverities(t *testing.T) {
+	longTitle := "Conflict: bean changed externally — bean lean-stack-n0ly stale etag mismatch"
+	longContext := "beans: stale etag (conflict): bean lean-stack-n0ly: etag mismatch: provided 54ff1e8f, current is 4c728326"
+
+	for _, kind := range []toastKind{toastInfo, toastWarn, toastError} {
+		m := model{width: 120, height: 24}
+		m, _ = m.showToast(kind, longTitle, longContext, nil, false)
+
+		box := m.toastBox()
+		if strings.Contains(box, "…") {
+			t.Errorf("kind=%v: toastBox truncated with an ellipsis, want full wordwrap instead:\n%s", kind, box)
+		}
+		for _, word := range strings.Fields(longTitle) {
+			if !strings.Contains(box, word) {
+				t.Errorf("kind=%v: toastBox is missing title word %q, want the full message readable:\n%s", kind, word, box)
+			}
+		}
+		for _, word := range strings.Fields(longContext) {
+			if !strings.Contains(box, word) {
+				t.Errorf("kind=%v: toastBox is missing context word %q, want the full message readable:\n%s", kind, word, box)
+			}
+		}
+
+		_, _, w, h := m.toastGeometry()
+		if w <= 36 {
+			t.Errorf("kind=%v: toastGeometry width = %d, want > 36 (old fixed toastBoxWidth) for a long title", kind, w)
+		}
+		if h < 4 { // top border + title line + context line + bottom border, at minimum
+			t.Errorf("kind=%v: toastGeometry height = %d, want >= 4", kind, h)
+		}
+	}
+}
+
+// TestToastBoxWidthClampedToCapOnWideContent guards the Cap=70 Planner-
+// Entscheidung (epic-E13-plan.md Item 1, "geklemmt [32, min(m.width-4, 70)]"):
+// even extremely long content does not grow the box past 70 cols on a wide
+// terminal -- it wraps to more lines instead.
+func TestToastBoxWidthClampedToCapOnWideContent(t *testing.T) {
+	m := model{width: 200, height: 24}
+	m, _ = m.showToast(toastWarn, strings.Repeat("verylongword ", 20), "", nil, false)
+	_, _, w, _ := m.toastGeometry()
+	if w > 70 {
+		t.Errorf("toastGeometry width = %d, want <= 70 (Cap, epic-E13-plan.md Item 1)", w)
+	}
+}
+
+// TestToastBoxWidthFloorOnNarrowTerminal guards the floor=32 (devd DD2-272
+// parity, unchanged by bt-0xrb): a short toast on a narrow terminal still
+// gets at least the old minimum width.
+func TestToastBoxWidthFloorOnNarrowTerminal(t *testing.T) {
+	m := model{width: 40, height: 24}
+	m, _ = m.showToast(toastInfo, "x", "", nil, false)
+	_, _, w, _ := m.toastGeometry()
+	if w < 32 {
+		t.Errorf("toastGeometry width = %d, want >= 32 (floor, devd DD2-272 parity)", w)
 	}
 }
 

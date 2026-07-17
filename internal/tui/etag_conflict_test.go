@@ -216,6 +216,54 @@ func TestEtagConflictSweep(t *testing.T) {
 	})
 }
 
+// TestPlainConflictSetsNonEmptyToastCtx guards bt-0xrb (D04, Plan-
+// Konkretisierung E13 Item 1, Vorgehen #4): applyMutationResult's
+// plain-ErrConflict branch (no *conflictWithRecovery match -- the ordinary
+// value-menu/picker conflict path, NOT the Editor-recovery path) must
+// pre-fill toastCtx from err.Error() instead of leaving it "" -- err already
+// carries the bean-ID + beans-CLI detail (internal/data/mutations.go:63/75,
+// classifyError) that used to be silently dropped, leaving the PO with no
+// handlungsleitende detail beyond the generic "Conflict: bean changed
+// externally" title.
+func TestPlainConflictSetsNonEmptyToastCtx(t *testing.T) {
+	fakeBeansConflict(t)
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: t.TempDir()}
+	m = focusBean(m, "tk-2")
+	m = step(t, m, runeMsg('s'))
+	if m.overlay != overlayValueMenu {
+		t.Fatal("setup: s did not open the value menu")
+	}
+
+	tm, cmd := m.Update(keyMsg(tea.KeyEnter))
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("Update(enter) did not return a model, got %T", tm)
+	}
+	if cmd == nil {
+		t.Fatal("setup: expected a mutation Cmd")
+	}
+	msg := cmd()
+	mdm, ok := msg.(mutationDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want mutationDoneMsg", msg)
+	}
+	if !errors.Is(mdm.err, data.ErrConflict) {
+		t.Fatalf("setup: mutationDoneMsg.err = %v, want a data.ErrConflict-classified error", mdm.err)
+	}
+
+	nm2 := step(t, nm, mdm)
+	if nm2.toast == nil {
+		t.Fatal("expected a toast after a plain ErrConflict mutation result")
+	}
+	if nm2.toast.context == "" {
+		t.Fatal("toast.context is empty, want it pre-filled from err.Error() (bean-ID + CLI detail, D04)")
+	}
+	if !strings.Contains(nm2.toast.context, "tk-2") {
+		t.Errorf("toast.context = %q, want it to mention the conflicting bean ID (tk-2), mirroring err.Error()", nm2.toast.context)
+	}
+}
+
 // TestConflictAfterWatchReloadUsesFreshETagNoConflict is the positive
 // counter-probe to design decision d: a watch-reload landing BETWEEN an
 // overlay's open and its enter must dispatch the FRESH (reloaded) etag, not

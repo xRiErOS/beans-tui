@@ -285,9 +285,16 @@ func (m model) applyMutationResult(err error) (tea.Model, tea.Cmd) {
 			// it) -- surface that path alongside the generic conflict text
 			// so the PO can recover it manually. Every OTHER mutation site's
 			// plain ErrConflict-wrapped error simply doesn't match here
-			// (errors.As returns false), leaving this branch's existing
-			// behavior untouched for them.
-			toastCtx := ""
+			// (errors.As returns false) -- bt-0xrb (D04, PO Grilling
+			// 2026-07-17): those plain-conflict sites (e.g. the t-Picker
+			// Tag-Konflikt repro, box_picker_tag.go) used to get toastCtx=""
+			// here, dropping the bean-ID + beans-CLI detail err already
+			// carries (internal/data/mutations.go:63/75, classifyError) --
+			// toastCtx now pre-fills from err.Error() so that detail survives
+			// into the Toast; the errors.As match below still OVERRIDES it
+			// with "Version saved: …" for the Editor-recovery path,
+			// UNCHANGED (D04: recovery-path wording stays exactly as-is).
+			toastCtx := err.Error()
 			var cr *conflictWithRecovery
 			if errors.As(err, &cr) {
 				m.err += " — your version: " + cr.path

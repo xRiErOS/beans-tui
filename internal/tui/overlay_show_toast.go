@@ -143,28 +143,82 @@ func toastKindColor(k toastKind) lipgloss.Color {
 	}
 }
 
-const toastBoxWidth = 36 // target width 32-40 cols (devd DD2-272 parity)
+const (
+	toastBoxMinWidth = 32 // floor (devd DD2-272 parity, unchanged by bt-0xrb)
+	toastBoxMaxWidth = 70 // cap (Planner-Entscheidung bt-0xrb, epic-E13-plan.md Item 1 -- PO
+	// named no number; oriented on clampModalWidth's own convention,
+	// box_filter_facets.go)
+)
+
+// toastBoxWidth returns the toast box's OUTER width (border+padding
+// included), content-driven and clamped to [toastBoxMinWidth,
+// min(termW-4, toastBoxMaxWidth)] (bt-0xrb: replaces the old fixed 36 --
+// PO-Anforderung Grilling 2026-07-17 "Toast muss dynamisch größer werden
+// [...] bis die Meldung VOLLSTÄNDIG lesbar ist", gilt für ALLE
+// toastKind-Severities, epic-E13-plan.md Item 1). contentW is the widest
+// UNWRAPPED content line (dot+" "+title, or context) in cells
+// (ansi.StringWidth) -- the +4 below reserves the same border(2)+padding(2)
+// budget the old fixed constant already accounted for (see toastBox's own
+// doc comment on the modalBox Width-vs-border relationship). Mirrors
+// clampModalWidth's own shrink-then-floor pattern (box_filter_facets.go).
+func toastBoxWidth(termW, contentW int) int {
+	capW := toastBoxMaxWidth
+	if termW > 4 && termW-4 < capW {
+		capW = termW - 4
+	}
+	w := contentW + 4
+	if w > capW {
+		w = capW
+	}
+	if w < toastBoxMinWidth {
+		w = toastBoxMinWidth
+	}
+	return w
+}
 
 // toastBox renders the toast box: line 1 = colored dot + title (kind-tinted),
-// line 2 = context, dimmed (ansi.Truncate, NEVER string-slicing/len()). The
-// border follows the same kind color.
+// line 2 = context, dimmed. Width is content-driven (toastBoxWidth) and
+// NEITHER line is ansi.Truncate'd anymore (bt-0xrb, D04) -- content that
+// still overflows the clamped width wraps via wrapText (view.go's own
+// ansi.Wordwrap/ansi.Hardwrap wrapper, already used for the footer) instead
+// of relying on lipgloss's own auto-wrap (LESSONS-LEARNED E12/1: TrueColor
+// terminals can split lipgloss auto-wrap mid-word/mid-ANSI-span -- explicit
+// wordwrap avoids that class of bug). The border follows the same kind
+// color.
 func (m model) toastBox() string {
 	t := m.toast
 	col := toastKindColor(t.kind)
-	innerW := toastBoxWidth - 4 // modalBox: Border(2) + Padding(0,1)*2 = 4
+
+	// Content-drive the width off the UNWRAPPED lines first (before any
+	// wrapping decision) -- toastBoxWidth clamps that to [32, min(m.width-4,
+	// 70)], then wrapText below wraps whatever still overflows the clamped
+	// budget onto more lines (toastGeometry's h = len(lines) already adapts
+	// automatically, no separate height wiring needed).
+	contentW := ansi.StringWidth("● " + t.title)
+	if t.context != "" {
+		if cw := ansi.StringWidth(t.context); cw > contentW {
+			contentW = cw
+		}
+	}
+	outerW := toastBoxWidth(m.width, contentW)
+	innerW := outerW - 4 // modalBox: Border(2) + Padding(0,1)*2 = 4
+
 	dot := lipgloss.NewStyle().Foreground(col).Render("●")
-	title := ansi.Truncate(t.title, innerW-2, "…") // -2: dot + space
-	line1 := dot + " " + lipgloss.NewStyle().Foreground(col).Bold(true).Render(title)
+	titleStyle := lipgloss.NewStyle().Foreground(col).Bold(true)
+	titleLines := strings.Split(wrapText(t.title, innerW-2), "\n") // -2: dot + space
+	line1 := dot + " " + titleStyle.Render(titleLines[0])
+	for _, extra := range titleLines[1:] {
+		line1 += "\n  " + titleStyle.Render(extra) // 2-space indent aligns under "● "
+	}
 	body := line1
 	if t.context != "" {
-		ctx := ansi.Truncate(t.context, innerW, "…")
-		body += "\n" + theme.Dim.Render(ctx)
+		body += "\n" + theme.Dim.Render(wrapText(t.context, innerW))
 	}
 	// modalBox sets lipgloss.Width(width) on the style BEFORE the border --
 	// the border then adds another +2 (left/right, 1 each) to the total
-	// width. toastBoxWidth-2 compensates so the rendered box is exactly
-	// toastBoxWidth wide (target 32-40, devd DD2-272 parity).
-	return modalBox(body, toastBoxWidth-2, col)
+	// width. outerW-2 compensates so the rendered box is exactly outerW
+	// wide.
+	return modalBox(body, outerW-2, col)
 }
 
 // toastGeometry returns the toast box's placement (top-right corner) on the
