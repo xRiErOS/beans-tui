@@ -10,8 +10,11 @@ package tui
 // (not just until a hypothetical future T2).
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"beans-tui/internal/config"
 	"beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -180,7 +183,7 @@ func TestPaletteActionsNoFocusedBeanOmitsNodeActions(t *testing.T) {
 			t.Fatalf("paletteActions leaked node action %q with no focused bean", it.actionID)
 		}
 	}
-	wantGlobal := []string{"create", "go_backlog", "go_browse", "filter", "search", "reload", "repo_picker", "go_tags", "settings"}
+	wantGlobal := []string{"create", "go_backlog", "go_browse", "filter", "search", "reload", "repo_picker", "register_project", "go_tags", "settings"}
 	if len(items) != len(wantGlobal) {
 		t.Fatalf("len(items) = %d, want %d (%v)", len(items), len(wantGlobal), wantGlobal)
 	}
@@ -248,25 +251,29 @@ func TestPalFilteredActionsFuzzyStatMatchesSetStatusAndSetParent(t *testing.T) {
 	}
 }
 
-// TestPalFilteredActionsFuzzyGoMatchesAllFiveGoToEntries guards T3-review
-// I01 (bean bt-kyj5 Prelude): the "go to <entity>" entries (backlog/browse/
-// repo picker/settings) share PF-8's UNCHANGED "go to X" shape -- a plain
-// "go" query must still fuzzy-match every one of them (not fewer), in
-// declaration order, with no other action or bean leaking in. E10 Task 2
+// TestPalFilteredActionsFuzzyGoMatchesAllGoToEntriesPlusRegisterProject
+// guards T3-review I01 (bean bt-kyj5 Prelude): the "go to <entity>" entries
+// (backlog/browse/repo picker/tags/settings) share PF-8's UNCHANGED "go to
+// X" shape -- a plain "go" query must still fuzzy-match every one of them
+// (not fewer), in declaration order, with no bean leaking in. E10 Task 2
 // (bean bt-r92i) added a 5th such entry ("go to tags", go_tags) -- widening
-// this guard from 4 to 5 (ERRATUM vs. the original Prelude's "genau die 4
-// 'go to'-Einträge" wording, which predates this task and is superseded by
-// the new entry, not violated by it). (T5-mini, bean bt-uyzf, optional
-// T4-review I01): none of fixtureBeans' titles ("Milestone One"/"Epic One"/
-// "Task One"/"Task Two") contain a 'g' at all, so no bean item could ever
-// fuzzy-match "go" and silently inflate the count above -- the exact-length
-// assertion below implicitly guards that absence too.
-func TestPalFilteredActionsFuzzyGoMatchesAllFiveGoToEntries(t *testing.T) {
+// this guard from 4 to 5. bt-d3ps (epic-E13-plan.md Item 4) ERRATUM: the new
+// "register project" label ALSO fuzzy-matches "go" as a subsequence (r-e-
+// "g"-ister project, g before the "o" in "project") -- not a "go to X" entry
+// conceptually, but fuzzyMatch (fuzzy.go) is a plain subsequence matcher
+// with no phrase-boundary awareness, so it matches anyway. Widening this
+// guard to 6 (not renaming its scope away from "go to") is the honest fix --
+// asserting 5 here would just be wrong, not a tighter guard. (T5-mini, bean
+// bt-uyzf, optional T4-review I01): none of fixtureBeans' titles ("Milestone
+// One"/"Epic One"/"Task One"/"Task Two") contain a 'g' at all, so no bean
+// item could ever fuzzy-match "go" and silently inflate the count above --
+// the exact-length assertion below implicitly guards that absence too.
+func TestPalFilteredActionsFuzzyGoMatchesAllGoToEntriesPlusRegisterProject(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	m.palQuery = "go"
 
 	items := m.palFiltered()
-	wantIDs := []string{"go_backlog", "go_browse", "repo_picker", "go_tags", "settings"}
+	wantIDs := []string{"go_backlog", "go_browse", "repo_picker", "register_project", "go_tags", "settings"}
 	if len(items) != len(wantIDs) {
 		t.Fatalf("len(palFiltered) = %d, want %d (%v) for query %q", len(items), len(wantIDs), wantIDs, m.palQuery)
 	}
@@ -519,5 +526,184 @@ func TestDispatchPaletteCreateTagNoFocusedBeanNoOp(t *testing.T) {
 	}
 	if mm.overlay != overlayNone {
 		t.Fatalf("overlay = %v, want overlayNone (no focused bean -- must not open the Tag-Picker)", mm.overlay)
+	}
+}
+
+// --- register_project: bt-d3ps (epic-E13-plan.md Item 4, PO-Redefinition
+// Grilling 2026-07-17 -- replaces the earlier discovery-scan design: NO
+// scan, NO discovery roots, NO find-persistence) ---
+
+// TestPaletteActionsIncludesRegisterProject guards the new global entry,
+// grouped directly after "repo_picker" (same repo-registry neighborhood,
+// plan's own "Platzierung neben repo_picker/settings").
+func TestPaletteActionsIncludesRegisterProject(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	items := paletteActions(m)
+
+	idx := -1
+	for i, it := range items {
+		if it.actionID == "register_project" {
+			idx = i
+			if it.label != "register project" {
+				t.Fatalf("register_project label = %q, want %q", it.label, "register project")
+			}
+		}
+	}
+	if idx == -1 {
+		t.Fatal(`"register_project" missing from paletteActions`)
+	}
+
+	repoPickerIdx := -1
+	for i, it := range items {
+		if it.actionID == "repo_picker" {
+			repoPickerIdx = i
+		}
+	}
+	if repoPickerIdx == -1 {
+		t.Fatal(`test setup invalid: "repo_picker" missing from paletteActions`)
+	}
+	if idx <= repoPickerIdx {
+		t.Fatalf("register_project at index %d, want it after repo_picker (index %d)", idx, repoPickerIdx)
+	}
+}
+
+// TestRegisterProjectNilClientNoOp guards the m.client == nil guard (Palette
+// opened from the Lobby itself, no live repo) -- no-op, never crash, no
+// toast, settings unchanged.
+func TestRegisterProjectNilClientNoOp(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // isolation: this path must never touch real config.yaml
+	m := fixtureModel(t, fixtureBeans())
+	if m.client != nil {
+		t.Fatal("test setup invalid: fixtureModel's client is not nil")
+	}
+	before := append([]string{}, m.settings.Repos...)
+
+	nm, cmd := m.registerProject()
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("registerProject did not return a model, got %T", nm)
+	}
+	if cmd != nil {
+		t.Fatal("registerProject with nil client must return a nil cmd (no-op)")
+	}
+	if mm.toast != nil {
+		t.Fatalf("toast = %+v, want nil (no-op must not show a toast)", mm.toast)
+	}
+	if len(mm.settings.Repos) != len(before) {
+		t.Fatalf("settings.Repos changed on a nil-client no-op: %v", mm.settings.Repos)
+	}
+}
+
+// TestRegisterProjectAlreadyRegisteredShowsInfoToastNoDuplicate guards the
+// dedup branch: a repo already in m.settings.Repos gets an "already
+// registered" toastInfo, no duplicate entry, no disk write.
+func TestRegisterProjectAlreadyRegisteredShowsInfoToastNoDuplicate(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // isolation: dedup branch must never reach SaveUserSettings
+	repoDir := "/tmp/bt-d3ps-already-registered"
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: repoDir}
+	m.settings.Repos = []string{repoDir}
+
+	nm, cmd := m.registerProject()
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("registerProject did not return a model, got %T", nm)
+	}
+	if cmd == nil {
+		t.Fatal("registerProject (already registered) must still return a Cmd (toast auto-dismiss timer)")
+	}
+	if mm.toast == nil {
+		t.Fatal("toast is nil, want a toastInfo \"already registered\" toast")
+	}
+	if mm.toast.kind != toastInfo {
+		t.Fatalf("toast.kind = %v, want toastInfo", mm.toast.kind)
+	}
+	if mm.toast.title != "already registered" {
+		t.Fatalf("toast.title = %q, want %q", mm.toast.title, "already registered")
+	}
+	if len(mm.settings.Repos) != 1 {
+		t.Fatalf("settings.Repos = %v, want exactly 1 entry (no duplicate)", mm.settings.Repos)
+	}
+}
+
+// TestRegisterProjectSuccessSavesSettingsAndToasts guards the success path:
+// a NOT-yet-registered repo gets appended to config.yaml (via
+// config.SaveUserSettings, existing signature) AND to the in-model
+// m.settings.Repos, plus a "Registered: <slug>" toastInfo.
+func TestRegisterProjectSuccessSavesSettingsAndToasts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repoDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoDir, ".beans.yml"), []byte("beans:\n    prefix: lt-\n"), 0o644); err != nil {
+		t.Fatalf("write .beans.yml: %v", err)
+	}
+
+	m := fixtureModel(t, fixtureBeans())
+	m.client = &data.Client{RepoDir: repoDir}
+	if len(m.settings.Repos) != 0 {
+		t.Fatalf("test setup invalid: settings.Repos = %v, want empty", m.settings.Repos)
+	}
+
+	nm, cmd := m.registerProject()
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("registerProject did not return a model, got %T", nm)
+	}
+	if cmd == nil {
+		t.Fatal("registerProject (success) must return a Cmd (toast auto-dismiss timer)")
+	}
+	if mm.toast == nil {
+		t.Fatal("toast is nil, want a toastInfo \"Registered: lt\" toast")
+	}
+	if mm.toast.kind != toastInfo {
+		t.Fatalf("toast.kind = %v, want toastInfo", mm.toast.kind)
+	}
+	if want := "Registered: lt"; mm.toast.title != want {
+		t.Fatalf("toast.title = %q, want %q", mm.toast.title, want)
+	}
+
+	found := false
+	for _, r := range mm.settings.Repos {
+		if r == repoDir {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("settings.Repos = %v, missing %q", mm.settings.Repos, repoDir)
+	}
+
+	saved, err := config.LoadSettings()
+	if err != nil {
+		t.Fatalf("config.LoadSettings() after registerProject: %v", err)
+	}
+	found = false
+	for _, r := range saved.Repos {
+		if r == repoDir {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("config.yaml Repos = %v, missing %q -- SaveUserSettings not persisted", saved.Repos, repoDir)
+	}
+}
+
+// TestDispatchPaletteRegisterProjectRoutesToRegisterProject guards the
+// dispatchPalette wiring itself (thin pass-through, mirrors every other
+// action-ID case's own doc-stamp) -- exercised end-to-end via the nil-client
+// no-op shape (cheapest deterministic assertion: palette closes, no crash).
+func TestDispatchPaletteRegisterProjectRoutesToRegisterProject(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := fixtureModel(t, fixtureBeans())
+	m.paletteOpen = true
+
+	nm, cmd := m.dispatchPalette(paletteItem{kind: paletteKindAction, actionID: "register_project", label: "register project"})
+	mm, ok := nm.(model)
+	if !ok {
+		t.Fatalf("dispatchPalette did not return a model, got %T", nm)
+	}
+	if mm.paletteOpen {
+		t.Fatal("dispatchPalette must close the palette")
+	}
+	if cmd != nil {
+		t.Fatal("dispatchPalette(register_project) with nil client must return a nil cmd (registerProject's own no-op)")
 	}
 }

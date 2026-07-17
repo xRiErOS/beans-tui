@@ -25,6 +25,8 @@ package tui
 import (
 	"strings"
 
+	"beans-tui/internal/config"
+	"beans-tui/internal/data"
 	"beans-tui/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -95,6 +97,14 @@ func paletteActions(m model) []paletteItem {
 		// keys.Picker dispatch (openLobby, view_lobby.go) -- mirrors every
 		// other single-key binding's own Command-Center mirror above.
 		paletteItem{kind: paletteKindAction, actionID: "repo_picker", label: "go to repo picker"},
+		// bt-d3ps (epic-E13-plan.md Item 4, PO-Redefinition Grilling
+		// 2026-07-17, replaces the earlier discovery-scan design entirely --
+		// NO scan, NO discovery roots, NO find-persistence): registers the
+		// currently open repo (m.client.RepoDir) into the SAME central
+		// config.yaml register the Lobby itself reads (view_lobby.go) --
+		// grouped directly after "go to repo picker" (same repo-registry
+		// neighborhood, mirrors "create_tag" sitting directly after "tags").
+		paletteItem{kind: paletteKindAction, actionID: "register_project", label: "register project"},
 		// E10 Task 2 (bean bt-r92i, epic bt-362n D05): the Tag-Management
 		// page has NO dedicated keybinding either (D05 mirrors the "go to
 		// settings" precedent immediately below -- Tastenraum bleibt knapp) --
@@ -260,6 +270,11 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 			// genuine second entry point to the SAME handler, never a
 			// parallel implementation (dispatchPalette's own doc-stamp).
 			return m.openLobby()
+		case "register_project":
+			// bt-d3ps (epic-E13-plan.md Item 4, PO-Redefinition Grilling
+			// 2026-07-17): a genuine second entry point into
+			// registerProject below -- no parallel implementation.
+			return m.registerProject()
 		case "go_tags":
 			// E10 Task 2 (bean bt-r92i, epic bt-362n D05): the Tag-Management
 			// page's ONLY entry point (no dedicated keybinding, same
@@ -273,6 +288,40 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// registerProject is the Command-Center's "register project" action
+// (bt-d3ps, epic-E13-plan.md Item 4, PO-Redefinition Grilling 2026-07-17 --
+// replaces the earlier discovery-scan design entirely: NO scan, NO
+// discovery roots, NO find-persistence). The Lobby (view_lobby.go's
+// repoPickerBody) only ever shows config.yaml-registered repos -- a repo
+// opened via plain cwd-resolution (FindRepo, never explicitly registered)
+// has no way into that list otherwise. This is the one-keystroke bridge.
+func (m model) registerProject() (tea.Model, tea.Cmd) {
+	if m.client == nil {
+		// Palette opened from the Lobby itself (no live repo) -- mirrors
+		// dispatchPalette's own "edit_title" focusedBean()-nil-guard shape:
+		// no-op, never crash.
+		return m, nil
+	}
+	repoDir := m.client.RepoDir
+	for _, r := range m.settings.Repos {
+		if r == repoDir {
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastInfo, "already registered", "", nil, false)
+			return m, toastCmd
+		}
+	}
+	repos := append(append([]string{}, m.settings.Repos...), repoDir)
+	if err := config.SaveUserSettings(repos, m.settings.Editor, m.settings.Theme.Accent, m.settings.Layout.TreeWidth); err != nil {
+		var toastCmd tea.Cmd
+		m, toastCmd = m.showToast(toastError, err.Error(), "", nil, false)
+		return m, toastCmd
+	}
+	m.settings.Repos = repos
+	var toastCmd tea.Cmd
+	m, toastCmd = m.showToast(toastInfo, "Registered: "+data.RepoSlug(repoDir), "", nil, false)
+	return m, toastCmd
 }
 
 // paletteBox renders the floating Command-Center -- actions render PLAIN +
