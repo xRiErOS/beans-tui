@@ -89,6 +89,51 @@ func TestEditTitleSubmitFiresSetTitleDirectlyNoConfirm(t *testing.T) {
 	}
 }
 
+// TestEditTitleSubmitTargetVanishedShowsToast guards submitForm's "editTitle"
+// vanished-target guard (box_confirm_create.go:66, bt-81f0's Inventar) --
+// the ONE of the seven ex-silent m.err sites this file owns. m.mutTarget
+// points at an id no longer in m.idx.ByID (beanETag's own ok=false
+// contract), mirroring every other overlay's vanished-target guard
+// (box_confirm_delete_test.go/box_picker_parent_test.go/etc.'s own
+// "TargetVanishedClosesGracefully" tests) -- m.err alone used to be the
+// ONLY feedback; post-bt-81f0 it renders nowhere, so a Toast must carry it.
+func TestEditTitleSubmitTargetVanishedShowsToast(t *testing.T) {
+	f := buildEditTitleForm("Original Title")
+	f = driveForm(f, enterMsg())
+	if f.State != huh.StateCompleted {
+		t.Fatalf("setup: form.State = %v, want StateCompleted after the single field's enter", f.State)
+	}
+
+	m := fixtureModel(t, fixtureBeans())
+	m.form = f
+	m.formKind = "editTitle"
+	m.mutTarget = "nonexistent-bt-81f0-target" // not in m.idx.ByID -> beanETag ok=false
+
+	tm, cmd := m.submitForm()
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("submitForm() did not return a model, got %T", tm)
+	}
+	if nm.form != nil {
+		t.Fatal("form still open after submitForm, want nil")
+	}
+	if nm.err == "" {
+		t.Fatal("submitForm(editTitle) on a vanished target must set a status-line note (m.err)")
+	}
+	// bt-81f0: cmd is no longer nil -- it is now the Toast's own
+	// auto-dismiss tick (non-sticky), NOT a doomed mutation (structurally
+	// guaranteed: this branch returns before any mutateCmd(...) is built).
+	// Not invoked here -- toastError's own 8s duration would block the test.
+	if cmd == nil {
+		t.Fatal("submitForm(editTitle) on a vanished target must still fire a Cmd (the Toast's own auto-dismiss tick, bt-81f0)")
+	}
+	if nm.toast == nil {
+		t.Fatal("submitForm(editTitle) on a vanished target must also show a Toast (m.err lost its rendering, bt-81f0)")
+	} else if nm.toast.kind != toastError {
+		t.Errorf("toast.kind = %v, want toastError (bt-81f0 bindender Rahmen)", nm.toast.kind)
+	}
+}
+
 // TestBuildEditTitleFormUsesMultiLineText guards B03's core swap (design-
 // spec.md §15 PF-17, bean bt-2v38): the title field itself must now be a
 // *huh.Text (multi-line textarea, huh v1.0.0 field_text.go), not the

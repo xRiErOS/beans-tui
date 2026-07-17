@@ -279,11 +279,13 @@ func (m model) viewBacklog() string {
 	head, localKeys := m.backlogChrome(innerW)
 
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
+	// bt-81f0 (Notifications vereinheitlichen, Q1-Annahme): m.err lost the
+	// status line's rendering slot -- Toast is the ONE visible channel now.
 	indicator := ""
 	if m.watchUnavailable {
 		indicator = "watch unavailable — ctrl+r for manual reload"
 	}
-	status := statusBar(indicator, m.err, innerW)
+	status := statusBar(indicator, innerW)
 
 	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
 	// clickPaneGeometry helper backlogClickRow (below) uses -- single source

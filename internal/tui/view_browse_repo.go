@@ -946,12 +946,14 @@ func (m model) viewBrowseRepo() string {
 	// I04 (T8 Opus quality review): a failed data.Watch start (no live
 	// reload) must never degrade silently -- it goes into the same
 	// indicator slot Chrome() uses for the scroll position (Accent, non-
-	// critical), leaving m.err/the Red slot reserved for real load failures.
+	// critical). bt-81f0 (Notifications vereinheitlichen, Q1-Annahme):
+	// m.err lost this slot entirely -- Toast is the ONE visible channel for
+	// real load failures now, the status line carries ONLY this indicator.
 	indicator := ""
 	if m.watchUnavailable {
 		indicator = "watch unavailable — ctrl+r for manual reload"
 	}
-	status := statusBar(indicator, m.err, innerW)
+	status := statusBar(indicator, innerW)
 
 	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
 	// clickPaneGeometry helper treeClickRow (below) uses to map a click back

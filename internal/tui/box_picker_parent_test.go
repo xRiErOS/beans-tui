@@ -269,8 +269,19 @@ func TestParentPickerEnterTargetVanishedClosesGracefully(t *testing.T) {
 	if nm.err == "" {
 		t.Fatal("enter on a vanished target must set a status-line note (m.err)")
 	}
-	if cmd != nil {
-		t.Fatal("enter on a vanished target must not fire a Cmd (no doomed mutation)")
+	// bt-81f0: cmd is no longer nil -- it is now the Toast's own
+	// auto-dismiss tick (non-sticky), NOT a doomed mutation (structurally
+	// guaranteed: this branch returns before any mutateCmd(...) is built).
+	// Not invoked here -- toastError's own 8s duration would block the test.
+	if cmd == nil {
+		t.Fatal("enter on a vanished target must still fire a Cmd (the Toast's own auto-dismiss tick, bt-81f0)")
+	}
+	// bt-81f0: m.err no longer renders anywhere -- Toast is the ONE visible
+	// channel, this guard must not go silent.
+	if nm.toast == nil {
+		t.Fatal("enter on a vanished target must also show a Toast (m.err lost its rendering, bt-81f0)")
+	} else if nm.toast.kind != toastError {
+		t.Errorf("toast.kind = %v, want toastError", nm.toast.kind)
 	}
 }
 

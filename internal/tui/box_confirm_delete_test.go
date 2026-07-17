@@ -392,8 +392,22 @@ func TestDeleteConfirmEnterTargetVanishedClosesGracefully(t *testing.T) {
 	if nm.err == "" {
 		t.Fatal("enter on a vanished target must set a status-line note (m.err)")
 	}
-	if cmd != nil {
-		t.Fatal("enter on a vanished target must not fire a Cmd (no doomed mutation)")
+	// bt-81f0: cmd is no longer nil -- it is now the Toast's own
+	// auto-dismiss tick (showToast's toastTimeout Cmd, non-sticky), NOT a
+	// doomed mutation (structurally guaranteed: this branch returns before
+	// any mutateCmd(...) is ever built). Not invoked here -- toastError's
+	// own duration (8s, overlay_show_toast.go toastDuration) would block
+	// this test for real.
+	if cmd == nil {
+		t.Fatal("enter on a vanished target must still fire a Cmd (the Toast's own auto-dismiss tick, bt-81f0)")
+	}
+	// bt-81f0 (Notifications vereinheitlichen): the status-line note above
+	// no longer renders anywhere -- Toast is the ONE visible channel, so a
+	// vanished-target guard that only set m.err would go completely silent.
+	if nm.toast == nil {
+		t.Fatal("enter on a vanished target must also show a Toast (m.err lost its rendering, bt-81f0)")
+	} else if nm.toast.kind != toastError {
+		t.Errorf("toast.kind = %v, want toastError", nm.toast.kind)
 	}
 }
 

@@ -128,7 +128,13 @@ func (m model) keyDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		id := m.mutTarget
 		if _, ok := m.beanETag(id); !ok {
 			m.err = "Bean no longer exists — deletion discarded"
-			return m, nil
+			// bt-81f0 (Notifications vereinheitlichen): m.err's rendering
+			// anbindung is gone (view.go statusBar/ErrNote) -- Toast is now
+			// the ONE visible channel, so this vanished-target guard needs
+			// its own showToast call to stay visible at all.
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+			return m, toastCmd
 		}
 		client := m.client
 		return m, mutateCmd(func() error { return client.Delete(id) })

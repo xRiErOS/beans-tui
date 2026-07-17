@@ -46,7 +46,15 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 			m.form = nil
 			m.formKind = ""
 			m.err = createInFlightNote
-			return m, nil
+			// bt-81f0: m.err's rendering anbindung is gone -- Toast is now
+			// the ONE visible channel. kind=toastError per bt-81f0's
+			// bindender Rahmen (ERRATUM: keyNodeAction's OWN copy of this
+			// same guard, update.go:735, already uses toastWarn for the
+			// identical message -- kept as bt-81f0 mandates rather than
+			// silently reconciling the two colors, see bean body).
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastError, createInFlightNote, "", nil, false)
+			return m, toastCmd
 		}
 		d := draftFromForm(m.form)
 		m.createDraft = &d
@@ -64,7 +72,10 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 		etag, ok := m.beanETag(id)
 		if !ok {
 			m.err = "Bean no longer exists — title edit discarded"
-			return m, nil
+			// bt-81f0: see box_confirm_delete.go's identical guard comment.
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+			return m, toastCmd
 		}
 		client := m.client
 		return m, mutateCmd(func() error { return client.SetTitle(id, title, etag) })
@@ -89,12 +100,23 @@ func (m model) submitForm() (tea.Model, tea.Cmd) {
 		m.formKind = ""
 		if err := config.SaveUserSettings(repos, editor, accent, treeWidth); err != nil {
 			m.err = "Failed to save settings: " + err.Error()
-			return m, nil
+			// bt-81f0: see box_confirm_delete.go's identical guard comment.
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+			return m, toastCmd
 		}
 		settings, err := config.LoadSettings() // re-read + clamp/validate, Port devd saveAndApplySettings
 		if err != nil {
 			m.err = "Failed to reload settings: " + err.Error()
-			return m, nil
+			// bt-81f0: see box_confirm_delete.go's identical guard comment.
+			// Practically unreachable (LoadSettings only errors on a
+			// genuine os.UserHomeDir failure, which the preceding
+			// SaveUserSettings call would already have hit first) -- kept
+			// in sync anyway per bt-81f0's "kein Fehler wird leiser als
+			// vorher" mandate.
+			var toastCmd tea.Cmd
+			m, toastCmd = m.showToast(toastError, m.err, "", nil, false)
+			return m, toastCmd
 		}
 		m.settings = settings
 		configuredEditor = settings.Editor     // DD2-221 Port: live, no restart (editor.go)

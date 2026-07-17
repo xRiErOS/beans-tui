@@ -13,6 +13,8 @@ package tui
 // own doc comment).
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"beans-tui/internal/config"
@@ -167,6 +169,62 @@ func TestSettingsFormSubmitSavesAndAppliesLive(t *testing.T) {
 	}
 	if persisted.Editor != "code -w" || persisted.Theme.Accent != "#f5a97f" || persisted.Layout.TreeWidth != 50 {
 		t.Errorf("config.LoadSettings() after submit = %+v, want editor=code -w accent=#f5a97f treeWidth=50", persisted)
+	}
+}
+
+// TestSettingsFormSubmitSaveErrorShowsToast guards submitForm's "settings"
+// SaveUserSettings failure branch (box_confirm_create.go:91, bt-81f0's
+// Inventar) -- forced deterministically by pre-occupying the config
+// DIRECTORY's own path (~/.config/beans-tui) with a plain FILE, so
+// config.SaveUserSettings' os.MkdirAll(filepath.Dir(path)) fails (ENOTDIR)
+// rather than depending on any real filesystem permission quirk. m.err
+// alone used to be the ONLY feedback; post-bt-81f0 it renders nowhere, so a
+// Toast must carry it (mirrors every other overlay's vanished-target-guard
+// toast assertion, box_confirm_delete_test.go et al.).
+func TestSettingsFormSubmitSaveErrorShowsToast(t *testing.T) {
+	skipSlowHuhDriveInShortMode(t)
+	resetConfiguredEditor(t)
+	resetThemeAccent(t)
+	home := t.TempDir()
+	configParent := filepath.Join(home, ".config")
+	if err := os.MkdirAll(configParent, 0o755); err != nil {
+		t.Fatalf("setup MkdirAll(%s): %v", configParent, err)
+	}
+	// A regular FILE at the exact path SaveUserSettings needs as a
+	// DIRECTORY (~/.config/beans-tui) -- os.MkdirAll must fail on it.
+	if err := os.WriteFile(filepath.Join(configParent, "beans-tui"), []byte("blocker"), 0o644); err != nil {
+		t.Fatalf("setup WriteFile blocker: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	f := buildSettingsForm(config.Settings{Layout: config.LayoutSettings{TreeWidth: 40}})
+	f = advanceFields(f, 4) // settle every field unedited
+	if f.State != huh.StateCompleted {
+		t.Fatalf("setup: form.State = %v, want StateCompleted", f.State)
+	}
+
+	m := fixtureModel(t, fixtureBeans())
+	m.form = f
+	m.formKind = "settings"
+
+	tm, cmd := m.submitForm()
+	nm, ok := tm.(model)
+	if !ok {
+		t.Fatalf("submitForm() did not return a model, got %T", tm)
+	}
+	// bt-81f0: cmd is no longer nil on the save-error path -- it is now the
+	// Toast's own auto-dismiss tick (non-sticky). Not invoked here --
+	// toastError's own 8s duration would block the test.
+	if cmd == nil {
+		t.Fatal("submitForm(settings) save-error must still fire a Cmd (the Toast's own auto-dismiss tick, bt-81f0)")
+	}
+	if nm.err == "" {
+		t.Fatal("submitForm(settings) save-error must set a status-line note (m.err)")
+	}
+	if nm.toast == nil {
+		t.Fatal("submitForm(settings) save-error must also show a Toast (m.err lost its rendering, bt-81f0)")
+	} else if nm.toast.kind != toastError {
+		t.Errorf("toast.kind = %v, want toastError (bt-81f0 bindender Rahmen)", nm.toast.kind)
 	}
 }
 

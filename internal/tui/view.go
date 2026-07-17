@@ -67,17 +67,20 @@ func wrapText(s string, w int) string {
 	return ansi.Hardwrap(ansi.Wordwrap(s, w, ""), w, true)
 }
 
-// statusBar renders footer Zone 4 (devd wireframe): scroll indicator
-// (Accent) + a critical error (Red), right-aligned. Empty → empty line.
-func statusBar(indicator, errNote string, width int) string {
-	var rparts []string
+// statusBar renders footer Zone 4 (devd wireframe): the scroll indicator
+// (Accent), right-aligned. Empty → empty line.
+//
+// bt-81f0 (Notifications vereinheitlichen, Q1-Annahme): this used to ALSO
+// render a critical error (Red) via a second errNote param -- Toast
+// (overlay_show_toast.go) is now the ONE visible notification channel, so
+// that param is gone. The status line itself stays (Q1: cap the Fehler-
+// Anbindung only, no dynamic footer height / layout rework) -- it now
+// carries ONLY the scroll indicator.
+func statusBar(indicator string, width int) string {
+	right := ""
 	if indicator != "" {
-		rparts = append(rparts, theme.Accent.Render(indicator))
+		right = theme.Accent.Render(indicator)
 	}
-	if errNote != "" {
-		rparts = append(rparts, lipgloss.NewStyle().Foreground(theme.Red).Render(errNote))
-	}
-	right := strings.Join(rparts, "  ")
 	if right == "" {
 		return ""
 	}
@@ -252,7 +255,6 @@ type ChromeOpts struct {
 	Body          string // unwrapped body text; wrapped+scrolled internally
 	Scroll        int    // scroll offset into the wrapped body
 	FooterHint    string // pre-rendered local+global "key:desc  ..." hint
-	ErrNote       string // critical error, right-aligned in the status line
 	fallbackAvail int    // test hook: override the body-height fallback (0 = default 18)
 }
 
@@ -280,7 +282,7 @@ func Chrome(o ChromeOpts) string {
 		}
 	}
 	win, ind := scrollView(wrapped, avail, o.Scroll)
-	status := statusBar(ind, o.ErrNote, innerW)
+	status := statusBar(ind, innerW)
 	content := head + "\n" + div + "\n" + win + "\n" + div + "\n" + localKeys + "\n" + status
 	// outerBorder's width param is the CONTENT width the border wraps around
 	// (lipgloss's Border() adds 2 columns on top of Width()) — pass innerW

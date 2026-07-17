@@ -229,7 +229,16 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 			// sites now, not two).
 			if m.pendingCreate != nil {
 				m.err = createInFlightNote
-				return m, nil
+				// bt-81f0: m.err's rendering anbindung is gone -- Toast is
+				// now the ONE visible channel. kind=toastError per bt-81f0's
+				// bindender Rahmen (ERRATUM: keyNodeAction's OWN copy of
+				// this same guard, update.go:735, already uses toastWarn
+				// for the identical message -- kept as bt-81f0 mandates
+				// rather than silently reconciling the two colors, see bean
+				// body).
+				var toastCmd tea.Cmd
+				m, toastCmd = m.showToast(toastError, createInFlightNote, "", nil, false)
+				return m, toastCmd
 			}
 			return m.openCreateForm()
 		case "go_backlog":

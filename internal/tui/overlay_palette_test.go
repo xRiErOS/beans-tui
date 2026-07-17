@@ -452,6 +452,16 @@ func TestDispatchPaletteCreateIgnoredWhileCreateInFlight(t *testing.T) {
 	if mm.pendingCreate == nil {
 		t.Fatal("pendingCreate must remain set -- the original in-flight create must not be forgotten")
 	}
+	// bt-81f0: m.err no longer renders anywhere -- Toast is the ONE visible
+	// channel, this guard must not go silent. kind=toastError per bt-81f0's
+	// bindender Rahmen (ERRATUM vs. update.go:735's own toastWarn choice for
+	// the identical message, see box_confirm_create_test.go's twin
+	// assertion / bean body Deviations).
+	if mm.toast == nil {
+		t.Fatal("palette create dropping the second create must also show a Toast (m.err lost its rendering, bt-81f0)")
+	} else if mm.toast.kind != toastError {
+		t.Errorf("toast.kind = %v, want toastError (bt-81f0 bindender Rahmen)", mm.toast.kind)
+	}
 }
 
 // --- create_tag dispatch guard (B14, design-spec.md §15 PF-16, bean bt-ntoz, E8 Task 7, bean bt-yqdy) ---
