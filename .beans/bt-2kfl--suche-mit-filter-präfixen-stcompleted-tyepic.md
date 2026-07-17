@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-07-17T06:21:42Z
-updated_at: 2026-07-17T11:44:39Z
+updated_at: 2026-07-17T11:58:00Z
 parent: bt-5uzr
 ---
 
@@ -246,3 +246,8 @@ Worktree-`.beans/`-Kopie):
   jetzt den AKTUELLEN Dispatch-Entscheid (`maybeBleveCmd() == nil`) für die
   fertig getippte reine Präfix-Query, nicht das (durch einen früheren
   Zwischenzustand potenziell noch gesetzte) `searchBleveLoading`-Flag.
+
+
+## Korrektur Smoke-Begründung (Reviewer-Finding I02, 2026-07-17)
+
+Die Smoke-Sektion oben behauptet „0 Treffer korrekt, keine completed-Beans im Fixture-Repo" — faktisch falsch: 87 completed-Beans existieren. Tatsächlicher Grund für 0 sichtbare Treffer: der Archiv-Sichtbarkeits-Default (`beanMatchesArchive`) blendet completed/scrapped standardmäßig aus — unabhängig von bt-2kfl. Verhalten korrekt, Begründung im Smoke-Text war falsch.
