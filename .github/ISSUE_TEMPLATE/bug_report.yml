@@ -34,7 +34,7 @@ body:
     id: bt-version
     attributes:
       label: bt version
-      description: Output of `bt --version` (or the git commit if built from source)
+      description: bt has no --version flag yet — give the git commit/tag you built from (`git rev-parse --short HEAD`), or the install date if you used `go install ...@latest`.
     validations:
       required: true
 
@@ -42,7 +42,7 @@ body:
     id: beans-version
     attributes:
       label: beans CLI version
-      description: Output of `beans --version`
+      description: Output of `beans version`
     validations:
       required: true
 

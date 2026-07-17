@@ -24,7 +24,7 @@ jobs:
           curl -sL "https://github.com/hmans/beans/releases/download/v${BEANS_VERSION}/beans_Linux_x86_64.tar.gz" -o beans.tar.gz
           tar -xzf beans.tar.gz beans
           sudo mv beans /usr/local/bin/beans
-          beans --version
+          beans version
 
       - name: Build
         run: go build -o bin/bt .
