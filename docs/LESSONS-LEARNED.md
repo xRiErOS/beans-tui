@@ -366,3 +366,17 @@ neue Sektion). Jeder Eintrag hat exakt drei Felder:
 - **Was lief nicht rund:** Konsolidierter Tag-Picker fing `keys.Toggle` (space UND `x`) VOR `m.tagInput.Update(msg)` ab — `x` war im Suchfeld nie tippbar (nginx/linux/unix…), stiller Funktionsverlust; Implementer hatte die Kollision als „bewusste Abwägung" fehlklassifiziert, Reviewer-Mutations-Test + tmux fingen sie.
 - **Wie gefixt:** Eigenes space-only Binding `keys.TagToggle` (Space ist laut `data.ValidTagName` nie Teil eines Tagnamens), `x` fällt zum Textinput durch; Footer-Hint nachgezogen (Commit 0ae4463).
 - **Forward-Guard:** Review-Checklisten-Punkt für jedes Overlay mit fokussiertem Textinput: JEDES vor dem Textinput abgefangene Binding gegen Zeichen-Tippbarkeit prüfen (Buchstaben-/Zeichen-Keys nur abfangen, wenn sie in gültigen Eingaben nicht vorkommen können); Regressionstest „Wort mit dem Binding-Zeichen tippen → Value vollständig".
+
+## 2026-07-17 — E13-Nacharbeitsrunde (Quellen: 5 Reviews, 1 Fix-Runde in E13 keine, Diagnose bt-0xrb)
+
+### 1. go-Shadowing erzeugte false-positiven Build im Review (Smoke gegen altes Binary)
+
+- **Was lief nicht rund:** bt-d3ps-Review: bloßes `go build`/`go vet` wurde von der Shell-Funktion `go` abgefangen — Exit 0 ohne echten Compile. Erster tmux-Smoke lief gegen ein 2 Tage altes Binary, „register project" fehlte scheinbar komplett. Die CLAUDE.md-Regel (`command go`) stand im Prompt, wurde aber erst nach dem Widerspruch Binary-Verhalten vs. Testlage angewendet.
+- **Wie gefixt:** Reviewer erkannte den Widerspruch selbst, baute mit `command go build` neu, wiederholte den Smoke vollständig.
+- **Forward-Guard:** Prompt-Vorlagen-Pflichtzeile für jeden Smoke: VOR tmux-Start `bin/bt`-mtime gegen `date` prüfen (Binary jünger als letzter Commit, sonst Abbruch + Neubau mit `command go`). Ein frisches Binary ist Beweis, kein Vertrauen.
+
+### 2. Upstream-ETag-Inkonsistenz beans 0.4.2 (Diagnose bt-0xrb)
+
+- **Was lief nicht rund:** `beans list`-ETag hasht die default-gefüllte In-Memory-Repräsentation, `--if-match` die rohen Datei-Bytes — nie mutierte beans ohne `priority:`-Zeile konflikten deterministisch und unheilbar per Watcher-Refresh (PO-Befund im lean-stack-Repo, 9 beans betroffen).
+- **Wie gefixt:** Datenheilung per einmaliger kanonischer Mutation (raw-Hash als if-match); Upstream-Issue-Entwurf erstellt (docs/_free-notes/); beans-tui bewusst OHNE Workaround (D04).
+- **Forward-Guard:** Bei „Conflict trotz Refresh"-Symptomen zuerst list-ETag vs. fnv1a64(raw bytes) diffen (Loop aus bt-0xrb-Diagnose) statt bt-seitig zu debuggen; bei bulk-importierten beans-Repos Heilungs-Sweep einplanen, bis Upstream gefixt.
