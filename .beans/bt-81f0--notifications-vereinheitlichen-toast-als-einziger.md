@@ -1,11 +1,11 @@
 ---
 # bt-81f0
 title: 'Notifications vereinheitlichen: Toast als einziger Kanal'
-status: todo
+status: in-progress
 type: feature
 priority: normal
 created_at: 2026-07-17T06:27:18Z
-updated_at: 2026-07-17T07:38:14Z
+updated_at: 2026-07-17T07:38:15Z
 parent: bt-5uzr
 ---
 
