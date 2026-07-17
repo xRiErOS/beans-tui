@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-16T22:47:53Z
+updated_at: 2026-07-17T06:15:28Z
 parent: bt-apmy
 ---
 
@@ -224,3 +224,10 @@ spec-§15-Nachtrag) · bt-b0w0/NB-2 (Relations-Scroll, 6429ee5) · bt-39cl
 CHANGES_REQUIRED der Runde). Follow-up offen: bt-se4q (Glyph-Rescan, normal).
 Voll-Suite auf integriertem main grün (alle Pakete, internal/tui 143s).
 PO-Abnahme des Epics steht aus (Tag to-review bleibt).
+
+
+## Review 2026-07-17 (E11-Nacharbeit, Runde 1 — Detail-Pane)
+
+- US-01 · META zeigt 5 Felder, created/modified nur in HISTORY (bt-lg68) · a
+- US-02 · META default zu, öffnet nur bei Auswahl, Meta-Strip trägt Infos (PF-18, bt-98cb) · a
+- US-03 · RELATIONS scrollt mit Cursor-Fenster + ↑/↓/L n–m/total-Indikator (bt-b0w0/NB-2, US-05-Reopen bestanden) · a
