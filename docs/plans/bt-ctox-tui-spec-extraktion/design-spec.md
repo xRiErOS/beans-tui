@@ -74,7 +74,9 @@ in-place aktualisieren · `NEU` = additives Konzept für eine Lücke · `synthes
 | 10 | Notifications/Toast | `tui/overlay_show_toast.go` | notification-toast-overlay | schärfen |
 | 11 | Search/Filter + Command-Palette | `tui/{fuzzy,search_prefix,box_filter_facets,overlay_palette}.go` | client-side-filter-search | schärfen + **Palette NEU** |
 | 12 | Config & Yank/Clipboard | `config/{settings,state}.go`, `tui/box_form_settings.go`, `clip/clip.go`, `tui/context.go` | config-and-state-persistence, clipboard-osc52 | schärfen |
-| 13 | Synthese: Cluster-Index + Querschnitts-Leitplanken | `docs/LESSONS-LEARNED.md`, Cluster-`index.md` | tui-specification, index | synthese |
+| 14 | Visuelle Prüfung: VHS + tmux | `*.tape`, `Makefile`, `*_golden_test.go`, `docs/screenshots/` | hybrid-test-strategy, build-tooling-pitfalls | schärfen + **VHS/tmux NEU** |
+| 15 | In-Action: PO-Feedback- & Evolutions-Mining | git-Historie, `.beans/` (PO-Feedback-Runden, Bug-Beans), LESSONS-LEARNED | design-guidelines-lessons-learned | mutiert in andere Slices |
+| 13 | Synthese: Cluster-Index + Querschnitts-Leitplanken (zuletzt) | `docs/LESSONS-LEARNED.md`, Cluster-`index.md` | tui-specification, index | synthese |
 
 **Optional (projektspezifisch, nur bei Bedarf):** Tag-Management & Review-Flow
 (`data/{tagdefs,tags,hierarchy,review}.go`, `tui/view_tag_management.go`) — an beans-Domänenmodell
@@ -93,23 +95,26 @@ Nicht als eigene Slice-Konzepte, sondern als Extraktions-Leitplanken, die in meh
 
 ## 7. Ausführungs-/Orchestrierungs-Modell
 
-1. **13 Subagenten parallel** (D05), einer je Slice. Jeder Subagent:
+1. **15 Subagenten parallel** (D05, alle Opus — starkes Reasoning für Delta-Entscheidungen), einer je Slice. Jeder Subagent:
    - liest bestehende dev-wiki-Konzepte der Slice (Baseline),
    - liest die beans-tui-Quell-Dateien der Slice,
-   - erzeugt OKF-fertige Delta-Drafts nach Vorlage §4 in `docs/<slug>-okf-inbox/`.
-2. **Ein PO-Review** aller Drafts am Ende (D05).
-3. **`/okf` ingest** der freigegebenen Drafts ins dev-wiki-Bundle — Hybrid: `migrate`/Update für
-   bestehende Konzepte, `ingest` für die 3 neuen (D01, D04).
-4. **Cluster-Index/Landkarte** (Slice 13) zuletzt, nachdem alle Konzepte stehen.
+   - erzeugt OKF-fertige Delta-Drafts nach Vorlage §4 in `docs/tui-spec-okf-inbox/`.
+2. **Slice 15 (In-Action)** erzeugt eine Mutations-Landkarte: jede Nutzungs-Erkenntnis → Ziel-Slice/Konzept.
+   Diese wird beim Review in die betroffenen Slice-Drafts eingearbeitet (Slice 15 editiert nicht selbst, da parallel).
+3. **Ein PO-Review** aller Drafts am Ende (D05).
+4. **`/okf` ingest** der freigegebenen Drafts ins dev-wiki-Bundle — Hybrid: `migrate`/Update für
+   bestehende Konzepte, `ingest` für die neuen Lücken-Konzepte (D01, D04).
+5. **Cluster-Index/Landkarte** (Slice 13) zuletzt, nachdem alle Konzepte stehen.
 
 **Subagent-Output-Format (Pflicht im Dispatch):** je Konzept eine Draft-Datei nach Vorlage §4;
 Rückgabe = Markdown-Tabelle `konzept | pfad | delta-typ | baseline-referenz | verankerte-quellen(datei:zeile)`.
 
 ## 8. Definition of Done
 
-- [ ] Alle 13 Slices als Drafts in `docs/<slug>-okf-inbox/` erzeugt.
+- [ ] Alle 15 Slices als Drafts in `docs/tui-spec-okf-inbox/` erzeugt.
 - [ ] Jedes Konzept zweischichtig (Prinzip + verankerte Bubbletea/Go-Referenz mit `datei:zeile`).
-- [ ] Die 3 Lücken (Theme-Token, Accordion, Command-Palette) als neue Konzepte abgedeckt.
+- [ ] Die Lücken (Theme-Token, Accordion, Command-Palette, VHS/tmux-Visualprüfung) als neue Konzepte abgedeckt.
+- [ ] In-Action-Erkenntnisse (Slice 15) in die betroffenen Slice-Konzepte eingearbeitet.
 - [ ] PO-Review bestanden.
 - [ ] `/okf`-Ingest ins dev-wiki abgeschlossen; Cluster-Index aktualisiert.
 - [ ] Findbar via `okf-cli --root ~/Obsidian/Knowledge-Catalogue find "<query>"`.
