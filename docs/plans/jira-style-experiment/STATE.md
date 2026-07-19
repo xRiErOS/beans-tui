@@ -16,8 +16,8 @@ Autonom weiterarbeiten, Entscheidungen selbst treffen, später gemeinsam prüfen
 |-------|------|--------|-------|
 | S1 | `dropdownBox`-Primitiv (Label+Hotkey im Rahmen, ▾, Fokus-Farbe) | 🟢 DONE | Commit `2b08977`, `internal/tui/box_dropdown.go`(+_test), voller Testlauf `ok 149.966s` |
 | S2 | **Additiv**: `detailBoxForm(bean,width)` Scalars (Title/Status/Type/Priority/Parent/Tags) via `dropdownBox`, responsive 3/2/1-up + R1 (Label=Subtext). Golden visuell verifiziert (Farben/Salienz/Ausrichtung gut). Kein Live-Wiring. | 🟢 DONE | Commit `f76b6e9`, `box_detail_form.go`(+_test+golden) |
-| S2c | Multi-line `panelBox(label,body,hotkey,width)`-Primitiv (Label im Rahmen, mehrzeiliger Inhalt); `detailBoxForm` um **Body/Relations/History** als full-width Panels erweitern. Additiv, Golden. | 🟣 NÄCHSTES | — |
-| S2b | Komplette box-form in die Browse-Detail-Pane einhängen (ersetzt Accordion-Render), Bestandsgolden aktualisieren, I01-Dichte prüfen (ggf. Pane-Rahmen weg), VHS 80/100 | 🟣 offen | — |
+| S2c | Multi-line `panelBox`-Primitiv + `detailBoxForm` um Body/Relations/History erweitert (full-width Panels), `detailBoxForm(idx,b,width)`. Additiv, Golden regeneriert. | 🟢 DONE | Commit `d62edf0`, `box_panel.go`(+_test), `box_detail_form.go` |
+| S2b | Live-Wiring per **Env-Flag `BT_BOXFORM=1`**: Detail-Pane rendert `detailBoxForm` statt Accordion, wenn gesetzt. Default aus → alle Bestandsgolden/Tests unverändert. EIN neuer Golden-Test für den an-Zustand. Max reversibel, direkt vergleichbar. Danach I01-Dichte + VHS/`BT_BOXFORM=1 bt` bei 80/100. | 🟣 NÄCHSTES | — |
 | S3 | Persistente Filter-Leiste (D02), `f` fokussiert; aktiver Chip=Peach | 🟣 offen | — |
 | S4 | Keymap + Picker: `o` Type, `u` Priority, `G` View; Type-/Priority-Picker | 🟣 offen | — |
 | S5 | Nested/Flat-Switcher (`G`); Flat-Tabelle (Default Hierarchie, `S`→flach) | 🟣 offen | — |
@@ -36,4 +36,4 @@ Filter: `f`-Einstieg, KEINE Facetten-Einzelkeys.
 - **I02** 80-Spalten: responsive 3/2/1-up in S2/S3/S5, VHS Pflicht.
 
 ## Nächste Aktion (für Resume)
-S2c (additiv): Implementer baut `panelBox`-Multi-line-Primitiv + erweitert `detailBoxForm` um Body/Relations/History (full-width Panels), TDD + Golden, sonnet, KEIN Live-Wiring. Danach S2b (komplette form in Live-Detail einhängen, Bestandsgolden updaten, VHS 80/100). Reviewer-Checkpoint nach S2b. R1 bereits erledigt (in S2).
+S2b: Implementer findet die EINE Stelle, wo die Live-Detail-Pane komponiert wird (Accordion-Body), und gated sie hinter `BT_BOXFORM=1` → `detailBoxForm(idx,bean,paneW)`. Default aus = Bestandsgolden unberührt. EIN neuer Golden-Test für den an-Zustand. sonnet, explore+wire+golden in einem. Danach visuell prüfen (`BT_BOXFORM=1 bt` bzw. VHS 80/100), I01-Dichte bewerten. Reviewer-Checkpoint nach S2b.
