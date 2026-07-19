@@ -37,10 +37,12 @@ func detailBoxFormPerRow(width int) int {
 
 // detailBoxForm renders a bean's scalar fields as jira-style titled boxes
 // (design-spec.md D01/D03, mockup §6.3): a full-width Title box, then a
-// responsive grid of Status/Type/Priority/Parent/Tags boxes. Reuses
-// dropdownBox. ADDITIVE — Body/Relations/History (multi-line panels) are a
-// later slice. width = inner pane width in cells.
-func detailBoxForm(b *data.Bean, width int) string {
+// responsive grid of Status/Type/Priority/Parent/Tags boxes, then full-width
+// Body/Relations/History panels (S2c, design-spec.md D01/D04) built via
+// panelBox (box_panel.go) reusing view_detail_bean.go's own content
+// renderers. idx is needed to resolve Relations (parent/children/blocking).
+// width = inner pane width in cells.
+func detailBoxForm(idx *data.Index, b *data.Bean, width int) string {
 	title := dropdownBox("Title", b.Title, "e", width, false)
 
 	priority := b.Priority
@@ -87,6 +89,13 @@ func detailBoxForm(b *data.Bean, width int) string {
 		}
 		lines = append(lines, joined)
 	}
+
+	relationsBody, _, _ := relationsSectionBody(idx, b, width-4, false, 0)
+	lines = append(lines,
+		panelBox("Body", bodySectionBody(b, width-4), "e", width, false),
+		panelBox("Relations", relationsBody, "", width, false),
+		panelBox("History", historieSectionBody(b, width-4), "", width, false),
+	)
 
 	return strings.Join(lines, "\n")
 }

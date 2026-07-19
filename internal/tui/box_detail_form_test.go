@@ -37,12 +37,25 @@ func detailBoxFormFixture() *data.Bean {
 	}
 }
 
+// detailBoxFormIndex builds the *data.Index fixture detailBoxForm needs to
+// resolve Relations (S2c) — a minimal parent/child pair around the fixture
+// bean's own ID/Parent ("gld-tsk1" parented under "gld-epic"), mirroring
+// view_detail_bean_test.go's own data.NewIndex(beans) construction pattern.
+func detailBoxFormIndex() *data.Index {
+	beans := []data.Bean{
+		{ID: "gld-epic", Title: "Golden epic", Status: "todo", Type: "epic", Priority: "normal"},
+		{ID: "gld-tsk1", Title: "First golden task", Status: "todo", Type: "task", Priority: "", Parent: "gld-epic"},
+	}
+	return data.NewIndex(beans)
+}
+
 // TestDetailBoxFormStructure asserts (width-agnostic, ansi.Strip'd) that all
 // 5 scalar fields plus Title render with their labels/values/hotkey badges,
 // and that no produced line ever overflows the requested width (100).
 func TestDetailBoxFormStructure(t *testing.T) {
 	b := detailBoxFormFixture()
-	out := detailBoxForm(b, 100)
+	idx := detailBoxFormIndex()
+	out := detailBoxForm(idx, b, 100)
 	plain := ansi.Strip(out)
 
 	for _, want := range []string{
@@ -53,6 +66,7 @@ func TestDetailBoxFormStructure(t *testing.T) {
 		"Parent", "gld-epic",
 		"Tags",
 		"(e)", "(s)", "(o)", "(u)", "(a)", "(t)",
+		"Body", "Relations", "History",
 	} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("output missing %q\n--- got ---\n%s", want, plain)
@@ -72,8 +86,9 @@ func TestDetailBoxFormStructure(t *testing.T) {
 // and no line exceeds the narrower width.
 func TestDetailBoxFormResponsiveNarrow(t *testing.T) {
 	b := detailBoxFormFixture()
-	wide := detailBoxForm(b, 100)
-	narrow := detailBoxForm(b, 50)
+	idx := detailBoxFormIndex()
+	wide := detailBoxForm(idx, b, 100)
+	narrow := detailBoxForm(idx, b, 50)
 
 	wideLines := strings.Count(wide, "\n") + 1
 	narrowLines := strings.Count(narrow, "\n") + 1
@@ -97,7 +112,8 @@ func TestDetailBoxFormGolden(t *testing.T) {
 	defer lipgloss.SetColorProfile(termenv.Ascii)
 
 	b := detailBoxFormFixture()
-	out := detailBoxForm(b, 100)
+	idx := detailBoxFormIndex()
+	out := detailBoxForm(idx, b, 100)
 
 	path := filepath.Join("testdata", "detail_boxform.golden")
 	if *update {
