@@ -17,7 +17,7 @@ Autonom weiterarbeiten, Entscheidungen selbst treffen, später gemeinsam prüfen
 | S1 | `dropdownBox`-Primitiv (Label+Hotkey im Rahmen, ▾, Fokus-Farbe) | 🟢 DONE | Commit `2b08977`, `internal/tui/box_dropdown.go`(+_test), voller Testlauf `ok 149.966s` |
 | S2 | **Additiv**: `detailBoxForm(bean,width)` Scalars (Title/Status/Type/Priority/Parent/Tags) via `dropdownBox`, responsive 3/2/1-up + R1 (Label=Subtext). Golden visuell verifiziert (Farben/Salienz/Ausrichtung gut). Kein Live-Wiring. | 🟢 DONE | Commit `f76b6e9`, `box_detail_form.go`(+_test+golden) |
 | S2c | Multi-line `panelBox`-Primitiv + `detailBoxForm` um Body/Relations/History erweitert (full-width Panels), `detailBoxForm(idx,b,width)`. Additiv, Golden regeneriert. | 🟢 DONE | Commit `d62edf0`, `box_panel.go`(+_test), `box_detail_form.go` |
-| S2b | Live-Wiring per **Env-Flag `BT_BOXFORM=1`**: Detail-Pane rendert `detailBoxForm` statt Accordion, wenn gesetzt. Default aus → alle Bestandsgolden/Tests unverändert. EIN neuer Golden-Test für den an-Zustand. Max reversibel, direkt vergleichbar. Danach I01-Dichte + VHS/`BT_BOXFORM=1 bt` bei 80/100. | 🟣 NÄCHSTES | — |
+| S2b | Live-Wiring per **Env-Flag `BT_BOXFORM=1`** in `renderAccordionPane` (view_browse_repo.go:640). Default aus → Bestandsgolden byte-identisch. Golden `browse_boxform.golden` für an-Zustand. | 🟢 DONE | Commit `987ce06`, `box_form_flag.go`, `box_form_golden_test.go` |
 | S3 | Persistente Filter-Leiste (D02), `f` fokussiert; aktiver Chip=Peach | 🟣 offen | — |
 | S4 | Keymap + Picker: `o` Type, `u` Priority, `G` View; Type-/Priority-Picker | 🟣 offen | — |
 | S5 | Nested/Flat-Switcher (`G`); Flat-Tabelle (Default Hierarchie, `S`→flach) | 🟣 offen | — |
@@ -35,5 +35,18 @@ Filter: `f`-Einstieg, KEINE Facetten-Einzelkeys.
 - **I01** Box-in-Box-Dichte in S2 prüfen (ggf. Pane-Rahmen weglassen).
 - **I02** 80-Spalten: responsive 3/2/1-up in S2/S3/S5, VHS Pflicht.
 
+## CHECKPOINT (2026-07-19) — Validierung durch Nutzer
+Box-Form live-sichtbar: `BT_BOXFORM=1 bt` (bzw. `BT_BOXFORM=1` + bt-test). Gate in `renderAccordionPane` wirkt auf Browse-Tree + Backlog + Fullscreen + Review (shared body).
+
+### Befunde aus browse_boxform.golden (100x30)
+- **F1 (offen, wichtig):** Box-Form höher als Detail-Pane → Body abgeschnitten, Relations/History unsichtbar. **Kein Scrolling im Box-Modus.** Muss vor produktivem Einsatz gelöst werden (Scroll-Viewport für die Detail-Pane, ODER Box-Form primär im Fullscreen `v`).
+- **F2:** I01 (Box-in-Box) tolerabel, kein Pane-Rahmen-Weglassen nötig.
+- **F3:** Split-Detail ~52 breit → perRow=1; 2/3-up erst im Fullscreen.
+
+### Offene Entscheidungen für den Nutzer (D-Codes)
+- **D10?** Scroll-Strategie für die Box-Form-Detail-Pane (Viewport-Scroll vs. Fullscreen-only vs. kollabierbare Panels). → treibt die nächste Slice.
+- **D11?** Gilt der Box-Modus global (auch Backlog/Fullscreen/Review) oder nur Browse-Detail? (Gate sitzt aktuell im shared body → global.)
+- Richtungs-Urteil: ist das eine Verbesserung → S3+ (Filter-Leiste, Nested/Flat, Picker, huh-Ersatz) weiterbauen, oder anpassen/verwerfen?
+
 ## Nächste Aktion (für Resume)
-S2b: Implementer findet die EINE Stelle, wo die Live-Detail-Pane komponiert wird (Accordion-Body), und gated sie hinter `BT_BOXFORM=1` → `detailBoxForm(idx,bean,paneW)`. Default aus = Bestandsgolden unberührt. EIN neuer Golden-Test für den an-Zustand. sonnet, explore+wire+golden in einem. Danach visuell prüfen (`BT_BOXFORM=1 bt` bzw. VHS 80/100), I01-Dichte bewerten. Reviewer-Checkpoint nach S2b.
+WARTET auf Nutzer-Validierung am Checkpoint oben. Bei „weiter": zuerst F1 (Scroll) lösen — hängt an D10. Danach S3 (persistente Filter-Leiste, `dropdownBox`-Reuse), dann S4/S5/S7. Kombinierter Code-Reviewer über S1–S2b läuft am Checkpoint.
