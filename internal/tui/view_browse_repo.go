@@ -652,23 +652,38 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 		// (ID/Title/type-status-prio) renders ABOVE the Accordion, same width
 		// as the Accordion itself (accW) -- not the App-Chrome header (PO-
 		// Antwort Q01: Detail-Pane only).
-		rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
-		secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
-		// NB-2 (Reopen bt-b0w0, PO-Review Runde 3, US-05, design-spec.md §15
-		// PF-17 Akzeptanz-Zusatz): when RELATIONS (the ONLY section this
-		// applies to, deliberately -- see windowRelationsSection's own doc
-		// comment) is the open section, its body is windowed to the pane's
-		// own line budget BEFORE renderAccordion ever joins it in -- the OLD
-		// path handed the full body to renderPane below, whose line cap just
-		// cut the tail off with no scroll/indicator (this function's own doc
-		// comment already anticipated exactly this drift). Every OTHER
-		// section (Meta/Body/History) is untouched, renderPane's existing cap
-		// still applies to them unchanged.
-		if open == relationsSectionIdx+1 {
-			secs[relationsSectionIdx].body = windowRelationsSection(secs[relationsSectionIdx].body, h, secs[relationsSectionIdx].activeLine)
+		if boxFormEnabled() {
+			// S2b (jira-style-experiment, BT_BOXFORM env gate, box_form_flag.go):
+			// swap the accordion body for detailBoxForm's jira-style boxes.
+			// accW is the SAME outer box width detailHeaderBlock/renderAccordion
+			// use above/below -- detailBoxForm's own dropdownBox/panelBox calls
+			// expect a full outer-box width (border included), not bodyW's
+			// content-only budget, so reusing accW (not inventing a new width)
+			// keeps this row-for-row consistent with the accordion path's own
+			// convention. Accordion nav (open/secCursor/fieldCursor) has no
+			// effect in this mode -- field-level nav for box-form is a later
+			// slice (see design-spec.md), acceptable for this experiment slice.
+			form := detailBoxForm(idx, b, accW)
+			rows = append(rows, strings.Split(form, "\n")...)
+		} else {
+			rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
+			secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
+			// NB-2 (Reopen bt-b0w0, PO-Review Runde 3, US-05, design-spec.md §15
+			// PF-17 Akzeptanz-Zusatz): when RELATIONS (the ONLY section this
+			// applies to, deliberately -- see windowRelationsSection's own doc
+			// comment) is the open section, its body is windowed to the pane's
+			// own line budget BEFORE renderAccordion ever joins it in -- the OLD
+			// path handed the full body to renderPane below, whose line cap just
+			// cut the tail off with no scroll/indicator (this function's own doc
+			// comment already anticipated exactly this drift). Every OTHER
+			// section (Meta/Body/History) is untouched, renderPane's existing cap
+			// still applies to them unchanged.
+			if open == relationsSectionIdx+1 {
+				secs[relationsSectionIdx].body = windowRelationsSection(secs[relationsSectionIdx].body, h, secs[relationsSectionIdx].activeLine)
+			}
+			acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
+			rows = append(rows, strings.Split(acc, "\n")...)
 		}
-		acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
-		rows = append(rows, strings.Split(acc, "\n")...)
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}
