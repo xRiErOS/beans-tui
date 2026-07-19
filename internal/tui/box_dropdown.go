@@ -30,7 +30,11 @@ func borderDashes(n int) string {
 }
 
 // dropdownBox rendert das 3-Zeilen-Widget in exakt width Zellen Breite.
-// focused = Mauve-Rahmen, sonst Overlay.
+// focused = Mauve-Rahmen, sonst Overlay. R1 (design-spec.md D08): das Label
+// im oberen Rahmen ist NICHT Teil des Rahmens selbst -- es rendert in
+// theme.Subtext (gedämpft), während die Rahmenzeichen (╭ ─ ╮ etc.) weiter in
+// der Fokus-Farbe (Mauve/Overlay) bleiben. labelStyle trägt nur den
+// Label-TEXT, frame weiterhin die Box-Zeichen links/rechts davon.
 func dropdownBox(label, value, hotkey string, width int, focused bool) string {
 	if width < 8 {
 		width = 8
@@ -40,10 +44,12 @@ func dropdownBox(label, value, hotkey string, width int, focused bool) string {
 		borderColor = theme.Mauve
 	}
 	frame := lipgloss.NewStyle().Foreground(borderColor)
+	labelStyle := lipgloss.NewStyle().Foreground(theme.Subtext)
 
-	labelSeg := "─ " + clampVisible(label, width-6) + " "
-	topFill := width - 2 - lipgloss.Width(labelSeg)
-	top := frame.Render("╭") + frame.Render(labelSeg) + frame.Render(borderDashes(topFill)) + frame.Render("╮")
+	labelText := clampVisible(label, width-6)
+	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ")
+	topFill := width - 2 - (2 + lipgloss.Width(labelText) + 1)
+	top := frame.Render("╭") + labelSeg + frame.Render(borderDashes(topFill)) + frame.Render("╮")
 
 	arrow := theme.Chevron.Render("▾")
 	inner := width - 6
