@@ -1,0 +1,151 @@
+# Experiment: jira-Style Flat/Salient UI für beans-tui
+
+Status: DESIGN (genehmigt) · Branch: `experiment/jira-style-ui` · Datum: 2026-07-19
+
+## 1. Warum / Frage des Experiments
+
+Tipp von außen: die [jira-TUI](https://jiratui.sh) wird gut angenommen, weil sie
+**nicht verschachtelt** wirkt. Referenz-Screenshot: `app-homepage.png` (jiratui.sh
+gallery). Das Experiment prüft die eine Frage:
+
+> Ist eine flachere, salientere Darstellung im jira-Stil eine **Verbesserung** für
+> beans-tui gegenüber dem heutigen doppelt-verschachtelten Modell?
+
+Es ist ein **Spike** auf eigenem Branch — nicht garantiert zum Merge. Erfolgskriterium:
+das neue Modell fühlt sich im tmux-Smoke (80 + 100 Spalten) klarer/schneller an als der
+Ist-Zustand, ohne Funktionsverlust.
+
+## 2. Ausgangslage (Ist) vs. jira
+
+**beans-tui heute = doppelt verschachtelt:**
+- Links: Baum-Accordion (Milestone ▾ Epic ▾ Task, eingerückt, klappbar)
+- Rechts: Detail mit Accordion-Sektionen `[1] META [2] BODY [3] RELATIONS [4] HISTORY`
+- Aktionen nur im Footer
+
+**jira-TUI = flach + salient:**
+- Oben: persistente Filter-Leiste (Dropdowns)
+- Links: flache Tabelle, eine Ebene
+- Rechts: Detail immer voll sichtbar, Felder als Boxen, Hotkeys direkt am Element
+- Farbe zur Salienz-Hebung
+
+**Was der PO explizit gut findet:** Shortcuts direkt & salient am Element · die
+Filter-Leiste oben · Felder als Dropdowns (maus-zugänglich) · Farbeinsatz zur Salienz.
+**Was bleibt:** der Baum ist ok — kein Zwangs-Ersatz, sondern umschaltbar (siehe D05).
+
+## 3. Entscheidungen (verriegelt)
+
+| Code | Entscheidung |
+|------|-------------|
+| D01 | **Ein wiederverwendbares Dropdown-Widget**: Label oben im Rahmen, `▾`-Affordance innen, **Hotkey-Badge unten-rechts im Rahmen**. Filter-Leiste UND Detail nutzen dasselbe Widget → UI-Konsistenz. |
+| D02 | **Filter-Leiste oben persistent**, Dropdown-Look konsistent zum Detail. |
+| D03 | Detail-Scalars als Dropdowns. **Type + Priority werden editierbar** (heute nicht) — neue Picker, neue Keys `o` / `u`. |
+| D04 | RELATIONS/HISTORY als **gestapelte Boxen** in einer scrollenden Pane — kein Accordion mehr im Detail. |
+| D05 | Links **View-Switcher `Nested ▏ Flat`** (Key `G`, klickbar). Flat-Default = Hierarchie-geordnet `M > E/F > T/B`. Eigener Sort (`S`) → Hierarchie fällt weg (flache Sortier-Liste). |
+| D06 | **Maus**: Klick öffnet Dropdown/Toggle. Infra vorhanden (`app.go:84` MouseCellMotion, `mouse.go` `detailClickRow`/`detailClickKey`, Double-Click). |
+| D07 | **Case-Konvention**: **klein** = Feld-Aktion (`s t a r e o u c d y`), **groß** = View/Global (`S X K G`). Zwei intern konsistente Gruppen, kein Mix innerhalb einer Gruppe. |
+| D08 | **Filter über `f`-Einstieg**, KEINE Facetten-Einzelkeys (hält D07, spart Buchstaben; Facetten via Tab/Pfeile/Maus). |
+| D09 | **huh ersetzen durch Inline-Box-Editing**: Detail *ist* das Edit-Formular, Create = leere Boxen gleicher Layout. huh-Forms + die langsamen huh-Drive-Tests fallen weg. Eigene Inline-Popups (jira-treu). **Synergie:** eigene Popups sind maus-nativ → löst den huh-MouseMsg-Blocker (D06) ohne Workaround. |
+
+## 4. Farb-Salienz-Karte (D08-Farbe) — nur `internal/theme`-Tokens
+
+Catppuccin Macchiato, TrueColor. Keine Hex-Literale in Views.
+
+| Element | Token | Effekt |
+|---------|-------|--------|
+| Dropdown-Rahmen, unfokussiert | `Overlay` #8087a2 | ruhig (bestehender Feld-Border) |
+| Dropdown-Rahmen, **fokussiert** | `Mauve`/`Accent` | aktives Feld poppt |
+| Feld-Label (oben im Rahmen) | `Subtext` / `Hint` | muted |
+| **Hotkey-Badge** (unten im Rahmen) | `BindingKey` = `Teal` | salienter Key |
+| `▾` Dropdown-Affordance | `Chevron` = `Peach` | Interaktions-Marker |
+| Status-Wert | `StatusColor` (todo=Green, in-progress=Yellow, draft=Blue, completed/scrapped=Subtext) | bestehend |
+| Priority-Wert | `priorityColor` (critical=Red, high=Yellow, normal=Text, low/deferred=Subtext) | bestehend |
+| Type-Wert | `TypeStyle` (Blue/Mauve/Sky/Red) | bestehend |
+| **Aktiver Filter-Chip** (Wert gesetzt) | Label/Rahmen `Peach` | hebt sich von leeren `(any)` ab |
+| Leerer Filter-Chip `(any)` | `Hint` | zurückgenommen |
+| View-Toggle aktives Segment | `Select` #fe640b (invers) | laut |
+| Titel/Body `✎` + `(e)` | `Teal` | Edit-Affordance |
+
+## 5. Keymap-Änderungen (Single Source: `internal/tui/keymap.go`)
+
+| Key | Aktion | Neu/geändert |
+|-----|--------|--------------|
+| `o` | Type-Picker (Feld-Edit) | NEU |
+| `u` | Priority-Picker (Feld-Edit) | NEU |
+| `G` | View-Toggle Nested ▏ Flat | NEU |
+| `f` | fokussiert die persistente Filter-Leiste (statt Overlay) | GEÄNDERT |
+| `s t a r e` | Status/Tags/Parent/Blocking/Body — unverändert, jetzt als Feld-Badges sichtbar | Darstellung |
+| `S X K` | Sort/Clear/Palette — unverändert (View/Global-Gruppe) | — |
+
+Help-Overlay generiert weiterhin aus der Keymap (kein Drift).
+
+## 6. Layout-Mockups (Referenz)
+
+### 6.1 Dropdown-Widget (D01) — Label im Rahmen, Hotkey im Rahmen
+```
+╭─ Status ───────────────────╮
+│ ● todo                 ▾   │
+╰──────────────────── (s) ───╯
+```
+
+### 6.2 Persistente Filter-Leiste (D02, D08)
+```
+  ╭─ Type ───────╮  ╭─ Status ─────╮  ╭─ Priority ───╮  ╭─ Tags ───────╮   ╭─ Search ───────────╮
+  │ (any)     ▾  │  │ (any)     ▾  │  │ (any)     ▾  │  │ (any)     ▾  │   │ /                  │
+  ╰──────────────╯  ╰──────────────╯  ╰──────────────╯  ╰──────────────╯   ╰────────────────────╯
+     f fokussiert die Leiste · Tab/Pfeile/Maus zwischen Facetten · gesetzter Filter = Peach
+```
+
+### 6.3 Detail-Pane (D03, D04) — Boxen gestapelt, scrollend
+```
+╭─ Title ───────────────────────────────────────────────────────────── (e) ──╮
+│ First golden task                                                        ✎  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Status ─────────╮ ╭─ Type ───────────╮ ╭─ Priority ───────╮
+│ ● todo        ▾  │ │ task          ▾  │ │ ·             ▾  │
+╰───────────(s)────╯ ╰───────────(o)────╯ ╰───────────(u)────╯
+╭─ Parent ─────────────────────╮ ╭─ Tags ───────────────────────╮
+│ gld-epic  Golden Epic     ▾  │ │ —                         ▾  │
+╰───────────────────────(a)────╯ ╰───────────────────────(t)────╯
+╭─ Body ────────────────────────────────────────────────────────────── (e) ──╮
+│ First golden task. Acceptance: …                                         ✎  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Relations ─────────────────────────────────────────────────────────────────╮
+│ blocks: — · blocked_by: — · parent: gld-epic                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ History ───────────────────────────────────────────────────────────────────╮
+│ 2026-07-05 created · 2026-07-14 updated                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+(Bei ≤80 Spalten: Scalars 1-up gestapelt statt 3-up — siehe I02.)
+
+### 6.4 Links: View-Switcher Nested ▏ Flat (D05)
+```
+╭─ View: ‹ Nested ▏ Flat › ────────────────────╮   ╭─ View: ‹ Nested ▏[Flat]› ────────────────────╮
+│ ▾ M gld-mlst Golden Milestone                │   │ Key       St     Ty    Summary               │
+│   ▾ E gld-epic Golden Epic                   │   │ gld-mlst  todo   M     Golden Milestone       │
+│ ▌   T gld-tsk1 First golden task             │   │ gld-epic  todo   E     Golden Epic            │
+│ ▾ (orphaned)                                 │   │ gld-tsk1  todo   T     First golden task      │
+│     T gld-orph Golden orphan                 │   │ gld-orph  todo   T     Golden orphan          │
+╰──────────────────────────────────────────────╯   ╰──────────────────────────────────────────────╯
+   Nested = Baum (heute)                              Flat = flache Liste, Default Hierarchie-Ordnung
+```
+
+## 7. Risiken / offene Spannungen
+
+| Code | Beschreibung | Umgang |
+|------|-------------|--------|
+| I01 | **Box-in-Box-in-Box**: App-Rahmen → Pane-Rahmen → Feld-Rahmen = 3 Ebenen, könnte unruhig wirken (jira lässt den App-Rahmen weg). | Prototyp prüfen: ggf. Pane-Rahmen weglassen, wenn Feld-Boxen kommen. |
+| I02 | **80-Spalten-Constraint** (Projekt-Regel): rechte Pane ~40 breit → Scalars 3-up passen nicht. | Responsive: 3-up ab ~110, 2-up ab ~90, 1-up bei 80. tmux-Smoke Pflicht. |
+| I03 | jira-Feld ist höher (Rahmen+Wert) → ~6 Scalars kosten viel Vertikal. | Kompakte 1-Zeilen-Box (Label im Rahmen löst die separate Label-Zeile). Scroll in Detail-Pane. |
+| I04 | D09 ist ein **großer** Umbau (huh raus, eigene Popups, Create neu). | Phasieren im Plan; Prototyp zuerst read-only Darstellung, dann Edit. |
+
+## 8. Aus dem Scope / Später
+
+- In-Picker-Maus war bei huh der Blocker — mit D09 (eigene Popups) von Anfang an nativ; kein separater Phase-2-Workaround nötig.
+- Merge auf `main` erst nach PO-Abnahme des Spikes (Erfolgskriterium §1).
+
+## 9. Machbarkeit (verifiziert)
+
+- **Maus** aktiv: `internal/tui/app.go:84` (`tea.WithMouseCellMotion`), `internal/tui/mouse.go` mappt bereits Tree-/Backlog-/Detail-Feld-Klicks + Double-Click.
+- **Theme-Tokens** alle vorhanden: `internal/theme/theme.go` (Overlay/Mauve/Teal/Peach/Hint/Select + StatusColor/priorityColor/TypeStyle).
+- **Keymap** zentral: `internal/tui/keymap.go` — neue Keys dort, Help generiert daraus.
