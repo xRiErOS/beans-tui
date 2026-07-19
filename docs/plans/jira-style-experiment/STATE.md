@@ -15,8 +15,9 @@ Autonom weiterarbeiten, Entscheidungen selbst treffen, später gemeinsam prüfen
 | Slice | Ziel | Status | Beleg |
 |-------|------|--------|-------|
 | S1 | `dropdownBox`-Primitiv (Label+Hotkey im Rahmen, ▾, Fokus-Farbe) | 🟢 DONE | Commit `2b08977`, `internal/tui/box_dropdown.go`(+_test), voller Testlauf `ok 149.966s` |
-| S2 | **Additiv**: neuer `detailBoxForm(bean,width)`-Renderer (gestapelte Boxen via `dropdownBox` + full-width Boxen für Title/Body/Relations/History), Unit-Test + NEUE Golden, NOCH NICHT in Live-View verdrahtet (Accordion bleibt bis validiert). De-risking: alle Bestandstests bleiben grün. | 🟣 NÄCHSTES | — |
-| S2b | box-form in die Browse-Detail-Pane einhängen (ersetzt Accordion-Render), Golden aktualisieren, responsive 3/2/1-up, VHS 80/100 | 🟣 offen | — |
+| S2 | **Additiv**: `detailBoxForm(bean,width)` Scalars (Title/Status/Type/Priority/Parent/Tags) via `dropdownBox`, responsive 3/2/1-up + R1 (Label=Subtext). Golden visuell verifiziert (Farben/Salienz/Ausrichtung gut). Kein Live-Wiring. | 🟢 DONE | Commit `f76b6e9`, `box_detail_form.go`(+_test+golden) |
+| S2c | Multi-line `panelBox(label,body,hotkey,width)`-Primitiv (Label im Rahmen, mehrzeiliger Inhalt); `detailBoxForm` um **Body/Relations/History** als full-width Panels erweitern. Additiv, Golden. | 🟣 NÄCHSTES | — |
+| S2b | Komplette box-form in die Browse-Detail-Pane einhängen (ersetzt Accordion-Render), Bestandsgolden aktualisieren, I01-Dichte prüfen (ggf. Pane-Rahmen weg), VHS 80/100 | 🟣 offen | — |
 | S3 | Persistente Filter-Leiste (D02), `f` fokussiert; aktiver Chip=Peach | 🟣 offen | — |
 | S4 | Keymap + Picker: `o` Type, `u` Priority, `G` View; Type-/Priority-Picker | 🟣 offen | — |
 | S5 | Nested/Flat-Switcher (`G`); Flat-Tabelle (Default Hierarchie, `S`→flach) | 🟣 offen | — |
@@ -35,4 +36,4 @@ Filter: `f`-Einstieg, KEINE Facetten-Einzelkeys.
 - **I02** 80-Spalten: responsive 3/2/1-up in S2/S3/S5, VHS Pflicht.
 
 ## Nächste Aktion (für Resume)
-S2 (additiv) läuft/als-nächstes: Implementer-Subagent baut `detailBoxForm(bean,width)` (TDD, neue Golden, KEIN Live-Wiring), sonnet. Danach S2b (Einhängen + VHS 80/100). Muster: subagent-driven-development. Reviewer-Checkpoint nach S2b oder S3.
+S2c (additiv): Implementer baut `panelBox`-Multi-line-Primitiv + erweitert `detailBoxForm` um Body/Relations/History (full-width Panels), TDD + Golden, sonnet, KEIN Live-Wiring. Danach S2b (komplette form in Live-Detail einhängen, Bestandsgolden updaten, VHS 80/100). Reviewer-Checkpoint nach S2b. R1 bereits erledigt (in S2).
