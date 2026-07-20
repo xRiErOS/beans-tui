@@ -41,12 +41,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xRiErOS/beans-tui/internal/data"
-	"github.com/xRiErOS/beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/xRiErOS/beans-tui/internal/data"
+	"github.com/xRiErOS/beans-tui/internal/theme"
 )
 
 // backlogSortModes is the canonical 4-stop Sort-Toggle `S` cycle (bean
@@ -170,7 +169,24 @@ func (m model) backlogSelected() *data.Bean {
 // Tree and Backlog/Flat are TWO separate render paths, and only changing one
 // would let them drift apart visually.
 func backlogRowText(b *data.Bean, slug string) string {
-	return theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(shortBeanID(b.ID, slug)) + " " + b.Title
+	head, title := backlogRowParts(b, slug)
+	return head + title
+}
+
+// backlogRowParts splits a Backlog/flat row into its fixed HEAD and its
+// variable TITLE -- treeRowParts' counterpart (view_browse_repo.go), for the
+// same hanging-indent wrapping reason (bean bt-f68z, PO-Befund #13). The
+// doc-comment claim above that "a beans title is short enough for the existing
+// single-line windowAround" is what the PO's live test disproved.
+func backlogRowParts(b *data.Bean, slug string) (head, title string) {
+	return theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(shortBeanID(b.ID, slug)) + " ", b.Title
+}
+
+// backlogRowLines renders one Backlog/flat row as one or more terminal lines,
+// hanging-indented to the title column (treeRowLines' counterpart).
+func backlogRowLines(b *data.Bean, slug string, width int) []string {
+	head, title := backlogRowParts(b, slug)
+	return hangingWrap(head, lipgloss.Width(head), title, width)
 }
 
 // backlogRows renders every visible Backlog row, applying the same D08
@@ -178,24 +194,22 @@ func backlogRowText(b *data.Bean, slug string) string {
 // the whole row accent-tinted when focused, muted when the Detail pane has
 // focus instead. Windowed around the cursor via the EXISTING windowAround
 // (E1 Task 8) -- no new fenestration mechanism (plan Port-Referenzen).
-func (m model) backlogRows(vis []*data.Bean, focused bool, bodyH int) []string {
+func (m model) backlogRows(vis []*data.Bean, focused bool, bodyH, width int) []string {
+	rows, _ := blockWindow(m.backlogBlocks(vis, focused, width), bodyH, m.backlogList.cursor)
+	return rows
+}
+
+// backlogBlocks is the Backlog's treeBlocks (view_browse_repo.go): one
+// variable-height line block per bean, shared by backlogRows above and
+// backlogClickRow below (bean bt-f68z -- rows are no longer 1:1 with beans).
+func (m model) backlogBlocks(vis []*data.Bean, focused bool, width int) [][]string {
 	pos := m.backlogList.cursor
 	slug := m.beanIDPrefix()
-	rows := make([]string, len(vis))
+	blocks := make([][]string, len(vis))
 	for i, b := range vis {
-		text := backlogRowText(b, slug)
-		if i == pos {
-			plain := ansi.Strip(text)
-			if focused {
-				rows[i] = theme.Accent.Render("▌" + plain)
-			} else {
-				rows[i] = theme.Dim.Render("▌" + plain)
-			}
-		} else {
-			rows[i] = " " + text
-		}
+		blocks[i] = decorateRowBlock(backlogRowLines(b, slug, width-1), i == pos, focused)
 	}
-	return windowAround(rows, bodyH, pos)
+	return blocks
 }
 
 // renderBacklogDetailPane renders the Detail-Accordion (Meta/Body/
@@ -306,7 +320,7 @@ func (m model) viewBacklog() string {
 		var listRows []string
 		if m.fullscreen == fullscreenList {
 			searchLine := m.treeSearchLine(paneW-2, "sort "+backlogSortDisplayLabel(m.backlogSort))
-			listRows = append([]string{searchLine}, m.backlogRows(vis, true, bodyH-1)...)
+			listRows = append([]string{searchLine}, m.backlogRows(vis, true, bodyH-1, paneW-2)...)
 		}
 		var detailBean *data.Bean
 		if m.fullscreen == fullscreenDetail {
@@ -323,7 +337,7 @@ func (m model) viewBacklog() string {
 		// Indicator -- a dezent (theme.Muted) suffix on the search line showing
 		// the active Sort-Toggle mode.
 		searchLine := m.treeSearchLine(lw-2, "sort "+backlogSortDisplayLabel(m.backlogSort))
-		rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-1)...)
+		rows := append([]string{searchLine}, m.backlogRows(vis, !m.detailFocus, bodyH-1, lw-2)...)
 		listBox := renderPane(pane{rows: rows}, lw, bodyH, !m.detailFocus)
 		detailBox := m.renderBacklogDetailPane(vis, rw, bodyH, m.detailFocus)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listBox, detailBox)
@@ -439,24 +453,14 @@ func backlogClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok b
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false
 	}
-	clickRow := msg.Y - originY
-	if clickRow <= 0 {
+	clickRow := msg.Y - originY - 1 // row 0 is the search/facet head line, never a target
+	if clickRow < 0 {
 		return 0, false
 	}
 
-	windowRows := bodyH - 1
-	if windowRows < 0 {
-		windowRows = 0
-	}
-	pos := m.backlogList.cursor
-	start := windowStart(len(vis), windowRows, pos)
-	visible := windowRows
-	if len(vis)-start < visible {
-		visible = len(vis) - start
-	}
-	rowIdx := clickRow - 1
-	if rowIdx < 0 || rowIdx >= visible {
-		return 0, false
-	}
-	return start + rowIdx, true
+	// bean bt-f68z: Backlog titles wrap too, so the clicked LINE is resolved
+	// through the same blockWindow the renderer used instead of by dividing
+	// screen rows by one.
+	_, rowElem := blockWindow(m.backlogBlocks(vis, !m.detailFocus, lw-2), bodyH-1, m.backlogList.cursor)
+	return blockWindowElemAt(rowElem, clickRow)
 }

@@ -529,6 +529,23 @@ func (m model) beanIDPrefix() string {
 // shortBeanID -- bean bt-pl5p) + title (design-spec.md §8). slug is the
 // caller's m.beanIDPrefix(); "" disables shortening entirely.
 func treeRowText(n treeNode, slug string) string {
+	head, title := treeRowParts(n, slug)
+	return head + title
+}
+
+// treeRowParts splits one Tree row into its fixed-width HEAD (indent + expand
+// marker + status glyph + type icon + ID) and its variable TITLE -- the split
+// bean bt-f68z's hanging-indent wrapping needs: the continuation lines are
+// padded to the head's own visible width so they start in the title column
+// (hangingWrap, line_window.go). treeRowText (above) is the unwrapped
+// concatenation, kept as the single-line composer the tests and the
+// non-wrapping call sites still use, so head/title can never drift from the
+// row they describe.
+//
+// Placeholder/orphan rows carry no title: their whole content is already a
+// hint, and hanging-indenting a hint would be noise -- they return an empty
+// title and therefore stay single-line by construction.
+func treeRowParts(n treeNode, slug string) (head, title string) {
 	indent := strings.Repeat("  ", n.depth)
 	marker := treeNodeMarker(n)
 	if n.placeholder {
@@ -537,13 +554,26 @@ func treeRowText(n treeNode, slug string) string {
 		// PO-Wortlaut. hasKids is zero-value false on a placeholder node, so
 		// treeNodeMarker already returned the blank "  " above -- same width
 		// as every ▾/▸ marker, no layout shift (B03 precedent).
-		return indent + marker + theme.Muted.Render(fmt.Sprintf("%d archiviert — f→Archive", n.hiddenCount))
+		return indent + marker + theme.Muted.Render(fmt.Sprintf("%d archiviert — f→Archive", n.hiddenCount)), ""
 	}
 	if n.orphan {
-		return indent + marker + theme.Dim.Render("(orphaned)")
+		return indent + marker + theme.Dim.Render("(orphaned)"), ""
 	}
 	b := n.bean
-	return indent + marker + theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(shortBeanID(b.ID, slug)) + " " + b.Title
+	return indent + marker + theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(shortBeanID(b.ID, slug)) + " ", b.Title
+}
+
+// treeRowLines renders one Tree row as one OR MORE terminal lines: the title
+// wraps at `width` with a hanging indent aligned to the title column (bean
+// bt-f68z / PO-Befund #13, the PO's own sketch). width is the row's total cell
+// budget INCLUDING nothing else -- the caller's cursor column is added by
+// treeBlocks around this result.
+func treeRowLines(n treeNode, slug string, width int) []string {
+	head, title := treeRowParts(n, slug)
+	if title == "" {
+		return []string{truncate(head, width)}
+	}
+	return hangingWrap(head, lipgloss.Width(head), title, width)
 }
 
 // treeRows renders every visible row, applying the D08 cursor treatment to
@@ -560,24 +590,58 @@ func treeRowText(n treeNode, slug string) string {
 // cursor (devd windowAround/windowStart port, view_browse_project.go:
 // 647-670) so a tree taller than the pane never hides the cursor below the
 // fold.
-func (m model) treeRows(nodes []treeNode, focused bool, bodyH int) []string {
+func (m model) treeRows(nodes []treeNode, focused bool, bodyH, width int) []string {
+	rows, _ := blockWindow(m.treeBlocks(nodes, focused, width), bodyH, m.cursorPos(nodes))
+	return rows
+}
+
+// treeBlocks builds ONE line block per node -- the structure both the renderer
+// (treeRows, above) and the mouse hit-test (treeClickRow, below) consume, so
+// the click can never land on a different bean than the one the PO sees
+// (bean bt-f68z, the "Zeilen sind nicht mehr 1:1 zu beans" follow-up the bean
+// itself flags; same Golden-Rule-Drift-Schutz rationale as clickPaneGeometry).
+//
+// The D08 cursor treatment applies to EVERY line of the cursor's block, not
+// just its first: a two-line bean whose second line lost the `▌` bar and the
+// accent tint would read as two separate half-selected beans.
+//
+// width is the row's total cell budget (renderPane's own w-2 truncate budget);
+// one cell of it is spent on the cursor column, so the wrap budget handed
+// down is width-1.
+func (m model) treeBlocks(nodes []treeNode, focused bool, width int) [][]string {
 	pos := m.cursorPos(nodes)
 	slug := m.beanIDPrefix()
-	rows := make([]string, len(nodes))
+	blocks := make([][]string, len(nodes))
 	for i, n := range nodes {
-		text := treeRowText(n, slug)
-		if i == pos {
-			plain := ansi.Strip(text)
-			if focused {
-				rows[i] = theme.Accent.Render("▌" + plain)
-			} else {
-				rows[i] = theme.Dim.Render("▌" + plain)
-			}
+		lines := treeRowLines(n, slug, width-1)
+		blocks[i] = decorateRowBlock(lines, i == pos, focused)
+	}
+	return blocks
+}
+
+// decorateRowBlock prepends the 1-cell cursor column to every line of one
+// row's block: the D08 `▌` bar plus the whole-line accent tint on the cursor
+// row (own per-cell colors stripped first, devd view_browse_project.go:
+// 382-398), a plain space otherwise. focused=false (the Detail pane has focus)
+// freezes the cursor muted instead of accent -- only the focused pane's cursor
+// is highlighted (devd D03). Shared verbatim by the Tree, the Browse flat list
+// and the Backlog (view_browse_flat.go / view_browse_backlog.go), which all
+// three used to carry their own copy of this five-line block.
+func decorateRowBlock(lines []string, isCursor, focused bool) []string {
+	out := make([]string, len(lines))
+	for j, l := range lines {
+		if !isCursor {
+			out[j] = " " + l
+			continue
+		}
+		plain := ansi.Strip(l)
+		if focused {
+			out[j] = theme.Accent.Render("▌" + plain)
 		} else {
-			rows[i] = " " + text
+			out[j] = theme.Dim.Render("▌" + plain)
 		}
 	}
-	return windowAround(rows, bodyH, pos)
+	return out
 }
 
 // windowStart computes the window start index so cursor stays visible --
@@ -856,12 +920,44 @@ func (m model) treeSearchLine(w int, sortSuffix string) string {
 	if sortSuffix != "" {
 		suffix = theme.Muted.Render(" · " + sortSuffix)
 	}
+	text, state := m.searchHeadText()
+	switch state {
+	case searchHeadTyping:
+		return truncate(searchShield+" "+text+suffix, w)
+	case searchHeadFiltered:
+		styled := lipgloss.NewStyle().Foreground(theme.Red).Render(searchShield + " " + text)
+		return truncate(styled+suffix, w)
+	}
+	return truncate(theme.Muted.Render(searchShield+" "+text)+suffix, w)
+}
+
+// searchHeadState names the three states the search head can be in. Extracted
+// (bean bt-f68z, PO-Befund #11) so the plain single-line head (treeSearchLine,
+// above) and the BOXED head (searchHeadBox, below) can differ in FRAMING while
+// sharing their CONTENT -- the two must never disagree on what the search
+// state is, only on how it is drawn.
+type searchHeadState int
+
+const (
+	searchHeadIdle searchHeadState = iota
+	searchHeadTyping
+	searchHeadFiltered
+)
+
+// searchHeadText returns the search head's content WITHOUT the ⌕ shield, the
+// sort suffix or any styling. The three branches are verbatim the ones
+// treeSearchLine carried inline before -- so treeSearchLine's own composition
+// (and therefore every pre-existing golden that depends on it) stays
+// byte-identical, which is exactly why the shield stayed in the CALLER and did
+// not move in here: the boxed variant carries a "Search" frame label instead
+// and must not repeat the glyph.
+func (m model) searchHeadText() (string, searchHeadState) {
 	if m.searchActive {
-		line := searchShield + " " + m.searchInput.View()
+		text := m.searchInput.View()
 		if fs := m.filterSummary(); fs != "" {
-			line += "  " + fs
+			text += "  " + fs
 		}
-		return truncate(line+suffix, w)
+		return text, searchHeadTyping
 	}
 	if m.treeActive() {
 		var parts []string
@@ -875,11 +971,97 @@ func (m model) treeSearchLine(w int, sortSuffix string) string {
 		if fs := m.filterSummary(); fs != "" {
 			parts = append(parts, fs)
 		}
-		line := searchShield + " " + strings.Join(parts, "  ")
-		styled := lipgloss.NewStyle().Foreground(theme.Red).Render(line)
-		return truncate(styled+suffix, w)
+		return strings.Join(parts, "  "), searchHeadFiltered
 	}
-	return truncate(theme.Muted.Render(searchShield+" / search")+suffix, w)
+	return "/ search", searchHeadIdle
+}
+
+// searchHeadBoxHeight is the boxed search head's line count (top frame, value
+// row, bottom frame) -- the same 3 lines every dropdownBox occupies.
+const searchHeadBoxHeight = 3
+
+// searchHeadBox renders the search head as a framed box (bean bt-f68z,
+// PO-Befund #11: "⌕ / search verschwindet optisch. Soll ebenfalls boxed
+// dargestellt werden, wie die uebrigen Felder"), built from the SAME
+// boxTopBorder/boxBottomBorder primitives dropdownBox and the filter chips use
+// (box_dropdown.go) -- label in the top frame, hotkey badge in the bottom one.
+//
+// The frame turns Mauve while the field is focused, mirroring dropdownBox's
+// own focus contract; an ACTIVE query/filter additionally tints the value Red,
+// the "Filter aktiv" signal (DD2-53) treeSearchLine already carried.
+func (m model) searchHeadBox(width int) []string {
+	if width < 8 {
+		width = 8
+	}
+	borderColor := theme.Overlay
+	if m.searchActive {
+		borderColor = theme.Mauve
+	}
+	frame := lipgloss.NewStyle().Foreground(borderColor)
+
+	text, state := m.searchHeadText()
+	inner := width - 4
+	switch state {
+	case searchHeadFiltered:
+		text = lipgloss.NewStyle().Foreground(theme.Red).Render(clampVisible(text, inner))
+	case searchHeadIdle:
+		text = theme.Muted.Render(clampVisible(text, inner))
+	default:
+		text = clampVisible(text, inner)
+	}
+	pad := inner - lipgloss.Width(text)
+	if pad < 0 {
+		pad = 0
+	}
+	mid := frame.Render("│") + " " + text + strings.Repeat(" ", pad) + " " + frame.Render("│")
+	return []string{boxTopBorder("Search", width, frame), mid, boxBottomBorder("/", width, frame)}
+}
+
+// treeHeaderWideMin is the pane width from which the column header spells its
+// labels out instead of abbreviating them to the single letters (bean bt-f68z,
+// PO-Befund #12: "Master-Detail (schmal): Header auf die Keybindings kuerzen.
+// Vollbild (v, breit): Header ausschreiben. Also breitenabhaengig, nicht zwei
+// getrennte Implementierungen"). The split's left pane is ~30 cells even on a
+// wide terminal (masterDetailWidths' 1fr:2fr, view.go), the Vollbild pane is
+// the full inner width -- 48 separates the two cleanly at every terminal size
+// the app supports, without a second code path.
+const treeHeaderWideMin = 48
+
+// treeColumnHeader renders the Tree/flat pane's column legend (bean bt-f68z,
+// PO-Befund #12). One implementation, two label sets chosen by width.
+//
+// The NARROW form is column-aligned with the rows below it: one leading cell
+// for the cursor column, two for the expand marker, then the 1-cell status and
+// type glyph columns, the 4-cell short bean ID and the title. The WIDE form
+// deliberately drops that alignment for the two glyph columns -- they are ONE
+// cell wide by construction, so "Status" and "Type" cannot sit above them; it
+// reads as a spelled-out legend instead, which is what "ausschreiben" asks
+// for and what the extra Vollbild width makes room for.
+func treeColumnHeader(width int) string {
+	label := "   S T ID   Title"
+	if width >= treeHeaderWideMin {
+		label = "   Status Type ID   Title"
+	}
+	return lipgloss.NewStyle().Foreground(theme.Subtext).Render(truncate(label, width))
+}
+
+// treePaneHeadRows builds the rows that precede the bean rows in the Browse
+// left pane: the search head (1 line plain, 3 lines boxed under
+// boxFormEnabled() -- bean bt-f68z #11) followed by the column header (#12).
+//
+// This is the ONE place that decides how tall that head is. viewBrowseRepo
+// trades its length out of the row budget and treeClickRow/flatClickRow offset
+// their hit-test by exactly len(...) -- so a future head row can never desync
+// the render from the mouse (the failure bt-vpvu was filed for: the filter bar
+// was reclaimed from bodyH by the renderer but not by the hit-test).
+func (m model) treePaneHeadRows(width int) []string {
+	var out []string
+	if boxFormEnabled() {
+		out = append(out, m.searchHeadBox(width)...)
+	} else {
+		out = append(out, m.treeSearchLine(width, ""))
+	}
+	return append(out, treeColumnHeader(width))
 }
 
 // repoLabel is the breadcrumb `> repo` segment: the repo directory's base
@@ -1124,7 +1306,7 @@ func (m model) viewBrowseRepo() string {
 		paneW := innerW - 2
 		var listRows []string
 		if m.fullscreen == fullscreenList {
-			searchLine := m.treeSearchLine(paneW-2, "") // D02: Tree never shows a sort suffix
+			headRows := m.treePaneHeadRows(paneW - 2) // search head + column header (bean bt-f68z #11/#12)
 			// B8 (bean bt-s90e): the Vollbild-Liste sources its rows from the
 			// SAME m.flatView switch the split's own left pane does (the
 			// `else if m.flatView` branch below) -- this branch used to call
@@ -1139,9 +1321,9 @@ func (m model) viewBrowseRepo() string {
 			// m.flatView's default false leaves the Tree path (and every
 			// pre-existing Vollbild golden) byte-for-byte untouched.
 			if m.flatView {
-				listRows = append([]string{searchLine}, m.flatRows(m.flatVisible(), true, bodyH-1)...)
+				listRows = append(headRows, m.flatRows(m.flatVisible(), true, bodyH-len(headRows), paneW-2)...)
 			} else {
-				listRows = append([]string{searchLine}, m.treeRows(nodes, true, bodyH-1)...)
+				listRows = append(headRows, m.treeRows(nodes, true, bodyH-len(headRows), paneW-2)...)
 			}
 		}
 		var detailBean *data.Bean
@@ -1160,8 +1342,8 @@ func (m model) viewBrowseRepo() string {
 		// branch so m.flatView's default false leaves that branch, and every
 		// pre-existing golden depending on it, byte-for-byte untouched.
 		vis := m.flatVisible()
-		searchLine := m.treeSearchLine(lw-2, "") // D02 precedent: flat mode has no Sort-Toggle (unlike Backlog), no suffix
-		flatRowsWithHead := append([]string{searchLine}, m.flatRows(vis, !m.detailFocus, bodyH-1)...)
+		headRows := m.treePaneHeadRows(lw - 2) // D02 precedent: flat mode has no Sort-Toggle (unlike Backlog), no suffix
+		flatRowsWithHead := append(headRows, m.flatRows(vis, !m.detailFocus, bodyH-len(headRows), lw-2)...)
 		flatBox := renderPane(pane{rows: flatRowsWithHead}, lw, bodyH, !m.detailFocus)
 		detailBox := m.renderFlatDetailPane(vis, rw, bodyH, m.detailFocus)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, flatBox, detailBox)
@@ -1172,8 +1354,8 @@ func (m model) viewBrowseRepo() string {
 		// now that renderPane no longer reserves its own title+separator lines)
 		// so the combined [searchLine, ...treeRows] slice still fits renderPane's
 		// own Golden-Rule-#1 line cap.
-		searchLine := m.treeSearchLine(lw-2, "") // D02: Tree never shows a sort suffix
-		treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-1)...)
+		headRows := m.treePaneHeadRows(lw - 2) // D02: Tree never shows a sort suffix
+		treeRowsWithHead := append(headRows, m.treeRows(nodes, !m.detailFocus, bodyH-len(headRows), lw-2)...)
 		treeBox := renderPane(pane{rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
 		detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
@@ -1225,32 +1407,40 @@ func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool
 		// it (that helper is shared with Backlog, which never shows the
 		// bar). treeClickRow is BROWSE-only (mouseTreeClick's own call
 		// site, mouse.go), so an unconditional boxFormEnabled() check here
-		// is correct without an extra m.view guard. Default off leaves this
-		// branch dead, existing Tree click tests/goldens byte-identical.
+		// is correct without an extra m.view guard.
+		//
+		// bt-vpvu ROOT CAUSE: the originY correction above landed in S6, but
+		// the matching bodyH correction did NOT -- the renderer reclaims the
+		// bar's 3 rows from bodyH before windowing, this hit-test kept
+		// windowing against the UNREDUCED bodyH. Both halves computed a
+		// different window start, so every click landed on the wrong bean the
+		// moment the list was scrolled far enough for the two starts to
+		// diverge (at the top of an unscrolled list both clamp to 0, which is
+		// why it looked like "sometimes works"). Reproduced live at 80x30
+		// against sproutling before the fix.
 		originY += filterBarHeight
+		bodyH -= filterBarHeight
+	}
+	if bodyH < 1 {
+		bodyH = 1
 	}
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false // right Detail pane, or off-screen -- no Tree target
 	}
-	clickRow := msg.Y - originY
-	if clickRow <= 0 {
-		return 0, false // above the pane, or row 0 == the search head line
+	// The head rows (search head + column header, bean bt-f68z) are never a
+	// node target -- and their COUNT is now variable (the boxed search head is
+	// 3 lines, the plain one 1), so it is read from the one function that
+	// builds them rather than assumed to be 1.
+	headRows := m.treePaneHeadRows(lw - 2)
+	clickRow := msg.Y - originY - len(headRows)
+	if clickRow < 0 {
+		return 0, false // above the pane, or on the search head / column header
 	}
 
-	windowRows := bodyH - 1
-	if windowRows < 0 {
-		windowRows = 0
-	}
-	pos := m.cursorPos(nodes)
-	start := windowStart(len(nodes), windowRows, pos)
-	visible := windowRows
-	if len(nodes)-start < visible {
-		visible = len(nodes) - start
-	}
-	nodeWindowIdx := clickRow - 1
-	if nodeWindowIdx < 0 || nodeWindowIdx >= visible {
-		return 0, false
-	}
-	return start + nodeWindowIdx, true
+	// Rows are no longer 1:1 with beans (hanging-indent title wrapping, bean
+	// bt-f68z), so the clicked LINE is resolved through the very same
+	// blockWindow the renderer used -- not by dividing by one.
+	_, rowElem := blockWindow(m.treeBlocks(nodes, !m.detailFocus, lw-2), bodyH-len(headRows), m.cursorPos(nodes))
+	return blockWindowElemAt(rowElem, clickRow)
 }

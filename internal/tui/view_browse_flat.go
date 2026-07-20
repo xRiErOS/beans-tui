@@ -21,10 +21,8 @@ package tui
 // Browse golden stay byte-identical.
 
 import (
-	"github.com/xRiErOS/beans-tui/internal/data"
-	"github.com/xRiErOS/beans-tui/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/xRiErOS/beans-tui/internal/data"
 )
 
 // flatVisible returns every bean matching the SAME shared search+facet+
@@ -75,24 +73,24 @@ func (m model) flatSelected() *data.Bean {
 // backlogRowText unchanged (status glyph + type icon + Key + Title) -- the
 // row-rendering half of "REUSE Backlog's row-rendering + selection logic",
 // this slice's own scope instruction.
-func (m model) flatRows(vis []*data.Bean, focused bool, bodyH int) []string {
+func (m model) flatRows(vis []*data.Bean, focused bool, bodyH, width int) []string {
+	rows, _ := blockWindow(m.flatBlocks(vis, focused, width), bodyH, m.flatList.cursor)
+	return rows
+}
+
+// flatBlocks is the flat list's treeBlocks (view_browse_repo.go): one
+// variable-height line block per bean, shared by flatRows above and
+// flatClickRow below so the click resolves against the SAME window the
+// renderer produced (bean bt-f68z -- rows stopped being 1:1 with beans once
+// titles wrap).
+func (m model) flatBlocks(vis []*data.Bean, focused bool, width int) [][]string {
 	pos := m.flatList.cursor
 	slug := m.beanIDPrefix()
-	rows := make([]string, len(vis))
+	blocks := make([][]string, len(vis))
 	for i, b := range vis {
-		text := backlogRowText(b, slug)
-		if i == pos {
-			plain := ansi.Strip(text)
-			if focused {
-				rows[i] = theme.Accent.Render("▌" + plain)
-			} else {
-				rows[i] = theme.Dim.Render("▌" + plain)
-			}
-		} else {
-			rows[i] = " " + text
-		}
+		blocks[i] = decorateRowBlock(backlogRowLines(b, slug, width-1), i == pos, focused)
 	}
-	return windowAround(rows, bodyH, pos)
+	return blocks
 }
 
 // renderFlatDetailPane renders the Detail-Accordion for the flat list's
@@ -148,32 +146,26 @@ func flatClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok bool
 
 	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	if boxFormEnabled() {
+		// bt-vpvu: the bodyH half of the filter-bar correction was missing
+		// here exactly as it was in treeClickRow -- same root cause, same fix
+		// (that function's own comment carries the full analysis).
 		originY += filterBarHeight
+		bodyH -= filterBarHeight
+	}
+	if bodyH < 1 {
+		bodyH = 1
 	}
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false // right Detail pane, or off-screen -- no flat-row target
 	}
-	clickRow := msg.Y - originY
-	if clickRow <= 0 {
-		return 0, false // above the pane, or row 0 == the search head line
+	headRows := m.treePaneHeadRows(lw - 2)
+	clickRow := msg.Y - originY - len(headRows)
+	if clickRow < 0 {
+		return 0, false // above the pane, or on the search head / column header
 	}
-
-	windowRows := bodyH - 1
-	if windowRows < 0 {
-		windowRows = 0
-	}
-	pos := m.flatList.cursor
-	start := windowStart(len(vis), windowRows, pos)
-	visible := windowRows
-	if len(vis)-start < visible {
-		visible = len(vis) - start
-	}
-	rowIdx := clickRow - 1
-	if rowIdx < 0 || rowIdx >= visible {
-		return 0, false
-	}
-	return start + rowIdx, true
+	_, rowElem := blockWindow(m.flatBlocks(vis, !m.detailFocus, lw-2), bodyH-len(headRows), m.flatList.cursor)
+	return blockWindowElemAt(rowElem, clickRow)
 }
 
 func (m model) keyFlat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

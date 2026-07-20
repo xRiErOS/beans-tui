@@ -205,6 +205,13 @@ func TestClickSetsTreeCursor(t *testing.T) {
 }
 
 // --- Doppelklick: devd D03 semantics (design decision f) ---
+//
+// NOTE (bean bt-vpvu): devd-D03's "a single click EXPANDS a closed node" half
+// was dropped on PO request -- a single click now only selects, and the
+// double click toggles in BOTH directions. The two tests below cover the
+// halves that survived unchanged (double click collapses an open node; a lone
+// single click never toggles); the new semantics live in
+// mouse_tree_select_test.go.
 
 // TestDoubleClickTogglesExpand: a SECOND click on the SAME node within
 // doubleClickInterval collapses an already-open, expandable node.
