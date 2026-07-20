@@ -193,3 +193,22 @@ Wiederkehr dieser Fehlerklasse.
 Verbindliche Begriffe (boxed field, Box-Titel, Box-Badge, Box-Form, Panel, Filter-Strip,
 Region …) stehen projektweit in **`docs/GLOSSARY.md`** — nicht hier, damit sie auch
 ausserhalb dieses Experiments gelten und nur an einer Stelle gepflegt werden.
+
+## PO-Entscheidungen 2026-07-20 (Runde 3)
+
+### D03 REVIDIERT — Klick im Tree
+Die devd-Portierungsentscheidung D03 („einfacher Klick klappt auf") ist **abgeloest**.
+Ab jetzt: **einfacher Klick waehlt aus, Doppelklick klappt auf/zu** (PO-Befund #14).
+Begruendung: unter D03 restrukturierte schon ein Blick auf ein Epic den Baum unter dem
+Zeiger. Der alte Beschluss wird nicht geloescht, sondern hier als revidiert vermerkt.
+
+### D13 — `v` nur im Box-Modus im Footer
+`v` (Vollbild) erscheint im Footer **nur bei aktivem `BT_BOXFORM`**. Der Footer ohne Flag
+misst bei 80 Spalten exakt zwei volle Zeilen; jede Ergaenzung kippt ihn auf drei und kostet
+eine Zeile Listeninhalt (`mouse_test.go` haelt die Zweizeiligkeit als Vorbedingung fest).
+Der Epic-Constraint „ohne Flag byte-identisch" zeigt in dieselbe Richtung.
+
+### D14 — History bleibt im tab-Zyklus
+`tab` laeuft im Detail ueber alle neun Felder aus `boxFormFieldOrder`, History
+eingeschlossen. History zu ueberspringen haette eine zweite Feldliste oder ein
+Skip-Kennzeichen erfordert; **eine Tabelle fuer Render, Maus und Tastatur** wiegt schwerer.
