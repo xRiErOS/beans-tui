@@ -18,6 +18,7 @@ Autonom weiterarbeiten, Entscheidungen selbst treffen, später gemeinsam prüfen
 | S2 | **Additiv**: `detailBoxForm(bean,width)` Scalars (Title/Status/Type/Priority/Parent/Tags) via `dropdownBox`, responsive 3/2/1-up + R1 (Label=Subtext). Golden visuell verifiziert (Farben/Salienz/Ausrichtung gut). Kein Live-Wiring. | 🟢 DONE | Commit `f76b6e9`, `box_detail_form.go`(+_test+golden) |
 | S2c | Multi-line `panelBox`-Primitiv + `detailBoxForm` um Body/Relations/History erweitert (full-width Panels), `detailBoxForm(idx,b,width)`. Additiv, Golden regeneriert. | 🟢 DONE | Commit `d62edf0`, `box_panel.go`(+_test), `box_detail_form.go` |
 | S2b | Live-Wiring per **Env-Flag `BT_BOXFORM=1`** in `renderAccordionPane` (view_browse_repo.go:640). Default aus → Bestandsgolden byte-identisch. Golden `browse_boxform.golden` für an-Zustand. | 🟢 DONE | Commit `987ce06`, `box_form_flag.go`, `box_form_golden_test.go` |
+| S2e | Feste 3|2-Gruppierung (D12: Title full · Status\|Type\|Priority · Parent\|Tags · Body/Relations/History full, KEIN 1-up-Collapse) + Reviewer-Fixes B1–B5 (exakte Spaltenbreite, Hotkey-Overflow-clamp, gemeinsame boxTop/BottomBorder, exakte-Breite-Tests). Beide box-form-Golden regeneriert. **Nebeneffekt: kompakte Form passt in Pane → F1 für Normalfälle gelöst.** | 🟢 DONE | Commit `e27c5f2`, `gridRow`/`scalarCell` |
 | S3 | Persistente Filter-Leiste (D02), `f` fokussiert; aktiver Chip=Peach | 🟣 offen | — |
 | S4 | Keymap + Picker: `o` Type, `u` Priority, `G` View; Type-/Priority-Picker | 🟣 offen | — |
 | S5 | Nested/Flat-Switcher (`G`); Flat-Tabelle (Default Hierarchie, `S`→flach) | 🟣 offen | — |
@@ -59,5 +60,9 @@ Richtung ok, ABER Layout anpassen: **1-up-Stapeln = Platzverschwendung.** Gewün
 - **B4 (low):** `box_panel` dupliziert Border-Logik von `box_dropdown` → gemeinsame `boxTopBorder(label,w,frame)`/`boxBottomBorder(hotkey,w,frame)` extrahieren, beide nutzen sie.
 - **B5 (low):** Tests prüfen nur `>width` → exakte `==width`-Assertion je Zeile ergänzen (fängt B1).
 
+## Restrisiken (offen, nicht blockierend)
+- **F1-Rest:** sehr langer Body / viele Relations überläuft die Pane weiterhin (kein Scroll im Box-Modus). Normalfall passt. Scroll-Strategie D10 (Viewport vs. Fullscreen-only) noch offen — bei Bedarf mit Nutzer klären.
+- **Narrow-width:** unter ~30 Zellen Detail-Breite bricht die exakte-Breite-Garantie der 3-Spalten-Zeile (dropdownBox-Floor 8/Spalte). Im Split erst bei Terminal <~68 Spalten relevant. VHS-80-Check in S2b-Nachlauf offen.
+
 ## Nächste Aktion (für Resume)
-S2e (autonom): `detailBoxForm` auf feste 3|2-Gruppierung umbauen (D12) + B1/B2/B3/B4/B5 fixen, exakte-Breite-Tests, Golden `detail_boxform.golden` + `browse_boxform.golden` regenerieren. sonnet. Danach F1 (Scroll für Relations/History unterhalb Body — Core passt jetzt in Pane) und S3 (Filter-Leiste). Reviewer war grün bis auf B1–B5.
+S3 (autonom, additiv, hinter `BT_BOXFORM`): persistente Filter-Leiste oben im Browse (Type/Status/Priority/Tags als `dropdownBox`-Chips, `f` fokussiert, aktiver Chip=Peach). Golden für an-Zustand, Default aus unverändert. Danach S4 (Keys o/u/G + Type-/Priority-Picker), S5 (Nested/Flat), S7 (huh-Ersatz). Reviewer-Checkpoint nach S3/S4.
