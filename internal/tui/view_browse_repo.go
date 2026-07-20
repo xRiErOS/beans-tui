@@ -1220,17 +1220,40 @@ func browseRepoLocalBindings() []keybind.Binding {
 		}
 		out = append(out, b)
 	}
-	return out
+	// keys.Fullscreen (bean bt-oox1, PO finding #10): `v` has been live since
+	// E9 but appeared in NEITHER footer list, so the Help overlay was the only
+	// place it was ever advertised -- the same class of miss as `r` (bt-6nuz),
+	// which is why the two were fixed together.
+	//
+	// It is added only under the box form, and that is a budget decision, not
+	// a scoping accident: the flag-OFF footer already measures 152 cells and
+	// fills its two lines at 80 columns exactly, so ANY further entry spills
+	// it to three and costs a row of list content (mouse_test.go's own D02
+	// precondition pins those two lines). Dropping the four inline-badged
+	// keys leaves the flag-ON footer at 127 cells, with room to spare. Epic
+	// bt-vy1q's standing constraint -- everything additive and gated,
+	// flag-off output byte-identical -- points the same way, and the PO saw
+	// the miss with BT_BOXFORM=1 in the first place.
+	return append(out, keys.Fullscreen)
 }
 
 // boxFormInlineKeys are the footer keys the box-form Detail pane already
 // shows itself (bt-fy5d). e/s/a/t are literal (x) badges rendered by
 // detailBoxForm's Title/Status/Parent/Tags boxes and panelBox("Body") --
 // o (Type) and u (Priority) are badges too but were never in the footer set
-// to begin with. r (Blocking) has no badge of its own, but its subject IS
-// the Relations panel that same render puts on screen, and the PO listed it
-// with the others in the bean's own acceptance criteria.
-var boxFormInlineKeys = map[string]bool{"e": true, "s": true, "a": true, "t": true, "r": true}
+// to begin with.
+//
+// The membership rule is exactly "this key is rendered as an inline (x)
+// badge", nothing looser. bean bt-6nuz (PO finding #6) removed `r`
+// (Blocking), which bt-fy5d had admitted on the weaker ground that its
+// SUBJECT -- the Relations panel -- is on screen. But a panel is not a
+// badge: the Relations panel carries no (r), so hiding `r` from the footer
+// left the key advertised nowhere at all while it stayed fully live. Since
+// a footer entry is the only discovery surface a badge-less key has,
+// dropping one is a net loss of information rather than a de-duplication.
+// TestBoxFormInlineKeysAllHaveAnInlineBadge (footer_boxform_test.go) now
+// holds this rule structurally against the real detailBoxForm render.
+var boxFormInlineKeys = map[string]bool{"e": true, "s": true, "a": true, "t": true}
 
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors
 // Chrome()'s own algebra exactly (view.go) so the frame always fills

@@ -121,7 +121,10 @@ func TestDetailBoxFormNoCursorIsUnchanged(t *testing.T) {
 
 	b := detailBoxFormFixture()
 	idx := detailBoxFormIndex()
-	want := dropdownBox("Title", b.Title, "e", 90, false)
+	// bean bt-oox1 (#1): the Title box's label now carries the bean ID
+	// alongside the word "Title". The invariant under test is the FOCUS
+	// state (cursor -1 => every box unfocused), not the label text.
+	want := dropdownBox("Title · "+b.ID, b.Title, "e", 90, false)
 	got := detailBoxForm(idx, b, 90, -1)
 	if !strings.HasPrefix(got, want) {
 		t.Fatal("detailBoxForm(cursor=-1) must start with the UNFOCUSED Title box (flag-on goldens depend on it)")

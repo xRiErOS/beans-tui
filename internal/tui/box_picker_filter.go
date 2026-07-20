@@ -62,6 +62,7 @@ import (
 	keybind "github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/xRiErOS/beans-tui/internal/data"
 	"github.com/xRiErOS/beans-tui/internal/theme"
 )
@@ -73,12 +74,16 @@ const pickerFilterPlaceholder = "type to filter (title or id)"
 
 // pickerFilterChromeLines is how many rendered lines the new chrome costs a
 // picker overlay: filterBarHeight (3, box_filter_bar.go's own const -- a
-// gridRow of dropdownBoxes is always exactly 3 lines) + 1 search field line
+// gridRow of dropdownBoxes is always exactly 3 lines) + 3 search field lines
 // + 1 blank separator. The bean's "Overlay-Höhe: Strip + Suchzeile kosten
 // Zeilen — Kandidatenliste entsprechend kürzen" requirement is honored by
 // subtracting this from the row budget (pickerRowWindow below)
 // rather than by letting the modal grow past the terminal.
-const pickerFilterChromeLines = filterBarHeight + 2
+//
+// bean bt-6nuz (#8): the search field went from ONE bare line to a framed
+// three-line box (searchBox), so this grew by 2 and the row window pays for
+// it -- TestPickerBoxesFitIn24Lines proves the overlay still fits 80x24.
+const pickerFilterChromeLines = filterBarHeight + 4
 
 // pickerFilterFrameLines is what a picker overlay spends OUTSIDE its row
 // list and outside the filter chrome: modalPanel's own top/bottom border,
@@ -270,10 +275,43 @@ func (f pickerFilter) strip(width int) string {
 	return gridRow(cells, width, -1) // -1: the picker filter strip has no field cursor (bt-1o4g)
 }
 
+// searchBoxLabel is the label boxTopBorder puts in the search field's own
+// frame -- named because TestPickerBoxesFrameTheSearchField and the layout
+// constants below both depend on the field being a real, framed box.
+const searchBoxLabel = "Search"
+
+// searchBox frames the query input exactly like every other field in the
+// overlay (bean bt-6nuz, PO finding #8). Before this the input was rendered
+// bare, a single unframed row directly beneath a strip of four framed
+// dropdownBoxes -- the one element that fell out of the box language the
+// rest of the picker (and the whole box-form Detail pane) speaks. It reuses
+// boxTopBorder/boxBottomBorder rather than re-deriving a frame, so a change
+// to the border vocabulary reaches this field too.
+//
+// No hotkey badge in the bottom border: the field is ALWAYS focused while a
+// picker is open (newPickerFilter), so there is no key that would focus it
+// and nothing truthful to advertise.
+func (f pickerFilter) searchBox(width int) string {
+	if width < 8 {
+		width = 8
+	}
+	frame := lipgloss.NewStyle().Foreground(theme.Overlay)
+
+	inner := width - 4
+	val := clampVisible(f.input.View(), inner)
+	pad := inner - lipgloss.Width(val)
+	if pad < 0 {
+		pad = 0
+	}
+	mid := frame.Render("│") + " " + val + strings.Repeat(" ", pad) + " " + frame.Render("│")
+
+	return boxTopBorder(searchBoxLabel, width, frame) + "\n" + mid + "\n" + boxBottomBorder("", width, frame)
+}
+
 // chrome is the strip + search field block every picker box prefixes onto
 // its row list -- one function so the two overlays cannot drift on layout.
 func (f pickerFilter) chrome(width int) string {
-	return f.strip(width) + "\n" + f.input.View() + "\n\n"
+	return f.strip(width) + "\n" + f.searchBox(width) + "\n\n"
 }
 
 // keyPickerFilter is the shared key step both pickers delegate their
@@ -311,9 +349,37 @@ func (m model) keyPickerFilter(f pickerFilter, msg tea.KeyMsg) (out pickerFilter
 }
 
 // pickerFilterHint is the shared hint line both picker boxes render above
-// their chrome, keyed off the picker's own toggle/confirm verbs.
-func pickerFilterHint(action string) string {
-	return theme.Muted.Render("type:filter  ^t/^n/^p/^g:facets  ↑/↓:nav  " + action + "  esc:discard")
+// their chrome. bean bt-6nuz (PO finding #9) changed BOTH what it says and
+// where it gets it from:
+//
+// STYLING -- it was one flat theme.Muted string, so an overlay footer looked
+// nothing like the app's every other footer, which renders Key in Teal and
+// action in Subtext (renderBindings, view.go). It now goes through
+// renderBindings like all of them.
+//
+// SOURCE -- the text was hand-written next to the render ("space:toggle
+// enter:save"), the exact two-sources shape bean bt-z4w7 eliminated
+// everywhere else. It now takes the picker's OWN local binding set, the
+// same accessor Footer Zone 3 renders for this overlay
+// (blockingPickerLocalBindings/parentPickerLocalBindings,
+// footer_context.go), so the inner hint and the outer footer are one string
+// built once and cannot disagree.
+//
+// The four facet chords are deliberately NOT in that set: the chip strip
+// badges ^t/^n/^p/^g in its own frames, and repeating an inline-badged key
+// in the footer is precisely what bt-fy5d removed from the main view.
+// "type:filter" went for the same reason -- the search field now carries a
+// framed "Search" label of its own (#8).
+// It also WRAPS at `width`, through the same ANSI-aware wrapText the main
+// footer uses (footer, view.go). The old flat string was written straight
+// into the modal body, where nothing wrapped it -- the 80-column tmux smoke
+// for this bean caught the result splitting "esc back" mid-word across two
+// lines ("esc b" / "ack"). renderBindings makes each entry wrap-atomic via
+// nbsp and leaves only the " · " separators breakable, so a word-aware wrap
+// breaks BETWEEN bindings or not at all (LESSONS-LEARNED Eintrag 4, the
+// NBSP-Wordwrap-Falle).
+func pickerFilterHint(bs []keybind.Binding, width int) string {
+	return wrapText(renderBindings(bs), width)
 }
 
 // filterPickerItems returns the subset of items whose bean satisfies f.

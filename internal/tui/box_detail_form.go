@@ -126,7 +126,22 @@ func boxFormBlocks(idx *data.Index, b *data.Bean, width, cursor int) []string {
 	}
 	on := func(row int) bool { return row == focusRow }
 
-	title := dropdownBox("Title", b.Title, "e", width, on(boxFormRowTitle))
+	// bean bt-oox1 (#1): the bean ID rides in the Title box's frame label,
+	// "slim next to the title" as the PO asked -- the frame label is the one
+	// slot that costs the title text no columns at all, and boxTopBorder
+	// already clamps it, so a narrow pane degrades instead of overflowing.
+	//
+	// The FULL ID, deliberately. bt-pl5p shortened the LIST rows
+	// (sproutling-eq67 -> eq67) because the repo slug repeats on every row
+	// there; that same decision kept the complete, copyable ID readable in
+	// the DETAIL pane, which shows exactly one bean and pays nothing for the
+	// slug. Do not unify the two (TestRelationRowKeepsFullIDInDetail and
+	// TestDetailBoxFormShowsBeanIDNextToTitle guard the two halves).
+	titleLabel := "Title"
+	if b.ID != "" {
+		titleLabel = "Title · " + b.ID
+	}
+	title := dropdownBox(titleLabel, b.Title, "e", width, on(boxFormRowTitle))
 
 	priority := b.Priority
 	if priority == "" {
@@ -157,7 +172,10 @@ func boxFormBlocks(idx *data.Index, b *data.Bean, width, cursor int) []string {
 		title,
 		rowA,
 		rowB,
-		panelBox("Body", bodySectionBody(b, width-4), "e", width, on(boxFormRowBody)),
+		// bean bt-oox1 (#4): the Body panel is the ONE box here whose height
+		// follows its content, so its bottom border can scroll out of the
+		// pane -- its (e) badge rides in the TOP border instead.
+		panelBoxTopHotkey("Body", bodySectionBody(b, width-4), "e", width, on(boxFormRowBody)),
 		panelBox("Relations", relationsBody, "", width, on(boxFormRowRelations)),
 		panelBox("History", historieSectionBody(b, width-4), "", width, on(boxFormRowHistory)),
 	}

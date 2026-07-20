@@ -42,7 +42,7 @@ Filter-Leiste oben · Felder als Dropdowns (maus-zugänglich) · Farbeinsatz zur
 | D04 | RELATIONS/HISTORY als **gestapelte Boxen** in einer scrollenden Pane — kein Accordion mehr im Detail. |
 | D05 | Links **View-Switcher `Nested ▏ Flat`** (Key `G`, klickbar). Flat-Default = Hierarchie-geordnet `M > E/F > T/B`. Eigener Sort (`S`) → Hierarchie fällt weg (flache Sortier-Liste). |
 | D06 | **Maus**: Klick öffnet Dropdown/Toggle. Infra vorhanden (`app.go:84` MouseCellMotion, `mouse.go` `detailClickRow`/`detailClickKey`, Double-Click). |
-| D07 | **Case-Konvention**: **klein** = Feld-Aktion (`s t a r e o u c d y`), **groß** = View/Global (`S X K G`). Zwei intern konsistente Gruppen, kein Mix innerhalb einer Gruppe. |
+| D07 | **Case-Konvention**: **klein** = Feld-Aktion (`s t a r e o u c d y`), **groß** = View/Global (`S X K G`). Zwei intern konsistente Gruppen, kein Mix innerhalb einer Gruppe. **Bestätigt PO 2026-07-20 (bt-mx4k):** `ctrl+k` für die Command-Palette entfernt, `K` ist die einzige Bindung — eine Taste, eine Funktion; Header sechs Zeichen kürzer. |
 | D08 | **Filter über `f`-Einstieg**, KEINE Facetten-Einzelkeys (hält D07, spart Buchstaben; Facetten via Tab/Pfeile/Maus). |
 | D09 | **huh ersetzen durch Inline-Box-Editing**: Detail *ist* das Edit-Formular, Create = leere Boxen gleicher Layout. huh-Forms + die langsamen huh-Drive-Tests fallen weg. Eigene Inline-Popups (jira-treu). **Synergie:** eigene Popups sind maus-nativ → löst den huh-MouseMsg-Blocker (D06) ohne Workaround. |
 

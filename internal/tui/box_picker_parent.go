@@ -228,13 +228,15 @@ func (m model) applyParentPickerSelection() (tea.Model, tea.Cmd) {
 // not a candidate.
 func (m model) parentPickerBox() string {
 	var b strings.Builder
-	b.WriteString(pickerFilterHint("enter:set") + "\n")
 
+	// bean bt-6nuz: width first, the hint wraps to it (see blockingPickerBox).
 	w := wideModalWidth(m.width)
 	contW := w - 2 // modalBox's own Padding(0,1) overhead -- border adds no further inner-width cost (empirically verified: Width() already absorbs padding, Border() only adds outside it)
 	if contW < 8 {
 		contW = 8
 	}
+
+	b.WriteString(pickerFilterHint(parentPickerLocalBindings(), contW) + "\n")
 	b.WriteString(m.parentFilter.chrome(contW))
 
 	rows := make([]string, len(m.parentFiltered))

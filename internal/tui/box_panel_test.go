@@ -94,3 +94,74 @@ func TestPanelBoxHotkeyOverflowClamp(t *testing.T) {
 		}
 	}
 }
+
+// --- bean bt-oox1 (#4): hotkey in the TOP border ---
+
+// TestPanelBoxTopHotkeyRendersInTopBorder guards the Body panel's exception
+// (PO finding #4). Every other box advertises its hotkey in the BOTTOM
+// border, which is fine for a fixed-height field -- but the Body panel is
+// as tall as the bean's body text, so on a long body the bottom border is
+// scrolled off the pane and the (e) badge with it: the PO could not see how
+// to edit precisely the beans that most needed editing. panelBoxTopHotkey
+// puts the badge in the top border instead, which is always on screen.
+func TestPanelBoxTopHotkeyRendersInTopBorder(t *testing.T) {
+	const w = 30
+	out := panelBoxTopHotkey("Body", "first\nsecond", "e", w, false)
+	lines := strings.Split(out, "\n")
+
+	top := ansi.Strip(lines[0])
+	bot := ansi.Strip(lines[len(lines)-1])
+	if !strings.Contains(top, "(e)") {
+		t.Errorf("top border carries no hotkey badge: %q", top)
+	}
+	if strings.Contains(bot, "(e)") {
+		t.Errorf("hotkey must move, not be duplicated in the bottom border: %q", bot)
+	}
+	if !strings.HasPrefix(top, "╭") || !strings.HasPrefix(bot, "╰") {
+		t.Errorf("frame corners wrong: top %q bot %q", top, bot)
+	}
+	if !strings.Contains(top, "Body") {
+		t.Errorf("top border lost its label: %q", top)
+	}
+}
+
+// TestPanelBoxTopHotkeyWidthExact holds the frame invariant every box in
+// this package shares: each rendered line is exactly `width` cells, at any
+// width, including ones too narrow for label+badge together.
+func TestPanelBoxTopHotkeyWidthExact(t *testing.T) {
+	for _, w := range []int{8, 10, 14, 20, 40, 80} {
+		out := panelBoxTopHotkey("Body", "content", "e", w, false)
+		for i, ln := range strings.Split(out, "\n") {
+			if got := lipgloss.Width(ln); got != w {
+				t.Errorf("width %d: line %d width = %d, want %d: %q", w, i, got, w, ln)
+			}
+		}
+	}
+}
+
+// TestDetailBoxFormBodyHotkeyIsInTopBorder is the same guarantee at the
+// call site the PO actually sees: the Body panel inside the box-form Detail
+// pane, not the primitive in isolation.
+func TestDetailBoxFormBodyHotkeyIsInTopBorder(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBeanFull(m, "tk-2")
+	b := m.focusedBean()
+	if b == nil {
+		t.Fatal("setup: no focused bean")
+	}
+	out := ansi.Strip(detailBoxForm(m.idx, b, 60, -1))
+
+	var bodyTop string
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.HasPrefix(ln, "╭─ Body ") {
+			bodyTop = ln
+			break
+		}
+	}
+	if bodyTop == "" {
+		t.Fatalf("no Body panel top border found:\n%s", out)
+	}
+	if !strings.Contains(bodyTop, "(e)") {
+		t.Errorf("Body panel top border carries no (e) badge -- unreachable on a long body: %q", bodyTop)
+	}
+}
