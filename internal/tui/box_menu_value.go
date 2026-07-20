@@ -276,15 +276,21 @@ func valueMenuTitle(items []valueMenuItem) string {
 	return "Set value"
 }
 
-// valueMenuBox renders the floating (now single-group, B11/B12) value menu --
-// same modalPanel + facetHead-group-header render pattern as
-// box_filter_facets.go's treeFilterBox, "(current)" suffix (theme.Muted) on
-// the group's current value (port beans-src statuspicker.go isCurrent). The
-// per-row group-header line still renders (lastGroup bookkeeping) even though
-// exactly one group is present now -- harmless, keeps the render loop
-// unchanged/simple, and the header text still adds value confirming which
-// group is open.
-func (m model) valueMenuBox() string {
+// valueMenuBodyAndItemRows builds the value-menu's body content (everything
+// modalPanel wraps below its own title line) IDENTICALLY to before this
+// slice, while ALSO recording the ABSOLUTE fg-row (0 = the popup's own top
+// border, matching m.valueMenuBox()'s own rendered lines) each item lands
+// at. Factored out so valueMenuItemRow (below, Slice D's click hit-test,
+// bt-f0y9 "feld-verankertes Inline-Dropdown") and valueMenuBox (render) share
+// the ONE builder -- the two can never independently drift on where an item
+// actually renders (Golden-Rule-Drift-Schutz). itemRows[i] = 2 (border-top +
+// title, both fixed 1-line) + the hint line (1) + however many lines this
+// loop has ALREADY written by the time item i's own turn comes up
+// (strings.Count of "\n" in the builder so far) -- exactly one blank+
+// group-header block ever fires (B11/B12: every open menu is single-group),
+// so this naturally matches valueMenuBox's OWN loop without hardcoding a
+// row-count constant that could silently desync from a future change here.
+func (m model) valueMenuBodyAndItemRows() (body string, itemRows []int) {
 	var b strings.Builder
 	// bean bt-z4w7: the cancel key is READ OFF the binding keyValueMenu
 	// actually matches (valueMenuGroupKey, footer_context.go) instead of the
@@ -298,12 +304,14 @@ func (m model) valueMenuBox() string {
 		cur = m.idx.ByID[m.mutTarget]
 	}
 
+	itemRows = make([]int, len(m.menuItems))
 	lastGroup := ""
 	for i, it := range m.menuItems {
 		if it.group != lastGroup {
 			b.WriteString("\n" + theme.Dim.Render(valueMenuGroupHead[it.group]) + "\n")
 			lastGroup = it.group
 		}
+		itemRows[i] = 2 + strings.Count(b.String(), "\n") // border-top(1) + title(1) + lines written so far
 		cursor := "  "
 		label := it.value
 		if i == m.menu.cursor {
@@ -315,8 +323,32 @@ func (m model) valueMenuBox() string {
 		}
 		b.WriteString(cursor + label + "\n")
 	}
+	return b.String(), itemRows
+}
+
+// valueMenuItemRow returns the fg-row (0 = the popup's own top border) item
+// index i renders at (Slice D click hit-test), or -1 for an out-of-range
+// index. Read box_menu_value.go's valueMenuBodyAndItemRows doc comment for
+// why this can never drift from the actual render.
+func valueMenuItemRow(m model, i int) int {
+	if i < 0 || i >= len(m.menuItems) {
+		return -1
+	}
+	_, itemRows := m.valueMenuBodyAndItemRows()
+	return itemRows[i]
+}
+
+// valueMenuBox renders the floating (now single-group, B11/B12) value menu --
+// same modalPanel + facetHead-group-header render pattern as
+// box_filter_facets.go's treeFilterBox, "(current)" suffix (theme.Muted) on
+// the group's current value (port beans-src statuspicker.go isCurrent). The
+// per-row group-header line still renders (lastGroup bookkeeping) even though
+// exactly one group is present now -- harmless, keeps the render loop
+// unchanged/simple, and the header text still adds value confirming which
+// group is open.
+func (m model) valueMenuBox() string {
+	body, _ := m.valueMenuBodyAndItemRows()
 	title := valueMenuTitle(m.menuItems)
-	body := b.String()
 	// Slice C B02 fix (bt-f0y9, PO-Entscheidung 2026-07-20): width now sizes
 	// to CONTENT (valueMenuContentWidth), not a fixed 40 -- a fixed-width
 	// popup is unrelated to the ~15-cell field it anchors to and, being far
@@ -405,15 +437,47 @@ func valueMenuPopupY(anchorY, anchorH, fgH, canvasH, minY int) int {
 // forced BOTH onto the SAME clamped column on an 80-column canvas).
 func (m model) placeValueMenuOverlay(out string, w, h int) string {
 	fg := m.valueMenuBox()
-	if !boxFormEnabled() {
-		return placeOverlay(out, fg, w, h)
-	}
-	b := m.idx.ByID[m.mutTarget] // nil-safe: a nil map / missing key both yield nil
-	rx, ry, _, rh, ok := boxFormFieldRect(m, b, m.valueMenuAnchorField)
+	x, y, _, _, ok := m.valueMenuPopupRect()
 	if !ok {
 		return placeOverlay(out, fg, w, h)
 	}
+	return placeOverlayAt(out, fg, w, h, x, y)
+}
 
+// valueMenuPopupRect returns the value-menu popup's absolute screen rect
+// (x, y, w, h) EXACTLY as placeValueMenuOverlay (above) draws it -- Slice D's
+// click hit-test (mouseValueMenuClick, mouse.go, bt-f0y9 "feld-verankertes
+// Inline-Dropdown") needs the SAME geometry the render uses, so both now
+// call this ONE function rather than maintaining the x/y math twice
+// (Golden-Rule-Drift-Schutz). ok=false whenever boxFormEnabled() is off
+// (accordion mode renders the menu CENTERED via the pre-existing
+// placeOverlay -- Slice D is explicitly scoped to the anchored box-form
+// popup only, D09's own "nur die endlichen Einzelfeld-Menüs") or the anchor
+// field's rect fails to resolve (same defensive fallback
+// placeValueMenuOverlay itself has, e.g. a vanished mutTarget bean).
+func (m model) valueMenuPopupRect() (x, y, w, h int, ok bool) {
+	if !boxFormEnabled() {
+		return 0, 0, 0, 0, false
+	}
+	b := m.idx.ByID[m.mutTarget] // nil-safe: a nil map / missing key both yield nil
+	rx, ry, _, rh, rectOK := boxFormFieldRect(m, b, m.valueMenuAnchorField)
+	if !rectOK {
+		return 0, 0, 0, 0, false
+	}
+
+	// Same <=0 fallback every geometry helper in this file/box_nav_field.go
+	// applies (clickPaneGeometry's own defaults) -- m.width/m.height are
+	// otherwise 0 in a zero-value model (render-only tests, init), which
+	// would make the clamps below meaningless.
+	ww, hh := m.width, m.height
+	if ww <= 0 {
+		ww = 80
+	}
+	if hh <= 0 {
+		hh = 24
+	}
+
+	fg := m.valueMenuBox()
 	fgLines := strings.Split(fg, "\n")
 	fgW, fgH := 0, len(fgLines)
 	for _, l := range fgLines {
@@ -422,14 +486,57 @@ func (m model) placeValueMenuOverlay(out string, w, h int) string {
 		}
 	}
 
-	x := rx
-	if fgW < w && x+fgW > w {
-		x = w - fgW // right-edge overflow: shift left, never past the field's own line
+	x = rx
+	if fgW < ww && x+fgW > ww {
+		x = ww - fgW // right-edge overflow: shift left, never past the field's own line
 	}
 	if paneLeft := boxFormPaneContentLeft(m); x < paneLeft {
 		x = paneLeft // never cross into the Tree/Backlog/Flat pane on the left
 	}
-	y := valueMenuPopupY(ry, rh, fgH, h, boxFormPopupChromeFloor(m))
+	y = valueMenuPopupY(ry, rh, fgH, hh, boxFormPopupChromeFloor(m))
 
-	return placeOverlayAt(out, fg, w, h, x, y)
+	return x, y, fgW, fgH, true
+}
+
+// mouseValueMenuClick dispatches a left-click while the value menu is open
+// (Slice D, bt-f0y9 "feld-verankertes Inline-Dropdown", D09 revidiert -- the
+// actual mouse-native payoff D09 was written for): a click on one of the
+// popup's own item rows applies that value IMMEDIATELY via
+// applyValueMenuSelection (box_menu_value.go -- the SAME enter-applies-and-
+// closes semantics keyValueMenu already has, UNTOUCHED by this slice), a
+// click anywhere else CLOSES the menu WITHOUT mutating (mirrors esc's own
+// keyValueMenu branch). Geometry comes exclusively from valueMenuPopupRect/
+// valueMenuItemRow (above) -- the SAME functions placeValueMenuOverlay
+// renders with -- NEVER detailBoxFormClickRow's own X (Slice A/B's ERRATUM:
+// that boundary is ~3 columns short of where content actually draws,
+// harmless for its own coarse pane gate, but would misplace this hit-test).
+//
+// Centered/accordion mode (boxFormEnabled() off) is deliberately OUT of
+// Slice D's scope: valueMenuPopupRect's own ok=false there routes every
+// click straight to "close without mutation" -- but handleMouse (mouse.go)
+// only ever calls this function while boxFormEnabled() in the first place
+// (its own guard mirrors composeOverlays' identical boxFormEnabled() gate),
+// so accordion mode's click is UNCHANGED: the pre-existing blanket overlay
+// guard still swallows it before this function is ever reached (no
+// regression, no new capability there either).
+//
+// A click INSIDE the popup's own rect but not on any item row (the title/
+// hint/group-header/blank/border rows) is a deliberate no-op -- neither
+// selects nor closes, mirroring "clicking a modal's own chrome does
+// nothing" precedent elsewhere in this codebase; only OUTSIDE the rect
+// closes.
+func (m model) mouseValueMenuClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	x, y, w, h, ok := m.valueMenuPopupRect()
+	if !ok || msg.X < x || msg.X >= x+w || msg.Y < y || msg.Y >= y+h {
+		m.overlay = overlayNone // outside the popup (or unresolved geometry): close, no mutation
+		return m, nil
+	}
+	row := msg.Y - y
+	for i := range m.menuItems {
+		if valueMenuItemRow(m, i) == row {
+			m.menu.cursor = i
+			return m.applyValueMenuSelection()
+		}
+	}
+	return m, nil // inside the popup, but not on an item row -- no-op
 }

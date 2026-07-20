@@ -163,6 +163,22 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Slice D (bt-f0y9, "feld-verankertes Inline-Dropdown", D09 revidiert):
+	// the anchored value menu is the ONE overlay mouse-native enough to act
+	// on a click (box_menu_value.go's mouseValueMenuClick) -- checked BEFORE
+	// the blanket overlay guard below, which would otherwise swallow this
+	// click same as every other overlay (devd precedent, update.go:470-474,
+	// still correct for every OTHER overlay: pickers/forms/palette/help/
+	// confirms stay keyboard-only, unchanged). Gated on boxFormEnabled()
+	// here too (mirrors composeOverlays' own identical gate,
+	// view_browse_repo.go) so accordion mode's centered value menu (Slice C,
+	// out of Slice D's scope) falls straight through to the blanket guard
+	// below, UNCHANGED.
+	if boxFormEnabled() && m.overlay == overlayValueMenu &&
+		msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+		return m.mouseValueMenuClick(msg)
+	}
+
 	// Modale/Overlays sind tastaturgesteuert -- Maus ignorieren (kein
 	// Fehlklick-Fokus), devd precedent update.go:470-474. m.view ==
 	// viewLobby closes the gap bt-mne6's own Notes-für-T6 flagged (T4 could
