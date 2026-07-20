@@ -60,6 +60,8 @@ type keyMap struct {
 
 	// Node-focused (act on the focused tree/list node).
 	Status    keybind.Binding // s — status menu (all node types)
+	Type      keybind.Binding // o — type menu (jira-style-ui experiment S4, D07 lowercase field action)
+	Priority  keybind.Binding // u — priority menu (jira-style-ui experiment S4, D07 lowercase field action)
 	Assign    keybind.Binding // a — parent assignment
 	Blocking  keybind.Binding // r — blocking picker (Q06 remap: was B, PF-14 freed r)
 	Create    keybind.Binding // c — create
@@ -154,6 +156,8 @@ func newKeyMap() keyMap {
 		Sort:        keybind.NewBinding(keybind.WithKeys("S"), keybind.WithHelp("S", "Sort")),
 
 		Status:    keybind.NewBinding(keybind.WithKeys("s"), keybind.WithHelp("s", "Status")),
+		Type:      keybind.NewBinding(keybind.WithKeys("o"), keybind.WithHelp("o", "Type")),
+		Priority:  keybind.NewBinding(keybind.WithKeys("u"), keybind.WithHelp("u", "Priority")),
 		Assign:    keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Parent")),
 		Blocking:  keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "Blocking")),
 		Create:    keybind.NewBinding(keybind.WithKeys("c"), keybind.WithHelp("c", "Create")),
@@ -191,7 +195,7 @@ func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen, k.HistoryBack, k.HistoryForward}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
-		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.TagToggle, k.Sort, k.NewTag, k.RenameTag}},
+		{"Actions", []keybind.Binding{k.Status, k.Type, k.Priority, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.TagToggle, k.Sort, k.NewTag, k.RenameTag}},
 	}
 }
 

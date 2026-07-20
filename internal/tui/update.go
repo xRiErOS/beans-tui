@@ -713,7 +713,9 @@ func (m model) beanETag(id string) (etag string, ok bool) {
 const createInFlightNote = "Creation already in progress — please wait"
 
 // keyNodeAction routes the node-focused mutation keys (design-spec §7:
-// s/t/a/B/c/d/e -- Status/TagAssign/Assign/Blocking/Create/Delete/Editor).
+// s/t/a/B/c/d/e -- Status/TagAssign/Assign/Blocking/Create/Delete/Editor;
+// plus jira-style-ui experiment S4's o/u -- Type/Priority, wired onto the
+// SAME value-menu machinery as Status, not gated behind BT_BOXFORM).
 // Placed in handleKey directly after the Refresh check and BEFORE the
 // m.detailFocus dispatch, since node actions must act on m.focusedBean()
 // regardless of which pane currently has focus (focusedBean() already
@@ -755,6 +757,8 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		nm, cmd := m.openCreateForm()
 		return true, nm, cmd
 	case keybind.Matches(msg, keys.Status),
+		keybind.Matches(msg, keys.Type),
+		keybind.Matches(msg, keys.Priority),
 		keybind.Matches(msg, keys.TagAssign),
 		keybind.Matches(msg, keys.Assign),
 		keybind.Matches(msg, keys.Blocking),
@@ -766,6 +770,17 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		}
 		if keybind.Matches(msg, keys.Status) {
 			return true, m.openValueMenu("status"), nil
+		}
+		// Type (o) / Priority (u) — jira-style-ui experiment S4: same
+		// value-menu machinery as Status, only the seeded group differs
+		// (openValueMenu/applyValueMenuSelection already fully support
+		// "type"/"priority", box_menu_value.go -- pre-existing via the
+		// Command-Center and the Meta field-level enter cascade).
+		if keybind.Matches(msg, keys.Type) {
+			return true, m.openValueMenu("type"), nil
+		}
+		if keybind.Matches(msg, keys.Priority) {
+			return true, m.openValueMenu("priority"), nil
 		}
 		if keybind.Matches(msg, keys.TagAssign) {
 			nm, cmd := m.openTagPicker()
@@ -804,7 +819,7 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			// fires until keyDeleteConfirm's own enter.
 			return true, m.openDeleteConfirm(), nil
 		}
-		return true, m, nil // unreachable: msg matched one of the six keys in this case's condition above
+		return true, m, nil // unreachable: msg matched one of the eight keys in this case's condition above
 	case keybind.Matches(msg, keys.Yank):
 		// E5 Task 3 (bean bt-e4a6, design decision b): `y` always acts on
 		// m.focusedBean() -- Tree/Backlog identical (focusedBean is already

@@ -382,6 +382,88 @@ func TestKeyNodeActionStatusOpensMenuWithFocusedBean(t *testing.T) {
 	}
 }
 
+// TestKeyNodeActionTypeOpensMenuSeededToType is jira-style-ui experiment
+// S4's positive-path pin for the new global `o` key: mirrors
+// TestKeyNodeActionStatusOpensMenuWithFocusedBean exactly, but asserts the
+// value menu opens seeded to the TYPE group (not gated behind BT_BOXFORM --
+// valid in both accordion and box-form modes, same dispatch checkpoint as
+// Status).
+func TestKeyNodeActionTypeOpensMenuSeededToType(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // status=todo, type=task, priority=normal (fixtureBeans, ms-1 -> ep-1 -> tk-2)
+
+	handled, nm, cmd := m.keyNodeAction(runeMsg('o'))
+	if !handled {
+		t.Fatal("o must be handled")
+	}
+	if cmd != nil {
+		t.Fatal("o (open) must not itself fire a Cmd")
+	}
+	mm := nm.(model)
+	if mm.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", mm.overlay)
+	}
+	if len(mm.menuItems) == 0 || mm.menuItems[0].group != "type" {
+		t.Fatalf("menuItems seeded group = %+v, want group \"type\"", mm.menuItems)
+	}
+	if mm.menuItems[mm.menu.cursor].value != "task" {
+		t.Fatalf("cursor value = %q, want %q (tk-2's current type)", mm.menuItems[mm.menu.cursor].value, "task")
+	}
+}
+
+// TestKeyNodeActionPriorityOpensMenuSeededToPriority mirrors
+// TestKeyNodeActionTypeOpensMenuSeededToType for the new global `u` key,
+// asserting the value menu opens seeded to the PRIORITY group.
+func TestKeyNodeActionPriorityOpensMenuSeededToPriority(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBean(m, "tk-2") // status=todo, type=task, priority=normal (fixtureBeans, ms-1 -> ep-1 -> tk-2)
+
+	handled, nm, cmd := m.keyNodeAction(runeMsg('u'))
+	if !handled {
+		t.Fatal("u must be handled")
+	}
+	if cmd != nil {
+		t.Fatal("u (open) must not itself fire a Cmd")
+	}
+	mm := nm.(model)
+	if mm.overlay != overlayValueMenu {
+		t.Fatalf("overlay = %v, want overlayValueMenu", mm.overlay)
+	}
+	if len(mm.menuItems) == 0 || mm.menuItems[0].group != "priority" {
+		t.Fatalf("menuItems seeded group = %+v, want group \"priority\"", mm.menuItems)
+	}
+	if mm.menuItems[mm.menu.cursor].value != "normal" {
+		t.Fatalf("cursor value = %q, want %q (tk-2's current priority)", mm.menuItems[mm.menu.cursor].value, "normal")
+	}
+}
+
+// TestKeyNodeActionTypeAndPriorityNoFocusedBeanIsSilentNoOp mirrors
+// TestKeyNodeActionRequiresFocusedBeanExceptCreate for the two new keys:
+// handled=true, no overlay opens, without a focused bean.
+func TestKeyNodeActionTypeAndPriorityNoFocusedBeanIsSilentNoOp(t *testing.T) {
+	m := fixtureModel(t, nil) // no beans -> focusedBean() == nil
+	if m.focusedBean() != nil {
+		t.Fatal("setup: expected focusedBean() == nil with zero beans loaded")
+	}
+
+	for _, k := range []tea.KeyMsg{runeMsg('o'), runeMsg('u')} {
+		handled, nm, cmd := m.keyNodeAction(k)
+		if !handled {
+			t.Fatalf("key %v: handled = false, want true (handled-but-silent no-op)", k)
+		}
+		if cmd != nil {
+			t.Fatalf("key %v: cmd != nil, want nil (no-op, no focused bean)", k)
+		}
+		mm, ok := nm.(model)
+		if !ok {
+			t.Fatalf("key %v: keyNodeAction did not return a model, got %T", k, nm)
+		}
+		if mm.overlay != overlayNone {
+			t.Fatalf("key %v: overlay = %v, want overlayNone (no focused bean -- must not open)", k, mm.overlay)
+		}
+	}
+}
+
 // --- applyMutationResult ---
 
 // TestApplyMutationResultConflictSetsStatusLineAndReloads guards the
