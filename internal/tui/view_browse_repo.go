@@ -986,6 +986,25 @@ func (m model) viewBrowseRepo() string {
 	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
 	nodes := m.visibleNodes()
 
+	// S3 (jira-style-experiment, BT_BOXFORM): the persistent filter chip row
+	// (box_filter_bar.go, design-spec.md D02/D08) sits between the header
+	// divider and the Tree/Detail split, ONLY when boxFormEnabled() --
+	// existing composition (bodyH/content below) stays byte-for-byte
+	// unchanged when the flag is off. filterBarRow's height is reclaimed
+	// from bodyH BEFORE the split renders, so the outer frame's total line
+	// count still matches clickPaneGeometry's own avail budget (Golden Rule
+	// #1: no forced Height() -- the frame grows exactly to its content, so
+	// adding a row without reclaiming its height would grow the frame past
+	// the terminal).
+	var filterBarRow string
+	if boxFormEnabled() {
+		filterBarRow = m.filterBar(innerW)
+		bodyH -= lipgloss.Height(filterBarRow)
+		if bodyH < 1 {
+			bodyH = 1
+		}
+	}
+
 	var body string
 	if m.fullscreen != fullscreenNone {
 		// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): Vollbild --
@@ -1030,7 +1049,11 @@ func (m model) viewBrowseRepo() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
 	}
 
-	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
+	content := head + "\n" + div
+	if boxFormEnabled() {
+		content += "\n" + filterBarRow
+	}
+	content += "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
 	out := outerBorder(content, innerW, true)
 
 	return m.composeOverlays(out, w, h)
