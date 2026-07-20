@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-20T18:05:08Z
-updated_at: 2026-07-20T20:29:07Z
+updated_at: 2026-07-20T20:55:11Z
 parent: bt-vy1q
 ---
 
@@ -449,3 +449,147 @@ grün · `command go test ./...` (VOLL, Vordergrund) grün,
   ist dieselbe Compositing-Eigenschaft, die JEDES Overlay über
   unregelmäßigem Hintergrund hat (nicht neu durch Slice C, nicht durch
   diesen Fix verursacht), kein Verhaltensfehler.
+
+
+
+## Grounding Slice D (2026-07-20)
+
+- **Guard bestätigt:** `handleMouse` (`mouse.go:181-185`) blockt JEDE Maus-
+  Aktion, sobald `m.overlay != overlayNone` — ein Klick auf eine Popup-Zeile
+  tat bis Slice D buchstäblich nichts. Davor laufen nur Toast-Klick-Vorrang
+  und Fullscreen-Guard (`m.fullscreen != fullscreenNone`, F01-Scope-Cut,
+  unangetastet).
+- **Wert-Anwendung bestätigt:** `applyValueMenuSelection()`
+  (`box_menu_value.go:191-216`) liest `m.menu.cursor`, setzt
+  `m.overlay = overlayNone` sofort, dispatcht `SetStatus/SetType/SetPriority`
+  via `mutateCmd` — GENAU das, was `keyValueMenu`s `enter`-Case bereits tut.
+  Slice D setzt nur `m.menu.cursor` auf den geklickten Index und ruft
+  dieselbe Funktion — keine eigene Mutations-Logik.
+- **Popup-Zeilen-Layout verifiziert** (`valueMenuBox()`, single-group seit
+  B11/B12): Rahmen oben, Titel, Hint, Leerzeile, Gruppenkopf, dann n Items,
+  dann Leerzeile+Rahmen unten. NICHT hart-codiert — `valueMenuBodyAndItemRows`
+  zählt Zeilen beim Bauen mit (`strings.Count`), speist sowohl `valueMenuBox()`
+  (Render) als auch `valueMenuItemRow()` (Hit-Test).
+- **X-Geometrie:** Popup-Rect kommt ausschließlich aus der neuen
+  `valueMenuPopupRect()` (jetzt die EINE Quelle für `placeValueMenuOverlay`
+  UND den Klick-Hit-Test) — nie aus `detailBoxFormClickRow`s eigener
+  (laut Slice-A/B-ERRATUM ungenauer) X-Logik.
+
+## Summary — bt-f0y9 (Slices A-E, D09 revidiert)
+
+Alle fünf Slices abgeschlossen, Feld-verankertes Inline-Dropdown für
+Status/Type/Priority ersetzt das zentrierte Modal, MAUS-nativ (Klick wählt),
+mit Flip-up/Chrome-Schutz und Inhaltsbreite. Create-Form bleibt huh
+(unangetastet, verifiziert per `git diff --stat` über alle Commits: keine
+Änderung an `box_confirm_create.go`/`box_confirm_create_test.go`).
+
+| Slice | Commit(s) | Inhalt |
+|---|---|---|
+| A | `601259a` | `boxFormFieldRect` — Vorwärts-Geometrie Feld→Screen-Rect |
+| B | `a068cbd` | `placeOverlayAt` — anker-positionierte Overlay-Variante |
+| C | `4abee07`, `27dc35d` (B01/B02-Fix nach Review) | Value-Menü feld-verankert statt zentriert, Flip-up mit Chrome-Fußboden, Inhaltsbreite statt fix 40 |
+| D | `cdeec98` | Klick im Popup wählt Wert (maus-nativ), Klick außerhalb schließt |
+| E | — (kein Code-Commit, s.u.) | Cleanup-Prüfung + finale Validierung |
+
+**Slice E — Cleanup-Ergebnis:** Kein toter Code gefunden. Alle in A-D neu
+eingeführten Funktionen (`boxFormFieldRect`, `boxFormPaneContentLeft`,
+`boxFormPopupChromeFloor`, `placeOverlayAt`, `placeCompose`,
+`valueMenuContentWidth`, `valueMenuBodyAndItemRows`, `valueMenuItemRow`,
+`valueMenuPopupRect`, `valueMenuPopupY`, `mouseValueMenuClick`,
+`boxFormFieldIndexForGroup`) per Grep gegen echte (Nicht-Test-)Call-Sites
+verifiziert — jede hat mindestens einen echten Aufrufer außerhalb ihrer
+eigenen Definition/Doc-Kommentare. Der zentrierte `placeOverlay`-Pfad für
+Accordion/Flag-OFF ist erhalten (`TestValueMenuStaysCenteredWithoutBoxFormFlag`
+weiterhin grün). Der faktisch tote Flip-Zweig in `valueMenuPopupY`
+(unerreichbar für Status/Type/Priority bei realistischen Terminalgrößen,
+siehe Slice-C-B01-Notiz) bleibt bewusst stehen — Reviewer hatte das als
+keinen Defekt eingestuft, nicht wegrefaktoriert. **Kein Cleanup-Commit
+nötig** (kein Leer-Commit erzeugt).
+
+## Test-Output
+
+- `command go build -o bin/bt .` — grün (alle Runden).
+- `command go vet ./...` — grün (alle Runden).
+- `command go test ./...` — **ZWEIMAL** im Vordergrund gelaufen (zweiter
+  Lauf mit `-count=1`, erzwungen ohne Cache): beide Male grün,
+  `internal/tui` 151.5s / 153.3s, alle anderen Pakete `ok`.
+- Goldens: `command go test ./internal/tui -run Golden -update` nach JEDER
+  Slice ausgeführt — `git status`/`git diff --stat` auf `testdata/` zeigt
+  über den GESAMTEN Verlauf NULL Diff für alle bestehenden Golden-Dateien;
+  einzige Änderung war das bewusst neu hinzugefügte
+  `testdata/value_menu_anchored.golden` (Slice C, nach dem B01/B02-Fix
+  erzeugt).
+
+## Smoke (REAL, nicht nur Unit)
+
+tmux 80×24 gegen `/Users/erik/Obsidian/tools/sproutling` (echtes Repo, echte
+Beans-Daten), `BT_BOXFORM=1`, frisches `bin/bt` (mtime nach dem letzten
+Commit geprüft: `cdeec98` @ 22:47, Binary @ 22:53 — frisch gebaut).
+
+1. `bt` gestartet, Bean `sproutling-elir` (Status `todo`) im Fokus.
+2. `s` gedrückt → Status-Menü öffnet feld-verankert direkt unter der
+   Status-Box (nicht zentriert), App-Chrome (Zeile 0-2) unverändert.
+3. **Echter Maus-Klick** via SGR-Mouse-Escape-Sequenz
+   (`\x1b[<0;COL;ROWM` / `...m`, Press+Release) auf die "completed"-Zeile
+   im Popup gesendet — via `tmux send-keys -l` (nicht simuliert, echte
+   Escape-Bytes an den bubbletea-Prozess).
+4. **Ergebnis:** Menü schloss, Status-Box zeigt "complet ▾" (Wert
+   angewendet), Tree-Zeile für `elir` wechselt Status-Glyph von "t" auf "c".
+   Auf Platte verifiziert: `.beans/sproutling-elir--bug-fixing-ios-app.md`
+   zeigt `status: completed` unmittelbar nach dem Klick (echte Mutation,
+   kein reiner UI-Zustand).
+5. **Aufräumen:** `sproutling`-Repo per `git checkout --` auf den
+   Original-Stand zurückgesetzt (verifiziert: `git status --porcelain`
+   zeigt clean für die betroffene Datei).
+
+Ehrlichkeit: NUR der Maus-Klick-Trigger (Slice D, der risikoreichste/
+wichtigste Pfad) wurde live gesmoked. Tastatur/Feld-Cursor-Enter/Palette-
+Trigger sowie Flip-up/Fullscreen/Breiten-Verhalten sind NUR unit-/
+render-geerdet getestet (Slices A-C), nicht zusätzlich live gesmoked — im
+Zeitbudget dieses Abschluss-Dispatches nicht verlangt, aber hier transparent
+benannt.
+
+## Deviations/ERRATA (kumulativ über A-E)
+
+1. **Slice A:** `detailBoxFormClickRow`s eigene X-Grenze (`originX+lw`) liegt
+   ~3 Spalten (Split) / 1 Spalte (Fullscreen) neben der tatsächlichen
+   Render-Position — für die bestehende Klick-Auflösung folgenlos (grobes
+   Pane-Gate + große Buckets schlucken den Versatz), für einen Anker-Popup
+   aber sichtbar falsch. `boxFormFieldRect` berechnet den geometrisch
+   exakten, render-verifizierten Ursprung separat.
+2. **Slice C (vor Fix):** Flip-up konnte Chrome überschreiben (B01) und
+   Type/Priority klemmten beide auf dieselbe Spalte (B02) — BEIDE per
+   Re-Review gefunden und in der Fix-Runde behoben, verifiziert grün.
+3. **Slice C (nach Fix):** Der Flip-Zweig ist für Status/Type/Priority bei
+   realistischen Terminalgrößen faktisch unerreichbar (Popup-Höhe > Platz
+   oberhalb des Chrome-Fußbodens) — bewusste Konsequenz aus "niemals Chrome
+   überschreiben", vom Reviewer als kein Defekt eingestuft.
+4. **Slice D:** Klick INNERHALB des Popups, aber NICHT auf einer Item-Zeile
+   (Titel/Hint/Gruppenkopf/Leerzeile/Rahmen) ist ein bewusster No-Op (weder
+   Auswahl noch Schließen) — in der Aufgabenstellung nicht explizit
+   spezifiziert, als sicherster/unauffälligster Default gewählt.
+5. **Kosmetischer Nebenbefund (kein Bug, aus Slice C):** wo der Popup über
+   die Parent/Tags-Zeile (rowB) reicht, bleibt ein einzelnes Rahmenzeichen
+   der darunterliegenden Box neben der Popup-Ecke sichtbar (Golden-Fixture,
+   Zeile 13) — dieselbe Compositing-Eigenschaft, die jedes Overlay über
+   unregelmäßigem Hintergrund hat.
+
+## Notes for final Reviewer
+
+- Alle vier Trigger-Pfade (Tastatur, Feld-Cursor-Enter, Klick, Palette)
+  sind für ANCHORING (Slice C) UND — nur für Klick — für die neue
+  Auswahl-Fähigkeit (Slice D) abgedeckt.
+- Live-Smoke deckt NUR den Maus-Klick-Pfad ab (s.o., "Ehrlichkeit"-Absatz) —
+  falls der finale Reviewer weitere Live-Smokes verlangt (z.B. Flip-up bei
+  80×24 visuell, Fullscreen-Anker), wäre das ein zusätzlicher, in diesem
+  Dispatch nicht enthaltener Schritt.
+- Der faktisch tote Flip-Zweig (Deviation 3) ist ein bewusster Kompromiss
+  zwischen "niemals Chrome überschreiben" (B01) und "sichtbares Klappen" —
+  bitte explizit abnehmen oder als bekannten Kompromiss protokollieren.
+- Kein Cleanup-Commit in Slice E — alle Funktionen aus A-D sind in
+  Benutzung, nichts wurde tot hinterlassen.
+- Create-Form (huh) unangetastet über den GESAMTEN Verlauf verifiziert
+  (`git diff --stat` über alle 5 Commits gegen `box_confirm_create*.go`:
+  leer).
+- `docs/GLOSSARY.md` durchgehend NICHT angefasst (pre-existing Fremd-Reformat,
+  bleibt für den Nutzer).
