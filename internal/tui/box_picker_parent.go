@@ -62,10 +62,14 @@ const parentPickerRowBudget = 14
 // b) (self/descendants/invalid-types pre-filtered, sorted) rendered via the
 // existing relationRow helper (view_detail_bean.go:66-68) -- same status-
 // icon+type-icon+ID+title glyph order as every other bean row in the app.
-func buildParentItems(idx *data.Index, b *data.Bean) []pickerItem {
+// slug (bean bt-pt1r) is the caller's m.beanIDPrefix() -- the rendered
+// prefix drops the current repo's own ID prefix exactly like the left pane's
+// rows do. pickerItem.id deliberately keeps the FULL id: it is the mutation
+// target handed to SetParent, not display text.
+func buildParentItems(idx *data.Index, b *data.Bean, slug string) []pickerItem {
 	items := []pickerItem{{id: "", title: "(No parent)"}}
 	for _, cand := range data.EligibleParents(idx, b) {
-		items = append(items, pickerItem{id: cand.ID, prefix: relationRowPrefix(cand), title: cand.Title})
+		items = append(items, pickerItem{id: cand.ID, prefix: relationRowPrefix(cand, slug), title: cand.Title})
 	}
 	return items
 }
@@ -91,7 +95,7 @@ func (m model) openParentPicker() (model, tea.Cmd) {
 		return m, nil
 	}
 	m.mutTarget = b.ID
-	m.parentItems = buildParentItems(m.idx, b)
+	m.parentItems = buildParentItems(m.idx, b, m.beanIDPrefix())
 	m.parentFilter = newPickerFilter()
 	m.parentFiltered = filterPickerItems(m.idx, m.parentItems, m.parentFilter, true)
 

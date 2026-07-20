@@ -78,6 +78,44 @@ Catppuccin Macchiato, TrueColor. Keine Hex-Literale in Views.
 
 Help-Overlay generiert weiterhin aus der Keymap (kein Drift).
 
+### 5.1 Nachtrag zu Entscheidung a3 — Schließen-Alias ist gruppen-gebunden (bean bt-z4w7)
+
+**Revidiert, nicht stillschweigend gepatcht.** Entscheidung a3 (epic-E3-plan.md »(a3)«)
+formulierte wörtlich „**esc/`s`** schließt" — korrekt zu ihrer Zeit, denn `s` war der
+einzige Key, der dieses Menü öffnen konnte. S4 hat mit `o` (Type) und `u` (Priority)
+zwei weitere Öffner ergänzt, ohne den Schließen-Zweig mitzuziehen. Folge: ein per `o`
+geöffnetes Menü schloss auf `s`, und beide Hint-Flächen (Footer Zone 3 + der modal-
+interne `esc/s:cancel`) nannten `s` unabhängig von der offenen Gruppe.
+
+**Neu:** Es schließt **`esc` plus der Key, der das Menü geöffnet hat** (`s`/`o`/`u`).
+Ein fremder Gruppen-Key schließt nicht mehr. `esc` bleibt in allen Gruppen der
+universelle Ausstieg.
+
+**Warum das die Ursache trifft und nicht das Symptom:** Der Fehler war nicht „das
+Label steht falsch da", sondern dass Label und Handler **zwei getrennte Quellen**
+hatten — der Handler matchte `keys.Status`, der Footer listete `keys.Status`, beide
+per Hand nebeneinander gepflegt. Jetzt liest jede der drei Flächen (Handler-Match,
+Footer Zone 3, Inline-Hint) dieselbe Funktion `valueMenuGroupKey(group)`
+(`internal/tui/footer_context.go`). Divergenz ist damit **konstruktiv ausgeschlossen**,
+nicht nur aktuell korrigiert.
+
+Dieselbe Klasse traf zwei weitere Stellen, mitbehoben:
+
+| Fläche | Label sagte | Real gebunden | Ursache |
+|---|---|---|---|
+| Blocking-Picker Toggle | `space/x Toggle facet` | nur `space` | bt-a3a8 (D6) verengte den Handler wegen des neuen Suchfelds, der Footer blieb auf dem geteilten `keys.Toggle` stehen |
+| Tag-/Parent-/Blocking-Picker Navigation | `↑/i up`, `↓/k down` | nur `↑`/`↓` | die Picker schalten bewusst auf rohe `tea.KeyUp`/`KeyDown`, damit `i`/`k` im Suchfeld tippbar bleiben |
+
+Beide nutzen jetzt overlay-lokale Bindings (`blockingPickerToggleHint`,
+`pickerNavUpHint`/`pickerNavDownHint`), die der jeweilige Handler **selbst** matcht.
+
+**Drift-Guard:** `TestPickerFooterKeysAreReservedNotTyped`
+(`internal/tui/footer_binding_source_test.go`) drückt für jedes Picker-Overlay jeden
+im Footer beworbenen Ein-Zeichen-Key und lässt den Build scheitern, sobald einer davon
+bloß in die Suchzeile getippt wird statt zu handeln. Genau dieser Test hat den dritten
+Fall (`↑/i`) überhaupt erst gefunden — er ist die eigentliche Absicherung gegen die
+Wiederkehr dieser Fehlerklasse.
+
 ## 6. Layout-Mockups (Referenz)
 
 ### 6.1 Dropdown-Widget (D01) — Label im Rahmen, Hotkey im Rahmen
