@@ -45,7 +45,7 @@ type keyMap struct {
 	Back    keybind.Binding // esc — back
 	Quit    keybind.Binding // q / ctrl+c — quit (confirm)
 	Help    keybind.Binding // ? — help overlay
-	Palette keybind.Binding // ctrl+k / K — Command-Center
+	Palette keybind.Binding // K — Command-Center
 	Picker  keybind.Binding // p — repo-picker
 	Backlog keybind.Binding // b — Backlog
 	Search  keybind.Binding // / — search
@@ -169,7 +169,11 @@ func newKeyMap() keyMap {
 		Back:    keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithHelp("esc", "back")),
 		Quit:    keybind.NewBinding(keybind.WithKeys("q", "ctrl+c"), keybind.WithHelp("q", "quit")),
 		Help:    keybind.NewBinding(keybind.WithKeys("?"), keybind.WithHelp("?", "help")),
-		Palette: keybind.NewBinding(keybind.WithKeys("ctrl+k", "K"), keybind.WithHelp("ctrl+k", "commands")),
+		// bt-mx4k: ctrl+k retired -- K was long since bound and matches the
+		// D07 case convention (uppercase = view/global). One key, one
+		// function; the header gets six characters shorter, which counts at
+		// 80 columns.
+		Palette: keybind.NewBinding(keybind.WithKeys("K"), keybind.WithHelp("K", "commands")),
 		Picker:  keybind.NewBinding(keybind.WithKeys("p"), keybind.WithHelp("p", "repos")),
 		Backlog: keybind.NewBinding(keybind.WithKeys("b"), keybind.WithHelp("b", "Backlog")),
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "search")),

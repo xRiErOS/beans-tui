@@ -31,7 +31,7 @@ func TestBrowseRepoChromeHeaderShowsExactlyFourGlobals(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	head, _ := m.browseRepoChrome(200) // wide enough to never trigger breadcrumb's narrow-stack fallback
 	plain := stripHint(head)
-	for _, want := range []string{"ctrl+k commands", "p repos", "? help", "q quit"} {
+	for _, want := range []string{"K commands", "p repos", "? help", "q quit"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("browseRepoChrome header = %q, want it to contain %q", plain, want)
 		}
