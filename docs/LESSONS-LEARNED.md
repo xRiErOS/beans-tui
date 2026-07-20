@@ -1,3 +1,6 @@
+---
+uid: 106f2a53-4891-4c71-b333-5cea7650c819
+---
 # LESSONS-LEARNED — beans-tui
 
 Append-only-Log. Einträge werden NIE umgeschrieben oder gelöscht, nur unten

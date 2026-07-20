@@ -1,3 +1,6 @@
+---
+uid: 35ff28b5-4577-40af-8da8-751a122abf32
+---
 # Glossar — beans-tui
 
 Gemeinsame Sprache für PO und Agenten. **Prosa-Begriff und Code-Bezeichner stehen
