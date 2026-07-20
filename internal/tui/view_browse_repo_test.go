@@ -71,13 +71,13 @@ func TestBrowseRepoChromeFooterShowsFocusInFocusOut(t *testing.T) {
 // Footer-Liste (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): browseRepoLocalBindings()
 // renders EXACTLY "tab focus in · shift+tab focus out · / search · f Filter
 // · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank ·
-// a Parent · r Blocking" -- Navigation-Keys (Up/Down/Left/Right) are
+// a Parent · r Relations" -- Navigation-Keys (Up/Down/Left/Right) are
 // entirely gone.
 func TestBrowseRepoChromeFooterMatchesQ06List(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	_, localKeys := m.browseRepoChrome(500) // wide enough for the whole list on one line
 	plain := stripHint(localKeys)
-	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking"
+	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Relations"
 	if plain != want {
 		t.Errorf("browseRepoChrome footer = %q, want exactly %q", plain, want)
 	}

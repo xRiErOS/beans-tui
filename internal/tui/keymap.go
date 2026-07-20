@@ -191,7 +191,13 @@ func newKeyMap() keyMap {
 		Type:      keybind.NewBinding(keybind.WithKeys("o"), keybind.WithHelp("o", "Type")),
 		Priority:  keybind.NewBinding(keybind.WithKeys("u"), keybind.WithHelp("u", "Priority")),
 		Assign:    keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Parent")),
-		Blocking:  keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "Blocking")),
+		// Label "Relations", nicht "Blocking" (PO-Befund #7): das Overlay heisst
+		// Relations und die Detail-Pane ueberschreibt ihr Panel ebenso. Der
+		// Bezeichner `Blocking` und `data.SetBlocking` bleiben, weil sie die
+		// konkrete Beziehungsart meinen -- ebenso appendGroup("Blocking", ...)
+		// in view_detail_bean.go, das eine Gruppe INNERHALB des Relations-Panels
+		// benennt. Nur das ANZEIGE-Label folgt der Ueberschrift.
+		Blocking:  keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "Relations")),
 		Create:    keybind.NewBinding(keybind.WithKeys("c"), keybind.WithHelp("c", "Create")),
 		Delete:    keybind.NewBinding(keybind.WithKeys("d"), keybind.WithHelp("d", "Delete")),
 		TagAssign: keybind.NewBinding(keybind.WithKeys("t"), keybind.WithHelp("t", "Tags")),
