@@ -34,6 +34,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/xRiErOS/beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
@@ -273,19 +274,34 @@ func (m model) mouseTreeClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// Doppelklick = zweiter Klick auf DENSELBEN Node-Index innerhalb des
 	// Zeitfensters. lastClickAt=zero (Zero-Value) ⇒ riesiges Delta ⇒ erster
-	// Klick nie Doppelklick (Port devd mouseTreeClick verbatim).
+	// Klick nie Doppelklick. now() reads the INJECTABLE clock (update.go), so
+	// none of this depends on wall time in tests -- bean bt-vpvu calls that
+	// out explicitly as the flakiness trap to avoid.
 	now := m.now()
 	isDouble := idx == m.lastClickIdx && now.Sub(m.lastClickAt) < doubleClickInterval
 	m.lastClickIdx = idx
 	m.lastClickAt = now
 
-	if n.hasKids {
-		switch {
-		case n.open && isDouble:
-			return m.setExpanded(n, false), nil
-		case !n.open:
-			return m.setExpanded(n, true), nil
-		}
+	if n.hasKids && isDouble {
+		// bean bt-vpvu (PO-Befund #14) CHANGES the ported devd-D03 semantics.
+		// devd expanded a CLOSED node on a single click and only collapsed on
+		// a double; the PO asked for the plain desktop-list model instead:
+		//
+		//   single click  -> select only (the bean appears in the Detail pane)
+		//   double click  -> toggle this bean's expansion
+		//
+		// Recorded as a deliberate deviation from a written-down decision (the
+		// same care STATE.md's own "Verhaltensaenderung gegen einen
+		// niedergeschriebenen Beschluss" note asks for): single-click-expands
+		// made every attempt to merely LOOK at an epic restructure the tree
+		// under the pointer, which is what made the pane feel unselectable.
+		//
+		// The click pair is CONSUMED here (lastClickAt reset to zero): without
+		// it a third rapid click would pair with the second and undo the
+		// toggle immediately, so a triple click would read as "nothing
+		// happened".
+		m.lastClickAt = time.Time{}
+		return m.setExpanded(n, !n.open), nil
 	}
 	return m, nil
 }
