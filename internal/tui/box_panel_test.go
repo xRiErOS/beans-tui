@@ -80,3 +80,17 @@ func TestPanelBoxHotkeyInBottomBorder(t *testing.T) {
 		t.Errorf("empty hotkey must not render parens: %q", bot2)
 	}
 }
+
+// TestPanelBoxHotkeyOverflowClamp asserts B2/B3: at a narrow width with a
+// long hotkey, the bottom border never overflows `width` -- if the badge
+// can't fit, it drops to a plain dash line instead of exceeding width.
+func TestPanelBoxHotkeyOverflowClamp(t *testing.T) {
+	for _, w := range []int{8, 9, 10, 12} {
+		out := panelBox("Body", "content", "shift+tab", w, false)
+		for i, ln := range strings.Split(out, "\n") {
+			if got := lipgloss.Width(ln); got != w {
+				t.Errorf("width %d: line %d width = %d, want %d (must never overflow): %q", w, i, got, w, ln)
+			}
+		}
+	}
+}

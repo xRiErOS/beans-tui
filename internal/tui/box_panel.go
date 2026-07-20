@@ -28,12 +28,8 @@ func panelBox(label, content, hotkey string, width int, focused bool) string {
 		borderColor = theme.Mauve
 	}
 	frame := lipgloss.NewStyle().Foreground(borderColor)
-	labelStyle := lipgloss.NewStyle().Foreground(theme.Subtext)
 
-	labelText := clampVisible(label, width-6)
-	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ")
-	topFill := width - 2 - (2 + lipgloss.Width(labelText) + 1)
-	top := frame.Render("╭") + labelSeg + frame.Render(borderDashes(topFill)) + frame.Render("╮")
+	top := boxTopBorder(label, width, frame)
 
 	inner := width - 4
 	rawLines := strings.Split(content, "\n")
@@ -48,19 +44,7 @@ func panelBox(label, content, hotkey string, width int, focused bool) string {
 	}
 	mid := strings.Join(midLines, "\n")
 
-	var bot string
-	if hotkey == "" {
-		bot = frame.Render("╰") + frame.Render(borderDashes(width-2)) + frame.Render("╯")
-	} else {
-		badge := theme.BindingKey.Render("(" + hotkey + ")")
-		badgeSeg := " " + badge + " "
-		right := frame.Render(borderDashes(3))
-		fill := width - 2 - lipgloss.Width(badgeSeg) - 3
-		if fill < 1 {
-			fill = 1
-		}
-		bot = frame.Render("╰") + frame.Render(borderDashes(fill)) + badgeSeg + right + frame.Render("╯")
-	}
+	bot := boxBottomBorder(hotkey, width, frame)
 
 	return top + "\n" + mid + "\n" + bot
 }

@@ -29,6 +29,41 @@ func borderDashes(n int) string {
 	return strings.Repeat("─", n)
 }
 
+// boxTopBorder builds the ╭─ label ─…─╮ row at exactly `width` cells: label
+// in labelStyle, dashes/corners in `frame`. Shared by dropdownBox + panelBox
+// (S2e Change 1, review B4 — was duplicated in both).
+func boxTopBorder(label string, width int, frame lipgloss.Style) string {
+	labelStyle := lipgloss.NewStyle().Foreground(theme.Subtext)
+	labelText := clampVisible(label, width-6)
+	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ")
+	topFill := width - 2 - (2 + lipgloss.Width(labelText) + 1)
+	return frame.Render("╭") + labelSeg + frame.Render(borderDashes(topFill)) + frame.Render("╮")
+}
+
+// boxBottomBorder builds the ╰…(hotkey)…╯ row at exactly `width` cells. Empty
+// hotkey → plain dash line. Shared by dropdownBox + panelBox (S2e Change 1,
+// review B4). S2e Change 2 (review B2/B3): if the badge plus the minimum
+// dashes/corners cannot fit within `width`, fall back to a plain dash line
+// instead of letting the row overflow — a dropped badge on an absurdly
+// narrow box is acceptable, an overflowing row is not.
+func boxBottomBorder(hotkey string, width int, frame lipgloss.Style) string {
+	plain := frame.Render("╰") + frame.Render(borderDashes(width-2)) + frame.Render("╯")
+	if hotkey == "" {
+		return plain
+	}
+	badge := theme.BindingKey.Render("(" + hotkey + ")")
+	badgeSeg := " " + badge + " "
+	const minRightDashes = 3
+	const minLeftDashes = 1
+	// width - 2 corners must fit: leftDashes(>=1) + badgeSeg + rightDashes(3)
+	if width-2-lipgloss.Width(badgeSeg)-minRightDashes < minLeftDashes {
+		return plain
+	}
+	right := frame.Render(borderDashes(minRightDashes))
+	fill := width - 2 - lipgloss.Width(badgeSeg) - minRightDashes
+	return frame.Render("╰") + frame.Render(borderDashes(fill)) + badgeSeg + right + frame.Render("╯")
+}
+
 // dropdownBox rendert das 3-Zeilen-Widget in exakt width Zellen Breite.
 // focused = Mauve-Rahmen, sonst Overlay. R1 (design-spec.md D08): das Label
 // im oberen Rahmen ist NICHT Teil des Rahmens selbst -- es rendert in
@@ -44,12 +79,8 @@ func dropdownBox(label, value, hotkey string, width int, focused bool) string {
 		borderColor = theme.Mauve
 	}
 	frame := lipgloss.NewStyle().Foreground(borderColor)
-	labelStyle := lipgloss.NewStyle().Foreground(theme.Subtext)
 
-	labelText := clampVisible(label, width-6)
-	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ")
-	topFill := width - 2 - (2 + lipgloss.Width(labelText) + 1)
-	top := frame.Render("╭") + labelSeg + frame.Render(borderDashes(topFill)) + frame.Render("╮")
+	top := boxTopBorder(label, width, frame)
 
 	arrow := theme.Chevron.Render("▾")
 	inner := width - 6
@@ -60,19 +91,7 @@ func dropdownBox(label, value, hotkey string, width int, focused bool) string {
 	}
 	mid := frame.Render("│") + " " + val + strings.Repeat(" ", pad) + " " + arrow + " " + frame.Render("│")
 
-	var bot string
-	if hotkey == "" {
-		bot = frame.Render("╰") + frame.Render(borderDashes(width-2)) + frame.Render("╯")
-	} else {
-		badge := theme.BindingKey.Render("(" + hotkey + ")")
-		badgeSeg := " " + badge + " "
-		right := frame.Render(borderDashes(3))
-		fill := width - 2 - lipgloss.Width(badgeSeg) - 3
-		if fill < 1 {
-			fill = 1
-		}
-		bot = frame.Render("╰") + frame.Render(borderDashes(fill)) + badgeSeg + right + frame.Render("╯")
-	}
+	bot := boxBottomBorder(hotkey, width, frame)
 
 	return top + "\n" + mid + "\n" + bot
 }

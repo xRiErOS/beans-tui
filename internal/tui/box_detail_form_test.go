@@ -51,11 +51,14 @@ func detailBoxFormIndex() *data.Index {
 
 // TestDetailBoxFormStructure asserts (width-agnostic, ansi.Strip'd) that all
 // 5 scalar fields plus Title render with their labels/values/hotkey badges,
-// and that no produced line ever overflows the requested width (100).
+// and that EVERY produced line is exactly the requested width (100) --
+// review B5/B1: overflow-only (`> width`) checks miss underflow, so this
+// asserts `== width`.
 func TestDetailBoxFormStructure(t *testing.T) {
 	b := detailBoxFormFixture()
 	idx := detailBoxFormIndex()
-	out := detailBoxForm(idx, b, 100)
+	const w = 100
+	out := detailBoxForm(idx, b, w)
 	plain := ansi.Strip(out)
 
 	for _, want := range []string{
@@ -74,31 +77,55 @@ func TestDetailBoxFormStructure(t *testing.T) {
 	}
 
 	for i, ln := range strings.Split(out, "\n") {
-		if w := lipgloss.Width(ln); w > 100 {
-			t.Errorf("line %d overflows width (%d > 100): %q", i, w, ln)
+		if got := lipgloss.Width(ln); got != w {
+			t.Errorf("line %d width = %d, want exactly %d: %q", i, got, w, ln)
 		}
 	}
 }
 
-// TestDetailBoxFormResponsiveNarrow asserts the perRow=1 narrow-width path
-// (width 50 < 64): every scalar box lands on its own row, so the rendered
-// output has strictly more lines than the wide (perRow=3, width 100) layout,
-// and no line exceeds the narrower width.
-func TestDetailBoxFormResponsiveNarrow(t *testing.T) {
+// TestDetailBoxFormFixedGridNoCollapse asserts D12: the scalar grid is FIXED
+// (Row A = Status|Type|Priority, Row B = Parent|Tags) at ANY width, no
+// responsive perRow collapse to 1-up. At a narrow width (50) Row A must
+// still render 3 columns (3 "▾" arrows / the (s)(o)(u) hotkeys on adjacent
+// columns) and Row B must still render 2 columns ((a)(t) hotkeys) -- and
+// every produced line is still exactly the requested width (review B1/B5).
+func TestDetailBoxFormFixedGridNoCollapse(t *testing.T) {
 	b := detailBoxFormFixture()
 	idx := detailBoxFormIndex()
-	wide := detailBoxForm(idx, b, 100)
-	narrow := detailBoxForm(idx, b, 50)
+	const w = 50
+	out := detailBoxForm(idx, b, w)
+	lines := strings.Split(out, "\n")
 
-	wideLines := strings.Count(wide, "\n") + 1
-	narrowLines := strings.Count(narrow, "\n") + 1
-	if narrowLines <= wideLines {
-		t.Errorf("narrow (width 50) layout has %d lines, want more than wide (width 100)'s %d lines", narrowLines, wideLines)
+	for i, ln := range lines {
+		if got := lipgloss.Width(ln); got != w {
+			t.Errorf("line %d width = %d, want exactly %d: %q", i, got, w, ln)
+		}
 	}
 
-	for i, ln := range strings.Split(narrow, "\n") {
-		if w := lipgloss.Width(ln); w > 50 {
-			t.Errorf("line %d overflows width (%d > 50): %q", i, w, ln)
+	// Layout is fixed: Title (3 lines: top/mid/bot), then Row A (3 lines),
+	// then Row B (3 lines), then the full-width panels.
+	if len(lines) < 9 {
+		t.Fatalf("want at least 9 lines (Title+RowA+RowB), got %d: %q", len(lines), out)
+	}
+	rowAMid := ansi.Strip(lines[4])
+	rowABot := ansi.Strip(lines[5])
+	if n := strings.Count(rowAMid, "▾"); n != 3 {
+		t.Errorf("Row A mid line must have 3 ▾ arrows (no 1-up collapse), got %d: %q", n, rowAMid)
+	}
+	for _, hk := range []string{"(s)", "(o)", "(u)"} {
+		if !strings.Contains(rowABot, hk) {
+			t.Errorf("Row A bottom border missing hotkey %q (no 1-up collapse): %q", hk, rowABot)
+		}
+	}
+
+	rowBMid := ansi.Strip(lines[7])
+	rowBBot := ansi.Strip(lines[8])
+	if n := strings.Count(rowBMid, "▾"); n != 2 {
+		t.Errorf("Row B mid line must have 2 ▾ arrows (no 1-up collapse), got %d: %q", n, rowBMid)
+	}
+	for _, hk := range []string{"(a)", "(t)"} {
+		if !strings.Contains(rowBBot, hk) {
+			t.Errorf("Row B bottom border missing hotkey %q (no 1-up collapse): %q", hk, rowBBot)
 		}
 	}
 }
