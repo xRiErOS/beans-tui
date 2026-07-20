@@ -82,15 +82,64 @@ func placeOverlay(bg, fg string, tw, th int) string {
 		y = 0
 	}
 
+	return placeCompose(bgLines, fgLines, x, y)
+}
+
+// placeOverlayAt places fg at the given absolute (x, y) over bg (Slice B,
+// bt-f0y9 "feld-verankertes Inline-Dropdown", D09 revidiert) — the
+// anchor-positioned sibling of placeOverlay (centered, above): SAME
+// ANSI-safe painter's-algorithm compositing core (canvasLines/placeCompose/
+// spliceLine), only WHERE fg lands differs — one render path shared between
+// the two variants (placeCompose, below) so they can never independently
+// drift on how a line actually gets spliced (mirrors panelBox/
+// panelBoxTopHotkey sharing panelBoxWith, box_panel.go's own precedent).
+// NOT wired into composeOverlays (view_browse_repo.go) yet — Slice C's job;
+// this is the primitive plus its own unit tests only (overlay_test.go).
+//
+// Overflow (S6/D09 grounding Q3, deliberately UNRESOLVED here — see bt-f0y9's
+// own "## Notes for Slice C"): an fg row that would land outside bg's own
+// [0, height) is silently DROPPED by placeCompose below — the EXACT same
+// silent-overflow behavior placeOverlay itself has always had (this file's
+// top doc comment, "There's no z-index in Bubble Tea"). No upward-flip
+// fallback exists anywhere in this codebase today (checked, not assumed,
+// during the S6 grounding) — a popup anchored too close to the bottom of the
+// pane will lose its lower rows rather than flip above its anchor; adding
+// that reflow is explicitly out of this slice's scope, left to Slice C.
+// x < 0 clamps to 0 (a negative anchor column is a caller bug, not a valid
+// "off the left edge" request this primitive tries to make sense of) —
+// placeCompose itself applies the same clamp defensively.
+func placeOverlayAt(bg, fg string, tw, th, x, y int) string {
+	bgLines := canvasLines(bg, tw, th)
+	fgLines := strings.Split(fg, "\n")
+	return placeCompose(bgLines, fgLines, x, y)
+}
+
+// placeCompose is the ONE splice loop both placeOverlay and placeOverlayAt
+// (above) drive: overlays fgLines onto bgLines at (x, y), padding every fg
+// line to the uniform width the widest fg line needs (otherwise a narrower
+// line — e.g. a form's helper/blank line — wouldn't fully cover the
+// background, and text behind it would bleed through: the overlay must be a
+// gapless rectangle). fg rows whose target row falls outside
+// [0, len(bgLines)) are silently skipped — placeOverlay's pre-existing
+// overflow behavior, now shared verbatim by placeOverlayAt too. Mutates and
+// returns bgLines' own backing via strings.Join, mirroring placeOverlay's
+// prior inline behavior exactly (byte-identical extraction, Basis-Goldens-
+// Gegenbeleg).
+func placeCompose(bgLines, fgLines []string, x, y int) string {
+	if x < 0 {
+		x = 0
+	}
+	fgW := 0
+	for _, l := range fgLines {
+		if w := ansi.StringWidth(l); w > fgW {
+			fgW = w
+		}
+	}
 	for i, fl := range fgLines {
 		row := y + i
 		if row < 0 || row >= len(bgLines) {
 			continue
 		}
-		// Pad every fg line to the uniform modal width fgW, otherwise
-		// narrower lines (e.g. a form's helper line/blank lines) don't cover
-		// the background and text behind bleeds through. The modal must be a
-		// gapless rectangle.
 		if pad := fgW - ansi.StringWidth(fl); pad > 0 {
 			fl += overlayPad.Render(strings.Repeat(" ", pad))
 		}
