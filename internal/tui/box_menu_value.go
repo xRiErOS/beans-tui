@@ -315,38 +315,68 @@ func (m model) valueMenuBox() string {
 		}
 		b.WriteString(cursor + label + "\n")
 	}
-	return modalPanel(valueMenuTitle(m.menuItems), b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
+	title := valueMenuTitle(m.menuItems)
+	body := b.String()
+	// Slice C B02 fix (bt-f0y9, PO-Entscheidung 2026-07-20): width now sizes
+	// to CONTENT (valueMenuContentWidth), not a fixed 40 -- a fixed-width
+	// popup is unrelated to the ~15-cell field it anchors to and, being far
+	// wider than any of its own lines actually need, forced
+	// placeValueMenuOverlay's old right-edge clamp to slam DIFFERENT fields
+	// (Type/Priority) onto the SAME clamped column (B02). clampModalWidth
+	// still applies on top -- an ultra-narrow terminal still shrinks/floors
+	// at 24, same safety net every other modal already has.
+	width := clampModalWidth(valueMenuContentWidth(title, body), m.width)
+	return modalPanel(title, body, "", width, theme.Mauve)
+}
+
+// valueMenuContentWidth sizes the value-menu popup to its own longest line
+// (Slice C B02 fix) instead of a fixed preference -- title, the "enter:
+// apply .../esc:..." hint, the group header, and every item row (the
+// cursored one is often the longest thanks to its own " (current)" suffix)
+// are all real candidates; +2 accounts for modalBox's own Padding(0,1) (1
+// cell reserved on each side within the width budget passed to lipgloss's
+// Width(), Border() adds ON TOP of that -- see overlay.go's own placeOverlay
+// doc-stamp for the general "Width() is content+padding, border is extra"
+// contract this reuses verbatim).
+func valueMenuContentWidth(title, body string) int {
+	maxW := ansi.StringWidth(title)
+	for _, l := range strings.Split(body, "\n") {
+		if w := ansi.StringWidth(l); w > maxW {
+			maxW = w
+		}
+	}
+	return maxW + 2
 }
 
 // valueMenuPopupY picks the value-menu popup's Y position (Slice C, bt-f0y9
 // "feld-verankertes Inline-Dropdown", D09 revidiert) given its triggering
-// field's own rect (anchorY, anchorH -- boxFormFieldRect, box_nav_field.go)
-// and the popup's own height (fgH) against the canvas height (canvasH):
-// conventional dropdown behavior, BELOW the field by default (PO-Vorgabe).
+// field's own rect (anchorY, anchorH -- boxFormFieldRect, box_nav_field.go),
+// the popup's own height (fgH), the canvas height (canvasH), and minY -- the
+// LOWEST row the popup may ever occupy (boxFormPopupChromeFloor,
+// box_nav_field.go -- one row past the app's own outer border/breadcrumb/
+// divider). Conventional dropdown behavior: BELOW the field by default
+// (PO-Vorgabe).
 //
-// If below would run past the bottom of the canvas, it flips ABOVE the
-// field instead -- as long as the field itself isn't already sitting at
-// canvas row 0 (anchorY == 0, "kein Platz" at all to flip into). The flipped
-// position is NOT required to fully fit above (Status/Type/Priority sit only
-// ~10 rows down in every real render, see this slice's own ERRATUM in
-// box_nav_field.go -- a popup taller than that can never fully fit above
-// them, so requiring a full fit would make the flip branch permanently dead
-// code for this feature's own fields): a partially-clipped-at-the-top popup
-// still beats one silently staying centered or bottom-clipped, and
-// placeOverlayAt's own silent-overflow-drop (Slice B, placeCompose) already
-// handles the clip the exact same way it handles every other overlay in
-// this codebase -- no new overflow mechanism introduced here.
-//
-// anchorY == 0 is the ONLY case that skips the flip (PO-Wortlaut "nur wenn
-// oben auch kein Platz: clampen") -- falls through to "below", clipped at
-// the bottom like any other overflow.
-func valueMenuPopupY(anchorY, anchorH, fgH, canvasH int) int {
+// B01 FIX (Reviewer, 2026-07-20): the popup flips ABOVE the field ONLY when
+// it fits there WITHOUT crossing minY -- the previous version flipped
+// whenever there was "any room at all" above the field and let the result go
+// negative, which spliced the popup's own MIDDLE rows straight over the
+// app's title/border at 80x24 (Status sits at y=10, a 12-line popup flipped
+// to y=-2). Since Status/Type/Priority sit only ~10 rows down in every real
+// render (box_nav_field.go's own ERRATUM) and minY is typically 3-7, a popup
+// taller than roughly (anchorY-minY) can NEVER fully fit above them -- this
+// is now working as intended: it stays BELOW instead, clipped at the BOTTOM
+// (placeOverlayAt's pre-existing silent-overflow-drop, Slice B) rather than
+// corrupting chrome above. The popup's own TOP EDGE therefore always stays
+// visible (Reviewer's own wording) -- a bottom-clip is cosmetically fine, an
+// app-title-clobber is not.
+func valueMenuPopupY(anchorY, anchorH, fgH, canvasH, minY int) int {
 	below := anchorY + anchorH
 	if below+fgH <= canvasH {
 		return below
 	}
-	if anchorY > 0 {
-		return anchorY - fgH
+	if above := anchorY - fgH; above >= minY {
+		return above
 	}
 	return below
 }
@@ -355,24 +385,24 @@ func valueMenuPopupY(anchorY, anchorH, fgH, canvasH int) int {
 // while boxFormEnabled() AND the anchor field's rect resolves
 // (boxFormFieldRect, box_nav_field.go, seeded via m.mutTarget/
 // m.valueMenuAnchorField at open time, openValueMenu above), the menu is
-// placed directly BELOW its triggering boxed field (or flipped above it,
-// valueMenuPopupY) via placeOverlayAt (Slice B) instead of the pre-existing
-// CENTERED placeOverlay. Falls back to placeOverlay in every other case:
-// boxFormEnabled() off (accordion mode has no boxed fields to anchor to at
-// all -- D09's own scope, "nur die endlichen Einzelfeld-Menüs"), or a rect
-// that fails to resolve (nil mutTarget bean, out-of-range anchor field --
-// defensive; should not happen in practice since openValueMenu always seeds
-// m.valueMenuAnchorField from the static boxFormFieldIndexForGroup lookup in
-// the SAME call that sets m.overlay).
+// placed LEFT-ALIGNED directly BELOW its triggering boxed field (or flipped
+// above it, valueMenuPopupY) via placeOverlayAt (Slice B) instead of the
+// pre-existing CENTERED placeOverlay. Falls back to placeOverlay in every
+// other case: boxFormEnabled() off (accordion mode has no boxed fields to
+// anchor to at all -- D09's own scope, "nur die endlichen Einzelfeld-
+// Menüs"), or a rect that fails to resolve (nil mutTarget bean, out-of-range
+// anchor field -- defensive; should not happen in practice since
+// openValueMenu always seeds m.valueMenuAnchorField from the static
+// boxFormFieldIndexForGroup lookup in the SAME call that sets m.overlay).
 //
-// x is clamped so the popup never renders past the RIGHT edge of the canvas
-// (defensive only -- the popup's own width, clampModalWidth(40, m.width), is
-// unrelated to the ~15-cell field it anchors to and can run wider than the
-// remaining space toward the right edge of an 80-column pane; this clamp
-// keeps the render on-canvas, it does NOT resize/reflow the popup to the
-// field's own width -- that "should the popup ever shrink or reflow
-// horizontally" question is explicitly OUT of this slice's scope, see
-// bt-f0y9's own S6 grounding §3 and this slice's "## Notes for Reviewer").
+// x (Slice C B02 fix, PO-Entscheidung 2026-07-20): left-aligned to rx
+// (the field's own x) by default -- ONLY shifted LEFT when the (now
+// content-width-sized, valueMenuContentWidth) popup would run past the
+// canvas' own RIGHT edge, and NEVER shifted past boxFormPaneContentLeft(m)
+// (the pane's own left content edge, box_nav_field.go) -- so Type and
+// Priority, anchored at visibly different field columns, now render at
+// visibly different popup columns too (the B02 bug: a fixed-width-40 popup
+// forced BOTH onto the SAME clamped column on an 80-column canvas).
 func (m model) placeValueMenuOverlay(out string, w, h int) string {
 	fg := m.valueMenuBox()
 	if !boxFormEnabled() {
@@ -394,12 +424,12 @@ func (m model) placeValueMenuOverlay(out string, w, h int) string {
 
 	x := rx
 	if fgW < w && x+fgW > w {
-		x = w - fgW
+		x = w - fgW // right-edge overflow: shift left, never past the field's own line
 	}
-	if x < 0 {
-		x = 0
+	if paneLeft := boxFormPaneContentLeft(m); x < paneLeft {
+		x = paneLeft // never cross into the Tree/Backlog/Flat pane on the left
 	}
-	y := valueMenuPopupY(ry, rh, fgH, h)
+	y := valueMenuPopupY(ry, rh, fgH, h, boxFormPopupChromeFloor(m))
 
 	return placeOverlayAt(out, fg, w, h, x, y)
 }

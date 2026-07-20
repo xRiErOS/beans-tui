@@ -381,6 +381,79 @@ func (m model) boxFormNav(b *data.Bean, dir string) model {
 // ever answers "where does detailBoxForm actually draw this box right now",
 // on- or off-screen alike. ok=false for a nil bean or an out-of-range field
 // index -- callers get a clean "no rect" rather than a garbage zero rect.
+//
+// boxFormPaneContentLeft and boxFormPopupChromeFloor (below) factor the
+// pane-origin geometry this function's own X/Y math depends on out into
+// reusable, view/fullscreen-agnostic helpers -- placeValueMenuOverlay (Slice
+// C B02 fix, box_menu_value.go) needs the SAME left-edge column to clamp a
+// left-aligned popup against, and the SAME "row right after the divider" as
+// a hard floor no popup Y may ever cross (Slice C B01 fix) -- both MUST
+// reuse this function's own geometry rather than a second, independently
+// maintained copy (Golden-Rule-Drift-Schutz).
+
+// boxFormPaneContentLeft returns the column detailBoxForm's boxes actually
+// start drawing at (the SAME value boxFormFieldRect's own col=0 resolves
+// to, see the ERRATUM above): Split mode butts the Detail pane directly
+// against the Tree/Backlog/Flat pane's own lw+2-wide box (border+lw
+// content+border, no gap), fullscreenDetail has no preceding pane at all.
+func boxFormPaneContentLeft(m model) int {
+	ww, hh := m.width, m.height
+	if ww <= 0 {
+		ww = 80
+	}
+	if hh <= 0 {
+		hh = 24
+	}
+	innerW := ww - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+
+	_, lw, _, originX, _ := clickPaneGeometry(ww, hh, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
+	paneLeftBorder := originX
+	if m.fullscreen != fullscreenDetail {
+		paneLeftBorder = originX + lw + 2
+	}
+	return paneLeftBorder + 1 // one column past the pane's own left border/corner
+}
+
+// boxFormPopupChromeFloor returns the LOWEST screen row (Y) any box-form
+// popup may ever occupy without overwriting the app's own outer border,
+// breadcrumb, or header divider (bt-f0y9 Slice C bug B01: a naive flip-up
+// could compute a Y small enough to splice the popup's own middle rows
+// straight over the app title). clickPaneGeometry's own originY (mouse.go)
+// already documents itself as "outer top border(1) + head(lines) +
+// divider(1) + the PANE'S OWN top border(1)" -- one row PAST the divider is
+// exactly originY minus that last "pane's own top border" term, i.e.
+// originY-1. View/fullscreen/filter-bar agnostic: none of those ever add
+// rows ABOVE this point (the filter bar, if boxFormEnabled(), sits AT this
+// row and below -- it is body chrome, not app chrome, safe to place a popup
+// over), only below it.
+func boxFormPopupChromeFloor(m model) int {
+	ww, hh := m.width, m.height
+	if ww <= 0 {
+		ww = 80
+	}
+	if hh <= 0 {
+		hh = 24
+	}
+	innerW := ww - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+
+	_, _, _, _, originY := clickPaneGeometry(ww, hh, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
+	return originY - 1
+}
+
 func boxFormFieldRect(m model, b *data.Bean, field int) (x, y, w, h int, ok bool) {
 	if b == nil || field < 0 || field >= len(boxFormFieldOrder) {
 		return 0, 0, 0, 0, false
@@ -402,21 +475,13 @@ func boxFormFieldRect(m model, b *data.Bean, field int) (x, y, w, h int, ok bool
 		head, localKeys = m.browseRepoChrome(innerW)
 	}
 
-	_, lw, _, originX, originY := clickPaneGeometry(ww, hh, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
+	_, _, _, _, originY := clickPaneGeometry(ww, hh, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	if boxFormEnabled() && m.view != viewBacklog {
 		originY += filterBarHeight // B6: same correction detailBoxFormClickRow applies (mouse.go)
 	}
 
 	accW, _ := boxFormPaneMetrics(m, b) // fullscreenDetail-aware accW (bt-s90e)
-
-	// Pane's own left border column (see ERRATUM above): Split mode butts
-	// the Detail pane directly against the Tree/Backlog/Flat pane's own
-	// lw+2-wide box; fullscreenDetail has no preceding pane at all.
-	paneLeftBorder := originX
-	if m.fullscreen != fullscreenDetail {
-		paneLeftBorder = originX + lw + 2
-	}
-	contentX := paneLeftBorder + 1 // one column past the pane's own left border/corner
+	contentX := boxFormPaneContentLeft(m)
 
 	f := boxFormFieldOrder[field]
 	widths := gridColWidths(boxFormRowCols(f.row), accW)
