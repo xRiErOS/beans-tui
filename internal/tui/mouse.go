@@ -36,9 +36,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xRiErOS/beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/xRiErOS/beans-tui/internal/data"
 )
 
 // minTreeWidthFloor/maxTreeWidthFloor mirror config.minTreeWidth/
@@ -193,6 +193,19 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if msg.Action != tea.MouseActionPress {
 			return m, nil
 		}
+		// bt-wtqs (epic bt-vy1q): the persistent filter-chip strip
+		// (box_filter_bar.go) sits ABOVE the Tree/Detail split, spanning
+		// the full inner width -- checked BEFORE the m.view switch below
+		// (the same "earliest wins" precedent as the Toast/fullscreen/
+		// overlay guards above), since a strip hit is never a Tree-or-
+		// Detail click. filterBarHit itself is a no-op unless
+		// boxFormEnabled() && m.view == viewBrowseRepo, so this is dead
+		// weight (never true) for every other view/flag-off combination --
+		// the existing switch below is reached completely unchanged
+		// whenever the strip is not even rendered.
+		if facet, ok := filterBarHit(m, msg); ok {
+			return m.openFilterMenuAt(facet)
+		}
 		switch m.view {
 		case viewBrowseRepo:
 			return m.mouseTreeClick(msg)
@@ -201,6 +214,74 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// filterBarFieldAt maps a click at (row, col) relative to the filter strip's
+// OWN top-left corner (row 0 = the strip's first screen row -- its own top
+// border, box_filter_bar.go's dropdownBox/gridRow shape; col 0 = the strip's
+// own left edge, the SAME zero point filterBar(width) itself renders from)
+// into one of its four chips. gridColAt (below) walks the SAME
+// gridColWidths(4, width) filterBar's own gridRow call renders from -- the
+// strip's real column boundaries and this hit-test can never independently
+// drift (Golden-Rule-Drift-Schutz, detailBoxFormClickRow's own gridColAt use,
+// above). facets is filterBar's own fixed cell order (box_filter_bar.go's
+// `cells` literal: Type/Status/Priority/Tags), mapped to buildFilterItems'
+// facet-key vocabulary (box_filter_facets.go) -- "tag", singular, NOT "tags".
+// ok=false for a row outside [0,filterBarHeight) or a col past the last chip
+// (the 1-cell inter-chip gap, or past the strip's own right edge).
+func filterBarFieldAt(row, col, width int) (facet string, ok bool) {
+	if row < 0 || row >= filterBarHeight {
+		return "", false
+	}
+	widths := gridColWidths(4, width)
+	i := gridColAt(widths, col)
+	if i < 0 {
+		return "", false
+	}
+	facets := []string{"type", "status", "priority", "tag"}
+	return facets[i], true
+}
+
+// filterBarHit resolves msg against the persistent filter-chip strip
+// (box_filter_bar.go, bt-wtqs) while boxFormEnabled() -- the strip only ever
+// renders in Browse (viewBrowseRepo, view_browse_repo.go's ONE call site;
+// Backlog never shows it, the SAME B6 precedent detailBoxFormClickRow/
+// treeClickRow's own doc comments already establish), so a non-Browse view
+// short-circuits false here without reconstructing any geometry at all.
+//
+// Reconstructs the SAME clickPaneGeometry geometry treeClickRow/
+// detailBoxFormClickRow do (Golden-Rule-Drift-Schutz) -- but, deliberately,
+// BEFORE either of those applies their own `originY += filterBarHeight`
+// correction: clickPaneGeometry's raw originY assumes screen content begins
+// exactly 1 row after a bordered box's own top border sitting directly below
+// the header divider (its own doc comment, mouse.go above) -- while
+// boxFormEnabled(), that bordered box IS the filter strip itself
+// (view_browse_repo.go's content build order: head+div, THEN filterBarRow,
+// THEN the Tree/Detail split), so the strip's own top-border row is
+// originY-1, and its 3 rows span [originY-1, originY-1+filterBarHeight).
+// This is exactly the row treeClickRow/detailBoxFormClickRow skip PAST via
+// their own `+= filterBarHeight` (which lands one row AFTER the strip, at
+// originY-1+filterBarHeight == originY+filterBarHeight-1... no: originY
+// itself, corrected, becomes originY+filterBarHeight, i.e. exactly the
+// strip's bottom border's own next row) -- the two hit-tests are two
+// windows on the SAME originY-1 anchor, verified against a real View()
+// render (mouse_filter_bar_test.go's filterBarClickAt).
+func filterBarHit(m model, msg tea.MouseMsg) (facet string, ok bool) {
+	if !boxFormEnabled() || m.view != viewBrowseRepo {
+		return "", false
+	}
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+	head, localKeys := m.browseRepoChrome(innerW)
+	_, _, _, originX, rawOriginY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
+	stripTop := rawOriginY - 1
+	return filterBarFieldAt(msg.Y-stripTop, msg.X-originX, innerW)
 }
 
 // wheelMove dispatches a single wheel tick (delta = ±1) -- design decision f:

@@ -1625,6 +1625,32 @@ func (m model) openFilterMenu() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// openFilterMenuAt is openFilterMenu (above) plus a SEED: after the same
+// reset, it jumps m.filterTab (and m.filterMenu.cursor) to the given facet's
+// own tab/first row instead of always landing on tab 0 (Status) -- bt-wtqs
+// (epic bt-vy1q): a click on one of the filter strip's four chips
+// (box_filter_bar.go) must open the menu already focused on THAT chip's own
+// facet, not force the PO to tab/shift+tab there manually. Mirrors
+// filterMenuSwitchTab's own "jump the cursor to the new tab's first element"
+// contract (box_filter_facets.go) -- it reuses filterFacetOrder/
+// filterFacetRange rather than duplicating that lookup. facet not found in
+// filterFacetOrder (cannot happen in practice: buildFilterItems always emits
+// all four chip facets) leaves tab 0 untouched, openFilterMenu's own default.
+func (m model) openFilterMenuAt(facet string) (tea.Model, tea.Cmd) {
+	tm, cmd := m.openFilterMenu()
+	mm := tm.(model)
+	facets := filterFacetOrder(mm.filterItems)
+	for i, f := range facets {
+		if f == facet {
+			mm.filterTab = i
+			start, _ := filterFacetRange(mm.filterItems, f)
+			mm.filterMenu.cursor = start
+			break
+		}
+	}
+	return mm, cmd
+}
+
 // keyTree drives the tree: up/down move the cursor, right/left expand/
 // collapse, enter toggles expand (no-op on a leaf, per task scope). `/`, `f`,
 // `X`, and the esc-cascade's search/filter-clearing rung (E2 Task 3+4) are

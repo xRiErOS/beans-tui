@@ -1,10 +1,11 @@
 ---
 # bt-wtqs
 title: 'Filter-Strip: Chips per Klick oeffnen Filter-Overlay'
-status: todo
+status: in-progress
 type: bug
+priority: normal
 created_at: 2026-07-20T18:05:08Z
-updated_at: 2026-07-20T18:05:08Z
+updated_at: 2026-07-20T18:09:25Z
 parent: bt-vy1q
 ---
 
@@ -76,3 +77,12 @@ mutiert DAS bean; verwechseln = falsch).
 tmux-Smoke bei 80 Spalten gegen sproutling: Strip-Chips anklicken, prüfen dass das
 richtige Facetten-Overlay öffnet (Maus-Geometrie hat dieses Repo mehrfach gebissen).
 Ehrlich dokumentieren: real gesmoked vs. nur Unit.
+
+
+## Grounding
+
+**Seeding: JA, unterstützt.** `openFilterMenu()` (update.go:1614) setzt `m.filterItems`/`m.filterMenu`/`m.filterTab=0` — kein eingebauter Seed-Parameter, aber `filterFacetOrder(m.filterItems)` (box_filter_facets.go:269) liefert die Facetten-Reihenfolge (status,type,priority,tag,archive) und `filterFacetRange` (box_filter_facets.go:285) das [start,end)-Zeilenfenster einer Facette. Neue Hilfsfunktion `openFilterMenuAt(facet string)` ruft `openFilterMenu()`, sucht `facet` in `filterFacetOrder`, setzt `m.filterTab` auf den gefundenen Index + `m.filterMenu.cursor` auf `start` -- exakt das Muster, das `filterMenuSwitchTab` (box_filter_facets.go:350) für Tab/Shift+Tab bereits nutzt. Fällt facet nicht gefunden (kann praktisch nicht passieren, alle 4 Chip-Facetten sind immer in buildFilterItems), bleibt Tab 0 (Status) wie bisher.
+
+**Chip-Spaltenlayout** (box_filter_bar.go:49-54, `filterBar`'s `cells` Slice-Reihenfolge): Spalte 0=Type, 1=Status, 2=Priority, 3=Tags. Mapping Spalte→Facet-String (box_filter_facets.go's `ffItem.facet`-Vokabular): 0→"type", 1→"status", 2→"priority", 3→"tag" (NICHT "tags" — buildFilterItems verwendet den Singular "tag" als facet-Key, box_filter_facets.go:69).
+
+Geometrie: `filterBar` rendert bei `innerW` (view_browse_repo.go:1303, volle Pane-Breite inkl. beider Sub-Panes + deren Rahmen, NICHT nur `lw+rw`), beginnend an `clickPaneGeometry`'s ROHEM `originY`/`originX` (VOR der `+= filterBarHeight`-Korrektur, die `treeClickRow`/`detailBoxFormClickRow` erst NACH dem Strip anwenden) -- der Strip besetzt exakt `[originY, originY+filterBarHeight)` x `[originX, originX+innerW)`. Spalten-Bucket via `gridColWidths(4, innerW)` + `gridColAt` (mouse.go:594-612, bereits bestehendes Muster für die Detail-Pane-Boxen).
