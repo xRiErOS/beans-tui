@@ -1,11 +1,11 @@
 ---
 # bt-mx4k
 title: Palette nur noch K, ctrl+k entfernen
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-20T09:30:49Z
-updated_at: 2026-07-20T09:30:49Z
+updated_at: 2026-07-20T10:13:48Z
 parent: bt-vy1q
 ---
 
@@ -34,3 +34,38 @@ Funktion. Nebeneffekt: der Header wird sechs Zeichen kuerzer, was bei 80 Spalten
 - [ ] Header zeigt `K commands`
 - [ ] Golden regeneriert und Zeile fuer Zeile geprueft
 - [ ] voller Testlauf gruen
+
+
+## Summary
+
+`ctrl+k` entfernt, `K` ist die einzige Palette-Bindung (keymap.go:172).
+Header sechs Zeichen kuerzer: `ctrl+k commands` -> `K commands`.
+D07 in docs/plans/jira-style-experiment/design-spec.md als PO-bestaetigt vermerkt.
+
+Fuenf Full-Capture-Guards (view_tag_management_test.go x4, overlay_shortcuts_test.go x1)
+sondierten mit `ctrl+k`. Ein unbebundener Key beweist nichts — sie sondieren jetzt `K`,
+womit sie wieder eine lebende Bindung testen (in den Tipp-Modi landet `K` als
+literales Zeichen im Input, die erwarteten Werte sind entsprechend `d?K`).
+
+Golden regeneriert (nur die Header-Zeile, Zeile fuer Zeile per git diff geprueft):
+tree.golden, backlog.golden, browse_flat.golden, browse_boxform.golden.
+
+Commit 862d8ee.
+
+## Test-Output
+
+command go test ./... — vollstaendig, ohne -short:
+
+    ?   github.com/xRiErOS/beans-tui  [no test files]
+    ok  github.com/xRiErOS/beans-tui/cmd  1.831s
+    ?   github.com/xRiErOS/beans-tui/internal/clip  [no test files]
+    ok  github.com/xRiErOS/beans-tui/internal/config  1.050s
+    ok  github.com/xRiErOS/beans-tui/internal/data  3.907s
+    ok  github.com/xRiErOS/beans-tui/internal/theme  0.702s
+    ok  github.com/xRiErOS/beans-tui/internal/tui  152.444s
+
+## Deviations
+
+Keine. `chrome_test.go:27` enthaelt weiterhin den Text "ctrl+k:cmd" — das ist ein
+handgeschriebener Fixture-String als Eingabe fuer `breadcrumb()`, keine Keymap-Aussage
+und keine gerenderte UI; unangetastet gelassen (kein Refactoring ueber den Auftrag hinaus).
