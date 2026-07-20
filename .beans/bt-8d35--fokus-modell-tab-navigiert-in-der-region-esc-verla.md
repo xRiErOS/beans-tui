@@ -1,11 +1,11 @@
 ---
 # bt-8d35
 title: 'Fokus-Modell: tab navigiert in der Region, esc verlaesst sie'
-status: todo
+status: completed
 type: feature
 priority: high
 created_at: 2026-07-20T09:30:49Z
-updated_at: 2026-07-20T09:47:31Z
+updated_at: 2026-07-20T10:05:12Z
 parent: bt-vy1q
 ---
 
@@ -110,3 +110,113 @@ am Pfeil) gilt ebenfalls weiter, denn die Pfeile scrollen ja wieder.
 
 ## Status
 Draft aufgehoben — umsetzbar.
+
+
+## Summary
+
+Umgesetzt in a789c62 (Branch experiment/jira-style-ui), vollstaendig
+boxFormEnabled()-gated.
+
+**Detail-Region (Flow #2)**
+- `keyDetailFocus` (update.go): up/down scrollen jetzt in BEIDEN Geometrien
+  ueber `adjustBoxFormScroll` — die Split-vs-Vollbild-Fallunterscheidung aus
+  der Merge-Aufloesung ist ersatzlos weg, samt Kommentarblock.
+- tab/shift+tab treiben den Feldcursor: neue Richtungen "next"/"prev" in
+  `boxFormNav` (box_nav_field.go), linear ueber `boxFormFieldOrder` mit
+  Wrap an beiden Enden. Der gemeinsame Tail (scroll-into-view + Ownership)
+  ist unveraendert, damit die Scroll-Mitnahme mit dem Cursor mitwandert.
+- `handleKey`: neuer Guard `inFocusedDetailRegion` routet tab/shift+tab zu
+  `keyDetailFocus`, solange die Detail-Region den Fokus hat. shift+tab ist
+  damit NICHT mehr der Exit — esc ist der einzige (keyDetailFocus Back-Case).
+- tab-in aus dem Tree setzt `boxFormCursor/boxFormCursorBean` zurueck →
+  Einstieg immer auf Title (nutzt boxFormEffectiveCursors abgeleiteten Reset,
+  keine zweite Reset-Regel).
+- `boxFormFieldOrder`/`boxFormFieldAt`/`activateBoxFormTarget` unveraendert.
+  `boxFormMoveField` + die vier Grid-Richtungen bleiben stehen (kein
+  Voll-Rueckbau), sind aber aktuell an keine Taste gebunden.
+
+**Filter-Strip (Flow #3)**
+- `keyFilterMenu`: enter schliesst nicht mehr, sondern wendet den cursorten
+  Wert an und HAELT den Fokus (neuer, gated Case vor dem Close-Case). esc/f
+  verlassen die Region, tab/shift+tab wechseln die Kategorie (bestand schon),
+  space toggelt, X leert (bestand schon).
+
+**Footer (bt-z4w7-konform, aus der aktiven Bindung abgeleitet)**
+- `boxFormFieldNext`/`boxFormFieldPrev` (box_nav_field.go) sind die
+  Bindungen, die der Handler matched UND die der Footer zeigt.
+  `boxFormRegionLabels` (footer_context.go) tauscht sie im Zone-3-Trichter
+  ein, sobald die Detail-Region fokussiert ist: "tab next field · shift+tab
+  prev field" statt "focus in/out".
+- `filterStripApplyHint` ("enter apply") analog fuer den Strip.
+
+**Reichweite (alle Ansichten geprueft)**
+- Browse: geaendert (siehe oben).
+- Backlog: teilt keyDetailFocus + Footer-Funnel → gleiches Verhalten, per
+  Test gepinnt (TestBoxFormTabWalksFieldsInTheBacklogToo).
+- Vollbild-Detail: bewusst AUSGENOMMEN — renderFullscreenBody rendert
+  fieldCursor -1, es gibt dort keinen sichtbaren Cursor zu bewegen. tab
+  behaelt seine globale Bedeutung; up/down scrollen (wie bisher).
+- Ein separates Review-Cockpit als eigene View existiert nicht mehr (in
+  view_detail_bean.go aufgegangen) — nichts zusaetzlich anzupassen.
+- Flag AUS: unveraendert, per Test gepinnt (TestTabStillSwapsPanesWithout
+  BoxForm, TestFooterKeepsFocusLabelsWithoutBoxForm).
+
+## Test-Output
+
+Voller Lauf (ohne -short), nach dem finalen Stand:
+
+    ?   github.com/xRiErOS/beans-tui        [no test files]
+    ok  github.com/xRiErOS/beans-tui/cmd    0.921s
+    ?   github.com/xRiErOS/beans-tui/internal/clip  [no test files]
+    ok  github.com/xRiErOS/beans-tui/internal/config    0.303s
+    ok  github.com/xRiErOS/beans-tui/internal/data  5.422s
+    ok  github.com/xRiErOS/beans-tui/internal/theme 0.507s
+    ok  github.com/xRiErOS/beans-tui/internal/tui   150.832s
+
+Neue Tests: TestBoxFormTabWalksFieldsWithWrap, TestBoxFormShiftTabWalks
+FieldsBackwardsWithWrap, TestBoxFormArrowsScrollInsteadOfMovingTheCursor,
+TestBoxFormEscLeavesTheDetailRegion, TestBoxFormTabFromTreeEntersAtTheFirst
+Field, TestBoxFormTabWalksFieldsInTheBacklogToo, TestTabStillSwapsPanes
+WithoutBoxForm, TestBoxFormFullscreenTabDoesNotMoveTheFieldCursor,
+TestFilterStripEnterAppliesAndHoldsFocus, TestFilterStripEscLeavesTheRegion,
+TestFooterNamesTabAsFieldNavInsideTheDetailRegion, TestFooterKeepsFocus
+LabelsWithoutBoxForm.
+
+Angepasst: TestBoxFormCursorStaysVisibleWhileNavigating und TestBoxFormDown
+ScrollsThroughATallField (gelten unveraendert weiter, nur von tab getrieben
+statt von den Pfeilen). TestBoxFormArrowsWalkFieldsInOrder →
+TestBoxFormGridMoveWalksTheLayout (prueft die Grid-Geometrie jetzt eine
+Ebene unter dem Keymap, da die Pfeile sie nicht mehr treiben).
+TestBoxFormDownReachesPanelFields entfaellt (seine "kein Wrap"-Aussage ist
+durch die PO-Entscheidung ueberholt, ersetzt durch die Wrap-Tests).
+
+**tmux-Smoke, 80 Spalten, echtes Repo sproutling, frisches Binary +
+frische Session:** kein Overflow, kein Wrap-Bug. Footer wechselt beim
+tab-in korrekt auf "tab next field · shift+tab prev field" und umbricht
+sauber; tab zieht den Viewport zum Body nach; Pfeile scrollen ohne den
+Cursor zu bewegen; esc verlaesst die Region; im Strip zeigt der Footer
+"enter apply", enter wendet an und haelt den Fokus, X leert, esc verlaesst.
+
+## Deviations
+
+1. **History bleibt im tab-Zyklus.** Die PO-Reihenfolge endet bei
+   Relations, `boxFormFieldOrder` hat als 9. Eintrag History. Da die
+   Feldtabelle laut Auftrag unveraendert bleibt und keine zweite Liste
+   angelegt werden darf, laeuft tab ueber alle neun Felder. History ist ein
+   echtes, klick- und rendermaessig existierendes Feld — es zu ueberspringen
+   haette genau die zweite Liste erzwungen.
+2. **Vollbild-Detail ausgenommen** (Begruendung oben). Dort bleibt tab die
+   globale Geste.
+3. **Alles gated hinter BT_BOXFORM.** Der Epic-Constraint ("alles additiv +
+   gated, Bestandsgolden byte-identisch") schlaegt die Formulierung
+   "beruehrt jede Ansicht": ohne Flag aendert sich nichts.
+4. **enter im Strip == toggeln des cursorten Werts.** Der Strip hat keine
+   separat aufklappbaren Dropdowns; die Werte des aktiven Facets stehen
+   bereits offen. "Anwenden" ist dort also das Setzen des cursorten Werts —
+   mit gehaltenem Fokus, wie verlangt. space behaelt seine Toggle-Rolle.
+5. **`boxFormMoveField` + Grid-Richtungen bleiben unbenutzt stehen** ("kein
+   Voll-Rueckbau"), weiterhin testabgedeckt, aber an keine Taste gebunden.
+
+## Golden
+
+Keine Golden-Datei regeneriert — kein geteiltes Golden angefasst.
