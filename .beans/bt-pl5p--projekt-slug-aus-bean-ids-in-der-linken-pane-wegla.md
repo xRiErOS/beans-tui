@@ -1,11 +1,11 @@
 ---
 # bt-pl5p
 title: Projekt-Slug aus Bean-IDs in der linken Pane weglassen
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-20T07:26:22Z
-updated_at: 2026-07-20T07:49:33Z
+updated_at: 2026-07-20T08:13:38Z
 parent: bt-vy1q
 ---
 
@@ -84,3 +84,57 @@ Ende EINMAL regeneriert.
 ### Kollisions-Hinweis fuer den Dispatch
 Beruehrt `view_browse_repo.go` + `mouse.go` — dieselben Dateien wie bt-ze10 (Detail-Scroll).
 **Erst nach dessen Commit starten.**
+
+
+## Summary
+
+Commit 2f531b5 `feat(browse): drop repo prefix from bean IDs in rows`.
+
+`shortBeanID(id, slug)` (view_browse_repo.go) schneidet exakt den Prefix
+`<slug>-` des AKTUELL geoeffneten Repos ab; `slug` kommt aus
+`m.beanIDPrefix()` -> `data.RepoSlug(m.repoDir)` (.beans.yml `beans.prefix`,
+also dieselbe Quelle, aus der die IDs selbst gemuenzt werden). NICHT bis zum
+letzten "-" geschnitten: Fremd-/Dangling-IDs (`lean-stack-58j0` in einem
+`sproutling`-Repo) und mehrsegmentige Prefixe bleiben eindeutig. Leerer Slug
+oder leerer Rest -> ID unveraendert.
+
+Beide Render-Stellen geaendert (Grounding-Fallstrick): `treeRowText`
+(view_browse_repo.go) UND `backlogRowText` (view_browse_backlog.go, auch von
+`flatRows` in view_browse_flat.go genutzt). Der Slug wird einmal pro Render in
+`treeRows`/`backlogRows`/`flatRows` aufgeloest, nicht pro Zeile (RepoSlug macht
+File-IO).
+
+## Entscheidungen
+
+- **Geltungsbereich: global**, nicht hinter BT_BOXFORM. Begruendung: Das Paket
+  regeneriert die Goldens ohnehin (bt-oqsv), der Platzgewinn gilt in beiden
+  Modi, und eine Flag-Weiche haette Tree/Flat/Backlog uneinheitlich gemacht.
+- **Detail-Pane behaelt die VOLLE ID** (Yank-/Referenz-Nutzen) — dort wurde
+  nichts angefasst. Im 80-Spalten-Smoke belegt: links `vy1q`, rechts `bt-vy1q`.
+
+## Test-Output
+
+Neue Tests in internal/tui/bean_id_short_test.go:
+
+    --- PASS: TestShortBeanID (7 Faelle: eigener Prefix, kurzer Prefix,
+              Fremd-Prefix, leerer Slug, Prefix-ohne-Separator, leerer Rest,
+              mehrsegmentiger Slug)
+    --- PASS: TestTreeRowTextDropsRepoPrefix
+    --- PASS: TestBacklogRowTextDropsRepoPrefix
+    --- PASS: TestBacklogRowTextKeepsForeignID
+
+Voller Lauf vor dem Commit:
+
+    ok  github.com/xRiErOS/beans-tui/cmd            0.366s
+    ok  github.com/xRiErOS/beans-tui/internal/config
+    ok  github.com/xRiErOS/beans-tui/internal/data
+    ok  github.com/xRiErOS/beans-tui/internal/theme
+    ok  github.com/xRiErOS/beans-tui/internal/tui   149.422s
+
+## Deviations
+
+- **Goldens unveraendert durch diese Aenderung.** Das Golden-Fixture nutzt
+  `repoDir=/tmp/bt-golden-repo` (Slug `bt-golden-repo`) mit IDs `gld-*` — kein
+  Prefix-Treffer, also greift die Kuerzung dort nicht. Der Nachweis laeuft
+  ueber die Unit-Tests oben plus den 80-Spalten-tmux-Smoke (linke Pane zeigt
+  `vy1q` statt `bt-vy1q`).

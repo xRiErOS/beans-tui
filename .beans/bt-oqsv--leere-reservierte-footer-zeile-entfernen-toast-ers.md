@@ -1,11 +1,11 @@
 ---
 # bt-oqsv
 title: Leere reservierte Footer-Zeile entfernen (Toast ersetzt sie)
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-20T07:26:22Z
-updated_at: 2026-07-20T07:49:33Z
+updated_at: 2026-07-20T08:14:09Z
 parent: bt-vy1q
 ---
 
@@ -85,3 +85,87 @@ Ende EINMAL regeneriert.
 ### Kollisions-Hinweis fuer den Dispatch
 Beruehrt `view_browse_repo.go` + `mouse.go` — dieselben Dateien wie bt-ze10 (Detail-Scroll).
 **Erst nach dessen Commit starten.**
+
+
+## Summary
+
+Commit 3e73363 `refactor(footer): drop the reserved blank status line`
+(+ Golden-Commit 2f6fe9c).
+
+**Ursprung belegt** (Akzeptanz 1): `statusBar()` (view.go) liefert `""`, wenn
+kein Indicator anliegt; die vier View-Kompositionen haengten `+ "\n" + status`
+UNBEDINGT an (view_browse_repo.go, view_browse_backlog.go,
+view_tag_management.go, `Chrome()` in view.go). Es ist **keine** Wrap-Reserve
+fuer den mehrzeiligen Footer — `footer()` wrappt in `localKeys` selbst, dessen
+Hoehe ueber `lipgloss.Height(localKeys)` separat verrechnet wird (im
+80-Spalten-Smoke belegt: 2-zeiliger Footer + separat die Leerzeile).
+
+Aenderung:
+- `m.statusLine(width)` in view.go ist jetzt die EINE Quelle des Indicators
+  (vorher dreimal derselbe `if m.watchUnavailable`-Block).
+- `appendStatusLine()` haengt die Zeile nur an, wenn sie etwas traegt.
+- `clickPaneGeometry` nimmt `status` als Parameter:
+  `footH := Height(localKeys) + 1 + statusLineHeight(status)`.
+
+## Entscheidungen
+
+- **Status-Zeile bleibt, nur die RESERVIERUNG faellt.** Der
+  watch-unavailable-Indicator braucht weiter einen Platz; ihn in die
+  Footer-Zeile zu mischen haette den rechtsbuendigen Optik-Slot zerstoert.
+- **`status` wird Parameter von `clickPaneGeometry`** statt intern geraten —
+  das erzwingt an jeder Aufrufstelle eine explizite Entscheidung und macht
+  den Grounding-Fallstrick unmoeglich zu vergessen (Compiler-Fehler statt
+  stiller Offset).
+- **`Chrome()` loest ein Henne-Ei-Problem mit 2-Pass**: `scrollView` erzeugt
+  den Indicator, braucht dafuer aber `avail`, das wissen muss, ob der
+  Indicator eine Zeile belegt. Pass 1 rechnet ohne Status-Zeile; ist eine
+  noetig, re-fenstert Pass 2 eine Zeile kuerzer. Terminiert beweisbar: ein
+  kleineres Fenster kann Ueberlauf nur erhoehen, nie aufheben — ein nicht-
+  leerer Indicator kann im zweiten Pass nicht leer werden.
+
+## Test-Output
+
+Neue Tests in internal/tui/footer_status_line_test.go:
+
+    --- PASS: TestBrowseRepoFooterHasNoReservedBlankLine
+    --- PASS: TestBrowseRepoWatchIndicatorKeepsItsOwnLine
+    --- PASS: TestBrowseRepoPanesGainTheFreedLine
+    --- PASS: TestClickPaneGeometryBodyHMatchesRenderedPane
+    --- PASS: TestTreeClickRowSurvivesStatusLineRemoval
+
+`TestClickPaneGeometryMultiLineFooterHeightPin` (mouse_test.go) pinnt jetzt
+BEIDE Zustaende auf Literale: ohne Status-Zeile bodyH=30/footerY=36, mit
+Status-Zeile bodyH=29/footerY=35 (die Vor-bt-oqsv-Zahlen).
+
+**Mutationsprobe** (Nachweis, dass der Regressionstest den Fallstrick wirklich
+faengt): `footH` testweise auf das alte `Height(localKeys) + 2`
+zurueckgedreht ->
+
+    --- FAIL: TestClickPaneGeometryBodyHMatchesRenderedPane
+        footer_status_line_test.go:120: watchUnavailable=false: frame height
+        = 29, want 30 -- footH no longer matches the composed footer
+
+Erster Entwurf des Tests (kurze Liste + reine Klick-Zuordnung) hat die
+Mutation NICHT gefangen — deshalb zusaetzlich die Rahmenhoehen-Assertion und
+ein 60-Beans-Fixture (`longTreeModel`), das laenger als die Pane ist und damit
+`windowStart(bodyH)` echt durchlaeuft.
+
+Voller Lauf (uncached, nach allen drei Commits):
+
+    ok  github.com/xRiErOS/beans-tui/cmd            0.441s
+    ok  github.com/xRiErOS/beans-tui/internal/config 1.121s
+    ok  github.com/xRiErOS/beans-tui/internal/data   4.700s
+    ok  github.com/xRiErOS/beans-tui/internal/theme  0.781s
+    ok  github.com/xRiErOS/beans-tui/internal/tui  151.398s
+
+**80-Spalten-tmux-Smoke** (Akzeptanz 4), beide Flag-Zustaende: Rahmen fuellt
+24 Zeilen, mehrzeiliger Footer bricht nichts, keine Leerzeile mehr ueber dem
+unteren Rahmen.
+
+Goldens (Akzeptanz 5): tree/backlog/browse_flat/chrome — je eine Leerzeile
+raus, je eine Pane-/Body-Zeile rein, Rahmenhoehe konstant.
+
+## Deviations
+
+Keine. Toast-Verhalten unveraendert (`renderToast` legt sich unabhaengig von
+der Footer-Komposition ueber die fertige View; alle Toast-Tests gruen).

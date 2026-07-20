@@ -1,11 +1,11 @@
 ---
 # bt-fy5d
 title: 'Footer entschlacken: inline gezeigte Keys nicht doppeln'
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-20T07:25:11Z
-updated_at: 2026-07-20T07:49:33Z
+updated_at: 2026-07-20T08:14:32Z
 parent: bt-vy1q
 ---
 
@@ -82,3 +82,78 @@ Ende EINMAL regeneriert.
 ### Kollisions-Hinweis fuer den Dispatch
 Beruehrt `view_browse_repo.go` + `mouse.go` — dieselben Dateien wie bt-ze10 (Detail-Scroll).
 **Erst nach dessen Commit starten.**
+
+
+## Summary
+
+Commit d81e583 `feat(footer): hide box-form inline keys from the footer`
+(+ Golden-Commit 2f6fe9c).
+
+`browseRepoLocalBindings()` (view_browse_repo.go) filtert bei
+`boxFormEnabled()` die Bindings heraus, deren Help-Key in `boxFormInlineKeys`
+steht: `e`, `s`, `a`, `t`, `r`. Bei Flag AUS gibt die Funktion die Liste
+unveraendert zurueck (frueher Return vor dem Filter) — byte-identisch.
+
+`backlogLocalBindings()` delegiert weiterhin an `browseRepoLocalBindings()`
+und duennt damit automatisch mit aus; das ist korrekt, weil der Backlog
+dieselbe box-form-Detailpane rendert (`renderBeanAccordionPane`).
+
+Footer im Box-Modus jetzt: `tab · shift+tab · / · f · c · d · b · y`.
+
+## Entscheidungen
+
+- **Welche Keys?** `e`/`s`/`a`/`t` sind woertliche `(x)`-Badges aus
+  `detailBoxForm` (Title/Status/Parent/Tags) bzw. `panelBox("Body")`.
+  `o` (Type) und `u` (Priority) sind ebenfalls Badges, standen aber nie im
+  Footer-Set — nichts zu tun. `r` (Blocking) hat kein eigenes Badge, aber sein
+  Gegenstand IST das Relations-Panel derselben Ansicht, und der PO hat es in
+  der Akzeptanz mit aufgelistet. Deshalb mit raus.
+- **Filter ueber `Help().Key`, nicht ueber Binding-Identitaet.** Das ist genau
+  der String, den `renderBindings` in den Footer schreibt — die Regel liest
+  sich damit als das, was sie ist: eine Anzeige-Regel.
+- **Keine Aenderung an keymap.go.** Die Ausduennung ist rein visuell.
+
+## Test-Output
+
+Neue Tests in internal/tui/footer_boxform_test.go:
+
+    --- PASS: TestBrowseRepoLocalBindingsDropInlineKeysWhileBoxForm
+    --- PASS: TestBrowseRepoLocalBindingsUnchangedWithoutBoxForm
+    --- PASS: TestBacklogFooterFollowsBrowseRepo
+    --- PASS: TestBoxFormFooterKeysStayFunctional
+
+Der Flag-AUS-Test pinnt die volle Reihenfolge als Literal
+(`tab|shift+tab|/|f|s|c|d|e|b|t|y|a|r`), der letzte prueft von der anderen
+Seite, dass alle fuenf entfernten Keys in `keys.helpGroups()` registriert
+bleiben.
+
+Drift-Guards gruen (Akzeptanz 5):
+
+    --- PASS: TestHelpGroupsCoverEveryBindingExactlyOnce
+    --- PASS: TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList
+
+Voller Lauf (uncached, nach allen drei Commits):
+
+    ok  github.com/xRiErOS/beans-tui/cmd            0.441s
+    ok  github.com/xRiErOS/beans-tui/internal/config 1.121s
+    ok  github.com/xRiErOS/beans-tui/internal/data   4.700s
+    ok  github.com/xRiErOS/beans-tui/internal/theme  0.781s
+    ok  github.com/xRiErOS/beans-tui/internal/tui  151.398s
+
+**80-Spalten-tmux-Smoke**, BT_BOXFORM=1 — Footer 2 Zeilen statt 3:
+
+    tab focus in · shift+tab focus out · / search · f Filter · c Create · d Delete
+    · b Backlog · y Yank
+
+Flag AUS, 80 Spalten — unveraendert:
+
+    tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create
+    · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking
+
+Golden `browse_boxform.golden` regeneriert: Footer ohne s/e/t/a/r.
+Die Flag-AUS-Goldens (tree/backlog/browse_flat/chrome) zeigen KEINE
+Footer-Aenderung — nur die von bt-oqsv entfernte Leerzeile.
+
+## Deviations
+
+Keine.
