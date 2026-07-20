@@ -1,11 +1,11 @@
 ---
 # bt-ce7i
 title: Fremde .beans-Aenderungen aus Experiment-Commit d4a5367 auf main bringen
-status: todo
+status: completed
 type: task
 priority: high
 created_at: 2026-07-20T07:32:50Z
-updated_at: 2026-07-20T07:32:50Z
+updated_at: 2026-07-20T07:47:39Z
 parent: bt-vy1q
 ---
 
@@ -31,3 +31,21 @@ In `.beans/` **nur explizite Einzelpfade** stagen, nie ein Glob — das Repo tra
 - [ ] PO waehlt A/B/C
 - [ ] Gewaehlte Option ausgefuehrt
 - [ ] `git log main --oneline -- .beans/` belegt, dass die fremden Aenderungen dort ankommen (bei A/C)
+
+
+## PO-Entscheidung 2026-07-20: Option B
+
+Der Spike gilt nach der Validierung gegen sproutling (VHS-GIF + 80-Spalten-Smoke) als
+**de facto erfolgreich**. `experiment/jira-style-ui` wird vollstaendig auf `main` gemerged.
+Damit kommen die ~35 fremden `.beans`-Aenderungen ohnehin auf main — kein Nachziehen,
+kein History-Rewrite noetig.
+
+Risiko aufgeloest: die Praemisse von Option B ("nur vertretbar, wenn der Spike sicher
+gemerged wird") ist durch die PO-Zusage erfuellt.
+
+Die **Lehre bleibt in Kraft**: in `.beans/` nur explizite Einzelpfade stagen, nie ein Glob.
+
+## Akzeptanz
+- [x] PO waehlt A/B/C -> B
+- [x] Gewaehlte Option ausgefuehrt (= bewusst nichts tun)
+- [x] Nachweis entfaellt bei B; Abdeckung erfolgt durch den Merge (siehe bt-2o9a)

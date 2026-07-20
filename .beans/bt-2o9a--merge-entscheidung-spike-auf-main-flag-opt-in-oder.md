@@ -1,11 +1,11 @@
 ---
 # bt-2o9a
 title: 'Merge-Entscheidung: Spike auf main (Flag opt-in) oder verwerfen'
-status: draft
+status: todo
 type: task
 priority: normal
 created_at: 2026-07-20T07:26:50Z
-updated_at: 2026-07-20T07:26:50Z
+updated_at: 2026-07-20T07:47:53Z
 parent: bt-vy1q
 ---
 
@@ -25,3 +25,15 @@ parent: bt-vy1q
 - [ ] PO-Entscheidung dokumentiert
 - [ ] Bei Merge: Reviewer-Durchlauf ueber den gesamten Branch-Diff, dann Merge durch PO
 - [ ] Bei Merge: `BT_BOXFORM` in README/CLAUDE.md dokumentieren
+
+
+## PO-Signal 2026-07-20: Merge ist beschlossen
+
+Nach der Validierung gegen sproutling (VHS-GIF echte Daten + 80-Spalten-tmux-Smoke) hat der
+PO den Spike als **erfolgreich** eingestuft: `experiment/jira-style-ui` wird **vollstaendig**
+auf `main` gemerged (inkl. der ueber d4a5367 mitgezogenen fremden `.beans`-Aenderungen —
+siehe bt-ce7i, dort Option B genau darauf gestuetzt).
+
+Damit ist die Richtungsfrage ("besser oder verwerfen?") beantwortet. Offen bleibt nur noch
+das **Timing**: der Merge erfolgt, wenn die restlichen Kinder von bt-vy1q durch sind.
+Der Merge selbst bleibt PO-Autoritaet (Merge-Gate) — der Agent merged nicht eigenmaechtig.
