@@ -28,15 +28,44 @@ gesprochenen Begriff ab, wird das hier vermerkt statt stillschweigend umbenannt.
 - **„Chip"** wurde früher für die Filter-Felder benutzt. **Aufgegeben** — es sind boxed
   fields wie alle anderen. In `box_filter_bar.go` steht der Begriff noch im Kopfkommentar.
 
-## Layout und Ansichten
+## Views
+
+**Top-Level-Views** — je eine Konstante in `viewID` (`internal/tui/types.go`). Das sind die
+Bildschirme, zwischen denen umgeschaltet wird.
+
+| Name | Datei | Kommentar |
+|---|---|---|
+| **Lobby** | `view_lobby.go` | Repo-Picker mit ASCII-Logo. Entfällt beim Start in einem einzelnen Repo. Konstante `viewLobby`. |
+| **Browse** | `view_browse_repo.go` | Der Primat-View: Master-Detail, links Tree, rechts Detail. Konstante `viewBrowseRepo`. |
+| **Backlog** | `view_browse_backlog.go` | Flache Liste parentloser/ready beans, ebenfalls Master-Detail, sortierbar. Taste `b`. Konstante `viewBacklog`. |
+| **Tag-Management** | `view_tag_management.go` | Zentrale Tag-Verwaltung. Konstante `viewTagManagement`. |
+
+**Darstellungen innerhalb eines Views** — eigene Dateien, aber **keine** eigene `viewID`.
+Sie sind Zustände von Browse, nicht Geschwister davon:
+
+| Name | Datei | Kommentar |
+|---|---|---|
+| **Flat** | `view_browse_flat.go` | Die linke Pane als flache Liste statt als Tree. Umschalter `G`, Zustand `flatView`. |
+| **Vollbild** | `view_fullscreen.go` | Detail über die ganze Breite. Taste `v`, Zustand `fullscreenDetail`. |
+| **Detail-Inhalt** | `view_detail_bean.go` | Was in der Detail-Pane steht — als Accordion oder, mit `BT_BOXFORM`, als Box-Form. |
+
+### Achtung: die Spec-Tabelle ist veraltet
+`docs/plans/v1-port/design-spec.md` §6 führt die Views als V1–V5 mit Bezeichnern, die es
+**im Code nicht gibt**: `viewBrowseProject`, `viewBrowseBacklog`, `viewDetailIssue`,
+`viewCommandCenter` und `viewHome` existieren allesamt nicht (`viewHome` nur als
+Kommentar-Verweis auf die devd-Vorlage). Ebenso verweisen Kommentare in
+`view_browse_repo.go` auf `renderReviewDetailPane` in `view_review_cockpit.go` — **beides
+existiert nicht**. Beim Lesen der Spec also die Namen hier gegenprüfen; die V-Nummern
+(V1 Lobby, V2 Browse, V3 Backlog, V4 Detail-Accordion, V5 Command-Center) sind weiterhin
+brauchbar als Referenz, die Bezeichner nicht.
+
+## Layout
 
 | Begriff | Bedeutung | Code |
 |---|---|---|
 | **Master-Detail** | Die geteilte Ansicht: Liste links, Detail rechts. | `viewBrowseRepo` |
 | **Pane** | Eine der beiden Hälften. „linke Pane" = Liste, „Detail-Pane" = rechts. | `renderPane`, `clickPaneGeometry` |
 | **Tree** | Die hierarchische Liste links (Milestone → Epic → Blatt). | `treeRows`, `treeRowText` |
-| **Flat** | Die flache Liste als Alternative zum Tree, Umschalter `G`. | `flatView`, `view_browse_flat.go` |
-| **Vollbild** | Detail über die ganze Breite, Taste `v`. | `fullscreenDetail` |
 | **Accordion** | Die klassische, aufklappbare Detail-Darstellung — das, was die Box-Form ablöst, wenn das Flag an ist. | `renderAccordionPane` |
 | **Region** | Fokussierbarer Bereich: Tree · Detail · Filter-Strip. `tab` bewegt INNERHALB, `esc` verlässt. | — |
 
