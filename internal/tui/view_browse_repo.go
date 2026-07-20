@@ -686,12 +686,14 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // boxScroll (bean bt-ze10, epic bt-vy1q F1) is ONLY consulted inside the
 // boxFormEnabled() branch below -- the accordion branch (flag off) ignores
 // it entirely, so a caller with no box-form scroll of its own (e.g.
-// renderFullscreenBody, view_fullscreen.go, which passes 0 -- fullscreen
-// box-form scrolling is out of this task's scope, see that call site's own
-// doc comment) is always safe.
+// renderReviewDetailPane, view_review_cockpit.go, which passes 0) is always
+// safe. The Vollbild path (renderFullscreenBody, view_fullscreen.go) used to
+// be such a caller and now passes a REAL offset (bt-s90e) -- see its own doc
+// comment for the geometry rationale.
 // boxCursor (bean bt-1o4g) is the box-form field cursor index the
 // boxFormEnabled() branch renders with a Mauve frame, or -1 for none -- the
-// accordion branch ignores it exactly the way it ignores boxScroll.
+// accordion branch ignores it exactly the way it ignores boxScroll. The
+// Vollbild passes -1: there, up/down scroll instead of walking fields.
 func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll, boxCursor int) string {
 	var rows []string
 	if b != nil {
@@ -1123,13 +1125,30 @@ func (m model) viewBrowseRepo() string {
 		var listRows []string
 		if m.fullscreen == fullscreenList {
 			searchLine := m.treeSearchLine(paneW-2, "") // D02: Tree never shows a sort suffix
-			listRows = append([]string{searchLine}, m.treeRows(nodes, true, bodyH-1)...)
+			// B8 (bean bt-s90e): the Vollbild-Liste sources its rows from the
+			// SAME m.flatView switch the split's own left pane does (the
+			// `else if m.flatView` branch below) -- this branch used to call
+			// treeRows() unconditionally, so `v` after `G` silently put the
+			// PO back in the Tree they had just toggled away from. Only the
+			// row SOURCE differs; the search head line, the bodyH-1 budget
+			// trade and the single-pane geometry are shared verbatim.
+			// Dispatch already handled flat mode here (keyTree routes to
+			// keyFlat, update.go; focusedBean resolves via flatSelected) --
+			// the render was the only half missing. NOT gated on
+			// boxFormEnabled(): `G` exists independently of BT_BOXFORM, and
+			// m.flatView's default false leaves the Tree path (and every
+			// pre-existing Vollbild golden) byte-for-byte untouched.
+			if m.flatView {
+				listRows = append([]string{searchLine}, m.flatRows(m.flatVisible(), true, bodyH-1)...)
+			} else {
+				listRows = append([]string{searchLine}, m.treeRows(nodes, true, bodyH-1)...)
+			}
 		}
 		var detailBean *data.Bean
 		if m.fullscreen == fullscreenDetail {
 			detailBean = m.focusedBean() // resolves via focusedBean's own fullscreenDetail case (update.go)
 		}
-		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel)
+		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel, boxFormEffectiveScroll(m, detailBean))
 	} else if m.flatView {
 		// S5 (jira-style-ui experiment, Nested/Flat Browse toggle `G`,
 		// view_browse_flat.go): the LEFT pane renders the flat, sorted bean

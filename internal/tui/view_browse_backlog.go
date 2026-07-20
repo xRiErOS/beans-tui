@@ -312,7 +312,7 @@ func (m model) viewBacklog() string {
 		if m.fullscreen == fullscreenDetail {
 			detailBean = m.focusedBean()
 		}
-		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel)
+		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel, boxFormEffectiveScroll(m, detailBean))
 	} else {
 		// Same 1-header-row budget trade as the Tree's search head (Task 3):
 		// the search/filter summary line costs 1 line of the list pane's bodyH

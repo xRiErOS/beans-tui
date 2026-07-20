@@ -623,6 +623,18 @@ func boxFormEffectiveScroll(m model, b *data.Bean) int {
 // comment, boxFormEnabled()) -- that SAME post-reclaim bodyH is what
 // ultimately reaches renderAccordionPane as its `h` param at render time, so
 // this must match it or the stored offset and the actual render disagree.
+//
+// bt-s90e (epic bt-vy1q) added the fullscreenDetail WIDTH branch below. F1
+// (bean bt-ze10) had guarded the Vollbild off entirely rather than clamp
+// against the wrong geometry; the fix turned out to be width-ONLY. Height
+// needs no branch: bodyH is already read off the CURRENT model's own chrome
+// (browseRepoChrome/backlogChrome are footer-context-aware, so the Vollbild
+// yields its own correct value here for free) via the SAME clickPaneGeometry
+// call viewBrowseRepo makes BEFORE its fullscreen branch, filter-bar reclaim
+// included. The Vollbild renders ONE full-width pane instead of the split's
+// right half, so accW comes from paneW (innerW-2, view_browse_repo.go's own
+// border-accounting comment) minus renderAccordionPane's own w-2, i.e.
+// innerW-4 -- NOT rw-2.
 func boxFormScrollBounds(m model, b *data.Bean) (total, height int) {
 	if b == nil {
 		return 0, 0
@@ -668,6 +680,11 @@ func boxFormPaneMetrics(m model, b *data.Bean) (accW, height int) {
 	}
 
 	accW = rw - 2
+	if m.fullscreen == fullscreenDetail {
+		// bt-s90e: Vollbild-Detail is ONE full-width pane, not the lw/rw split --
+		// paneW is innerW-2, minus renderAccordionPane's own w-2.
+		accW = innerW - 4
+	}
 	if accW < 1 {
 		accW = 1
 	}

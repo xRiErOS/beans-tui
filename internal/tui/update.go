@@ -1282,31 +1282,46 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// F1 (bean bt-ze10) + N8 (bean bt-1o4g, PO "keyboard-first"), epic
-	// bt-vy1q: while boxFormEnabled(), the Accordion nav below has "no effect"
-	// (box-form has no Section/Field two-level machine of its own), so all
-	// four arrows plus enter are routed to the box-form's OWN field cursor
-	// here -- boxFormNav (box_nav_field.go) moves the cursor between
-	// detailBoxForm's boxes AND drags bt-ze10's scroll offset along so the
-	// focused field can never sit outside the viewport (see boxFormNav's doc
-	// comment for the reveal-then-move rule that keeps a long Body fully
-	// keyboard-reachable). enter opens the cursored field's editor through
-	// activateBoxFormTarget (mouse.go) -- the same dispatch a click takes.
-	// Guarded off inside fullscreenDetail (m.fullscreen ==
-	// fullscreenDetail): boxFormScrollBounds derives its height from the
-	// SPLIT pane's own clickPaneGeometry call (mouse.go), a DIFFERENT budget
-	// than the Vollbild-Detail's single full-width pane -- scrolling here
-	// would clamp against the wrong height (renderFullscreenBody's own doc
-	// comment, view_fullscreen.go, has the matching "out of scope" note for
-	// the render side). boxFormEnabled() off, or fullscreenDetail active,
-	// falls straight through to the ORIGINAL switch below, unchanged.
-	if boxFormEnabled() && m.fullscreen != fullscreenDetail {
-		switch dir := navKey(msg.String()); dir {
-		case "up", "down", "left", "right":
-			return m.boxFormNav(b, dir), nil
-		}
-		if keybind.Matches(msg, keys.Enter) {
-			return m.boxFormActivateCursor(b)
+	// F1 (bean bt-ze10) + N8 (bean bt-1o4g) + bt-s90e, epic bt-vy1q: while
+	// boxFormEnabled(), the Accordion nav below has "no effect" (box-form has
+	// no Section/Field two-level machine of its own), so the arrows are
+	// repurposed here. The two geometries want DIFFERENT things:
+	//
+	//   Split Detail pane -> FIELD CURSOR. All four arrows plus enter drive the
+	//     box-form's own cursor: boxFormNav (box_nav_field.go) moves between
+	//     detailBoxForm's boxes AND drags bt-ze10's scroll offset along, so the
+	//     focused field can never sit outside the viewport (boxFormNav's doc
+	//     comment has the reveal-then-move rule that keeps a long Body fully
+	//     keyboard-reachable). enter opens the cursored field's editor through
+	//     activateBoxFormTarget (mouse.go) -- the same dispatch a click takes.
+	//
+	//   Vollbild-Detail -> PLAIN VIEWPORT SCROLL. renderFullscreenBody passes
+	//     fieldCursor -1 on purpose (view_fullscreen.go): a cursor rendered
+	//     there would be a Mauve frame nothing can move. With no cursor to walk,
+	//     up/down keep their bt-ze10 meaning and scroll -- through the very same
+	//     adjustBoxFormScroll mutation point the wheel uses, so keyboard and
+	//     wheel still cannot drift on the reset/clamp rules. bt-s90e made
+	//     boxFormScrollBounds fullscreen-aware (mouse.go's accW branch), so it
+	//     clamps against the Vollbild's own budget, not the split's.
+	//
+	// boxFormEnabled() off falls straight through to the ORIGINAL switch below,
+	// unchanged.
+	if boxFormEnabled() {
+		if m.fullscreen == fullscreenDetail {
+			switch navKey(msg.String()) {
+			case "up":
+				return m.adjustBoxFormScroll(b, -1), nil
+			case "down":
+				return m.adjustBoxFormScroll(b, 1), nil
+			}
+		} else {
+			switch dir := navKey(msg.String()); dir {
+			case "up", "down", "left", "right":
+				return m.boxFormNav(b, dir), nil
+			}
+			if keybind.Matches(msg, keys.Enter) {
+				return m.boxFormActivateCursor(b)
+			}
 		}
 	}
 

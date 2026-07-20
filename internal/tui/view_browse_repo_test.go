@@ -390,7 +390,7 @@ func TestRenderFullscreenBodyRelationsWindowsSameAsSplitPane(t *testing.T) {
 	m := fixtureModel(t, all)
 	b := m.idx.ByID["ep-many"]
 
-	out := renderFullscreenBody(fullscreenDetail, 60, 15, nil, true, m.idx, b, relationsSectionIdx, relationsSectionIdx+1, 7, 1)
+	out := renderFullscreenBody(fullscreenDetail, 60, 15, nil, true, m.idx, b, relationsSectionIdx, relationsSectionIdx+1, 7, 1, 0)
 	plain := ansi.Strip(out)
 	if !strings.Contains(plain, "ch-07") {
 		t.Fatalf("Vollbild-Detail must window RELATIONS the SAME way the Split pane does -- fieldCursor=7 must stay visible, got:\n%s", plain)

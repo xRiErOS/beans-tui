@@ -168,24 +168,27 @@ func (m model) keyFullscreen(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 // view_browse_backlog.go) always pass true (a Vollbild pane is by
 // definition the ONLY visible pane, there is no split-focus ambiguity to
 // resolve).
-func renderFullscreenBody(fs fullscreenMode, innerW, bodyH int, listRows []string, focused bool, idx *data.Index, detailBean *data.Bean, secCursor, accOpen, fieldCursor, detailLevel int) string {
+// boxScroll (bt-s90e, epic bt-vy1q) is the Vollbild-Detail's box-form scroll
+// offset, which F1 (bean bt-ze10) had left as a literal 0 here: back then
+// boxFormScrollBounds (mouse.go) reconstructed the SPLIT pane's accW only, so
+// m.boxFormScroll was clamped against a budget this single full-width pane
+// does not have. That helper branches on m.fullscreen now, so both callers
+// (view_browse_repo.go/view_browse_backlog.go) simply hand in
+// boxFormEffectiveScroll(m, detailBean) -- the SAME value the split's own
+// renderBeanAccordionPane passes -- and the offset means the same thing on
+// both geometries. Ignored entirely in the fullscreenList case and while
+// boxFormEnabled() is off (renderAccordionPane's own accordion branch never
+// reads it).
+func renderFullscreenBody(fs fullscreenMode, innerW, bodyH int, listRows []string, focused bool, idx *data.Index, detailBean *data.Bean, secCursor, accOpen, fieldCursor, detailLevel, boxScroll int) string {
 	if fs == fullscreenList {
 		return renderPane(pane{rows: listRows}, innerW, bodyH, focused)
 	}
-	// F1 (bean bt-ze10) scoped this task's box-form scroll wiring to the
-	// SPLIT Detail pane only (keyDetailFocus explicitly guards its scroll
-	// branch off while m.fullscreen == fullscreenDetail, update.go) -- the
-	// Vollbild-Detail geometry (single full-width pane, no lw/rw split) is a
-	// DIFFERENT bodyH/accW budget than boxFormScrollBounds (mouse.go)
-	// computes from the split's own clickPaneGeometry call, so reusing
-	// m.boxFormScroll here would clamp against the wrong height. Passing 0
-	// literal keeps fullscreen box-form exactly at its pre-F1 behavior
-	// (unwindowed, renderPane's own line cap still applies) -- a real gap,
-	// but an EXISTING one this task's own "Betroffen" file list (bean body)
-	// does not name view_fullscreen.go, so it stays out of scope here.
-	// N8 (bean bt-1o4g) passes -1 (no field cursor) for the SAME reason and
-	// the same scope boundary: keyDetailFocus guards its whole box-form nav
-	// branch off inside fullscreenDetail, so a cursor rendered here would be
-	// a Mauve frame nothing can move -- worse than none.
-	return renderAccordionPane(idx, detailBean, innerW, bodyH, accOpen, secCursor, fieldCursor, detailLevel, focused, 0, -1)
+	// bt-s90e closed F1's Vollbild gap: boxFormScrollBounds is fullscreen-aware
+	// now (mouse.go's accW branch), so this call site passes the REAL offset
+	// instead of the literal 0 it used while the geometry was split-only.
+	// The field cursor stays -1 (no cursor) on purpose (bean bt-1o4g):
+	// keyDetailFocus routes the Vollbild's up/down to plain viewport scrolling
+	// rather than field navigation, so a cursor rendered here would be a Mauve
+	// frame nothing can move -- worse than none.
+	return renderAccordionPane(idx, detailBean, innerW, bodyH, accOpen, secCursor, fieldCursor, detailLevel, focused, boxScroll, -1)
 }
