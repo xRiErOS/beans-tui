@@ -167,3 +167,62 @@ Wenn der Branch komplett auf main geht: soll `BT_BOXFORM` weiter default-aus sei
 abgenommenes Feature hinter einem Env-Flag zu verstecken ist fragwuerdig. Optionen: Default
 an (Flag als Notausgang) / Flag ganz raus / so lassen. Noch nicht entschieden, gehoert vor
 den Merge.
+
+## Stand 2026-07-20 (spaet) — Trilogie + Picker gemerged, alles gruen
+
+### Erledigt in diesem Lauf
+| bean | Commit | Ergebnis |
+|---|---|---|
+| bt-ze10 | `8e5a869` | Detail-Pane scrollt (F1 geschlossen) |
+| bt-pl5p | `2f531b5` | Repo-Prefix aus Bean-IDs der linken Pane — ~11 Zeichen mehr Titel |
+| bt-oqsv | `3e73363` | reservierte Leerzeile weg — eine Inhaltszeile gewonnen |
+| bt-fy5d | `d81e583` | Footer zeigt die inline gebadgten Keys nicht mehr doppelt |
+| (Golden) | `2f6fe9c` | Regeneration fuer die drei oben |
+| bt-a3a8 | `f0d140d` -> merge `02223e3` | Picker-Suche + Filter-Strip |
+
+`experiment/jira-style-ui` @ `9a06682`. **Voller Testlauf nach dem Merge gruen**
+(`internal/tui 149.466s`). Agent-Worktree entfernt, Branch geloescht, Tree sauber.
+
+### Live verifiziert (tmux 80x30 gegen sproutling, BT_BOXFORM=1)
+Alle drei Platz-Verbesserungen sichtbar; Picker-Suche filtert 114 beans auf 6 Treffer
+("passkey"). Der urspruengliche PO-Befund N7 ("kaum nutzbar ohne Suche") ist damit
+end-to-end belegt, nicht nur unit-getestet.
+
+### Bemerkenswert aus den Agent-Laeufen (nicht verlieren)
+- **Der Picker-Worktree wurde von `main` erzeugt**, wo die zu benutzenden Primitiven gar
+  nicht existieren (35 Commits Rueckstand). Der Agent hat das vor dem ersten Commit
+  bemerkt und umgesetzt. **Lehre: bei `isolation: worktree` die Basis pruefen** — sie ist
+  nicht automatisch der aktuelle Arbeitsbranch.
+- **Ein Regressionstest war wertlos und der Agent hat es selbst gefunden:** er bestand auch
+  gegen ein absichtlich verfaelschtes `footH`, weil `clickPaneGeometry` Render UND Hit-Test
+  speist — ein falscher Wert verschiebt beide gemeinsam. Ersetzt durch eine
+  Rahmenhoehen-Assertion + 60-bean-Fixture, Mutation danach rot. **Mutations-Gegenprobe
+  lohnt sich bei Geometrie-Tests.**
+- **Der 80x24-Smoke fand einen echten Bug:** `parentPickerRowBudget` begrenzte
+  Listen*elemente* statt Terminal*zeilen* — bei umbrechenden Titeln lief das Overlay unten
+  aus dem Bild. Ein Element-Cap kann Hoehe grundsaetzlich nicht bounden, wenn Zeilen
+  umbrechen.
+- **Verhaltensaenderung gegen einen niedergeschriebenen Beschluss:** `keymap.go` sagte, der
+  Blocking-Picker behalte `space`/`x`. Mit dem neuen Suchfeld haette `x` den Buchstaben
+  untippbar gemacht -> auf space-only verengt, Test angepasst. **Dem PO vorgelegt.**
+- `.claude/` ist jetzt gitignored (`3b8968d`) — der Agent-Worktree landete IM Repo statt
+  daneben (entgegen der tools-Konvention); ohne den Eintrag haette ein `git add -A` einen
+  verschachtelten Checkout eingecheckt.
+
+### Neue Befunde aus dem Merge-Smoke
+- **bt-pt1r** (neu, low): Picker-/Overlay-Listen zeigen den Projekt-Slug weiterhin voll
+  (`sproutling-xglu`), die linke Pane nicht mehr -> **App-interne Inkonsistenz**.
+- **bt-z4w7** (Prelude ergaenzt): der Picker-Footer zeigt `space/x Toggle facet`, obwohl der
+  Blocking-Toggle jetzt space-only ist. Gleiche Ursache wie der schon notierte
+  Value-Menue-Mismatch: **Footer-Label hart verdrahtet statt aus der aktiven Bindung
+  abgeleitet.** An der Ursache fixen, nicht zwei Labels einzeln.
+
+### Offen
+`bt-ty48` (GIF Body-Scroll, entblockt) · `bt-1o4g` (Feld-Navigation, entblockt) ·
+`bt-s90e` (Fullscreen: flatView + Scroll, zwei Luecken zusammen) · `bt-z4w7` ·
+`bt-pt1r` · `bt-dovm` (S7 huh-Ersatz, draft, PO-Freigabe noetig) · `bt-2o9a` (Merge).
+
+### Weiterhin offene PO-Frage
+Bleibt `BT_BOXFORM` beim Merge auf main default-**aus**? Ein abgenommenes Feature hinter
+einem ungesetzten Env-Flag sieht niemand. Optionen: Default an (Flag als Notausgang) /
+Flag ganz raus / so lassen.

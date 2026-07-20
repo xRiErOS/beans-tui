@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: low
 created_at: 2026-07-20T07:26:50Z
-updated_at: 2026-07-20T07:26:50Z
+updated_at: 2026-07-20T08:19:10Z
 parent: bt-vy1q
 ---
 
@@ -23,3 +23,18 @@ Die urspruengliche Design-Entscheidung a3 formulierte woertlich "esc/s schliesst
 - [ ] Footer zeigt die Taste der offenen Gruppe
 - [ ] Entscheidung a3 als revidiert dokumentiert
 - [ ] Tests fuer alle drei Gruppen, voller `command go test ./...` gruen
+
+
+## Prelude aus dem Merge-Smoke (2026-07-20)
+
+Gleiche Fehlerklasse, jetzt auch im **Blocking-Picker**: dessen Footer zeigt
+`space/x Toggle facet`, waehrend der Blocking-Toggle in bt-a3a8 bewusst auf **space-only**
+verengt wurde (`x` haette im neuen Suchfeld den Buchstaben untippbar gemacht — Design-
+Entscheidung D6 dort). Der `x`-Teil des Labels gilt nur noch fuer das Facetten-Menue,
+das kein Eingabefeld hat.
+
+Beleg: tmux 80x30 gegen sproutling, Picker offen mit Suchtext.
+
+Zusammen mit dem bereits notierten Value-Menue-Mismatch erledigen — beides ist derselbe
+Befund: **das Footer-Label ist hart verdrahtet statt aus der real aktiven Bindung
+abgeleitet.** Der Fix sollte an der Ursache ansetzen, nicht zwei Labels einzeln korrigieren.
