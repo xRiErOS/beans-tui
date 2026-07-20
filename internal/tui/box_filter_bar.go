@@ -24,6 +24,15 @@ import (
 // theme.Chevron pins Peach to a specific glyph use, box_dropdown.go).
 var filterBarActive = lipgloss.NewStyle().Foreground(theme.Peach)
 
+// filterBarHeight is filterBar's fixed rendered height: gridRow's four
+// dropdownBox cells are always exactly 3 lines tall (top border/value/bottom
+// border, box_dropdown.go's dropdownBox), so the bar itself never varies --
+// S6 (bean tbd, B6 "filter-bar click offset") needs this exact number too,
+// so it is a named const here rather than re-deriving lipgloss.Height(
+// m.filterBar(...)) at every click-geometry call site (Golden-Rule-Drift-
+// Schutz, mirrors headerBlockLines' own const precedent, mouse.go).
+const filterBarHeight = 3
+
 // filterBar renders the four-chip Type/Status/Priority/Tags row at exactly
 // `width` cells (gridRow's own contract). A facet with active values shows
 // them (joinFilterKeys, box_filter_facets.go) in theme.Peach — the shared

@@ -213,6 +213,14 @@ func (m model) wheelMove(delta int) model {
 // single click on an ALREADY-open node only moves the cursor (no toggle,
 // devd D03).
 func (m model) mouseTreeClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if m.flatView {
+		// S5/S6: the Nested/Flat Browse toggle (`G`, view_browse_flat.go)
+		// swaps the LEFT pane's content source -- a click there must resolve
+		// against flatVisible()/flatList (flatClickRow), never the Tree's
+		// own nodes/cursorID, mirroring the SAME m.flatView branch
+		// viewBrowseRepo's own render already takes (view_browse_repo.go).
+		return m.mouseFlatClick(msg)
+	}
 	nodes := m.visibleNodes()
 	idx, ok := treeClickRow(m, nodes, msg)
 	if !ok {
@@ -255,6 +263,27 @@ func (m model) mouseTreeClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			return m.setExpanded(n, true), nil
 		}
 	}
+	return m, nil
+}
+
+// mouseFlatClick dispatches a Flat-list left-click (S6, S5's Nested/Flat
+// Browse toggle `G`, view_browse_flat.go) -- the flat-list analog of
+// mouseTreeClick: resolves the clicked row via flatClickRow (view_browse_flat.go,
+// pure geometry, mirrors treeClickRow's own structure) then sets flatList's
+// index cursor. No Doppelklick semantics, same rationale as
+// mouseBacklogClick just below (flat list, keyFlat's own doc comment: "kein
+// Doppelklick-Bedarf").
+func (m model) mouseFlatClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	vis := m.flatVisible()
+	idx, ok := flatClickRow(m, vis, msg)
+	if !ok {
+		// B07 precedent (mouseTreeClick/mouseBacklogClick, above): delegate
+		// to the shared Detail-Pane click dispatcher for anything outside
+		// the flat list's own column/row span.
+		return m.mouseDetailClick(msg)
+	}
+	m.flatList.setLen(len(vis))
+	m.flatList.cursor = idx
 	return m, nil
 }
 
@@ -454,6 +483,17 @@ func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if b == nil {
 		return m, nil
 	}
+	if boxFormEnabled() {
+		// S6 ("Box-form detail click-to-edit"): while the experiment flag is
+		// on, renderAccordionPane (view_browse_repo.go) swaps the Detail
+		// pane's body for detailBoxForm's jira-style boxes (box_detail_form.go)
+		// -- detailClickRow's accordion Section/Field walk below is the WRONG
+		// geometry in that mode (no beanSections/headerBlockLines exist),
+		// so this branches to the box-form-specific hit test instead, BEFORE
+		// ever reaching the accordion path. Default off leaves the branch
+		// dead, existing accordion click tests/goldens byte-identical.
+		return m.mouseBoxFormDetailClick(b, msg)
+	}
 	secIdx, fieldIdx, ok := detailClickRow(m, b, msg)
 	if !ok {
 		return m, nil
@@ -491,6 +531,158 @@ func (m model) mouseDetailClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if fieldIdx < len(fields) {
 			return m.activateDetailField(b, fields[fieldIdx])
 		}
+	}
+	return m, nil
+}
+
+// boxFormTarget* — detailBoxFormClickRow's hit-test result kinds (S6, "Box-
+// form detail click-to-edit"): named strings mirroring update.go's own
+// keyNodeAction group vocabulary (openValueMenu's "status"/"type"/
+// "priority" argument, box_menu_value.go) plus "parent"/"tags"/"editor" for
+// the picker/whole-bean-editor targets -- ONE vocabulary, so
+// detailBoxFormClickRow and mouseBoxFormDetailClick's dispatch switch can
+// never drift on the set of valid targets.
+const (
+	boxFormTargetStatus   = "status"
+	boxFormTargetType     = "type"
+	boxFormTargetPriority = "priority"
+	boxFormTargetParent   = "parent"
+	boxFormTargetTags     = "tags"
+	boxFormTargetEditor   = "editor"
+)
+
+// gridColAt buckets a column offset (relative to a gridRow's OWN left edge --
+// detailBoxFormClickRow's clickCol := msg.X - (originX+lw), the same zero
+// point the row's boxes themselves render from, box_detail_form.go's
+// gridRow) into the gridColWidths (box_detail_form.go) column index it falls
+// under -- the ONE place that walks widths+gap, so gridRow's real rendered
+// column boundaries and this hit-test can never independently drift
+// (Golden-Rule-Drift-Schutz, detailClickRow's own doc comment precedent,
+// above). Returns -1 for a click past the last column (e.g. inside the
+// 1-col inter-box gap, or past the row's own right edge).
+func gridColAt(widths []int, col int) int {
+	x := 0
+	for i, w := range widths {
+		if col >= x && col < x+w {
+			return i
+		}
+		x += w + detailBoxFormGap
+	}
+	return -1
+}
+
+// detailBoxFormClickRow maps a Detail-Pane click to a box-form field target
+// (S6) while boxFormEnabled() -- the box-form analog of detailClickRow
+// (accordion mode, above): reconstructs the SAME clickPaneGeometry geometry
+// (Golden-Rule-Drift-Schutz), corrected by the B6 filter-bar offset (this
+// file's treeClickRow doc comment, view_browse_repo.go) -- ONLY viewBrowseRepo
+// ever shows the filter bar (box_filter_bar.go's one call site), so the
+// offset is guarded on `m.view != viewBacklog` here, the SAME branch
+// detailClickRow's own head/localKeys selection already makes.
+//
+// detailBoxForm's OWN fixed row order (box_detail_form.go doc comment:
+// Title(3 lines) -> rowA Status|Type|Priority(3 lines) -> rowB Parent|Tags
+// (3 lines) -> Body/Relations/History panels, unbounded) is walked directly
+// here rather than re-deriving it from beanSections/accordion state (box-
+// form has none yet -- design-spec.md D12, no per-field cursor). Rows past
+// rowB (clickRow >= 9, Body/Relations/History) collapse into ONE "editor"
+// target: keys.Editor already opens the SAME whole-bean $EDITOR
+// unconditionally regardless of section context (D01, update.go's own
+// keyNodeAction doc comment, "egal an welcher Stelle") -- so this is not a
+// "wrong action" the way mis-mapping Status/Type/Priority/Parent/Tags would
+// be, it is the exact same action a real `e` press already fires from
+// anywhere in the pane today.
+func detailBoxFormClickRow(m model, msg tea.MouseMsg) (target string, ok bool) {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+
+	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	if m.view != viewBacklog {
+		originY += filterBarHeight // B6: viewBacklog never shows the filter bar
+	}
+
+	if msg.X < originX+lw || msg.X >= originX+lw+rw {
+		return "", false // left pane, or off-screen -- no Detail target
+	}
+	clickRow := msg.Y - originY
+	if clickRow < 0 || clickRow >= bodyH {
+		return "", false // above the pane, or past renderPane's own line cap
+	}
+
+	accW := rw - 2
+	if accW < 1 {
+		accW = 1
+	}
+	clickCol := msg.X - (originX + lw)
+
+	switch {
+	case clickRow < 3:
+		return boxFormTargetEditor, true // Title box (dropdownBox's own "e" hotkey)
+	case clickRow < 6:
+		switch gridColAt(gridColWidths(3, accW), clickCol) {
+		case 0:
+			return boxFormTargetStatus, true
+		case 1:
+			return boxFormTargetType, true
+		case 2:
+			return boxFormTargetPriority, true
+		}
+		return "", false // inside the row but not over a box (inter-box gap)
+	case clickRow < 9:
+		switch gridColAt(gridColWidths(2, accW), clickCol) {
+		case 0:
+			return boxFormTargetParent, true
+		case 1:
+			return boxFormTargetTags, true
+		}
+		return "", false
+	default:
+		return boxFormTargetEditor, true // Body/Relations/History panels
+	}
+}
+
+// mouseBoxFormDetailClick dispatches a Detail-Pane left-click while
+// boxFormEnabled() (S6, "Box-form detail click-to-edit"): resolves the
+// clicked box via detailBoxFormClickRow (above, pure geometry) then fires
+// the EXACT SAME action keyNodeAction's own s/o/u/a/t/e branch fires for
+// each key (update.go:760-823) -- box-form fields are direct dropdownBox/
+// panelBox hotkeys (box_detail_form.go), not an accordion Section/Field
+// two-level selection, so a single click ALWAYS opens the target's editor/
+// menu/picker immediately -- no Doppelklick semantics here, mirrors
+// mouseBacklogClick's own "flat list, kein Doppelklick-Bedarf" precedent
+// (this file). Matches the S6 task spec verbatim ("Trigger the SAME action
+// those keys fire").
+func (m model) mouseBoxFormDetailClick(b *data.Bean, msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	target, ok := detailBoxFormClickRow(m, msg)
+	if !ok {
+		return m, nil
+	}
+	switch target {
+	case boxFormTargetStatus:
+		return m.openValueMenu("status"), nil
+	case boxFormTargetType:
+		return m.openValueMenu("type"), nil
+	case boxFormTargetPriority:
+		return m.openValueMenu("priority"), nil
+	case boxFormTargetParent:
+		return m.openParentPicker(), nil
+	case boxFormTargetTags:
+		return m.openTagPicker()
+	case boxFormTargetEditor:
+		return m.openBeanEditor(b)
 	}
 	return m, nil
 }

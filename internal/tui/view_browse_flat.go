@@ -120,6 +120,61 @@ func (m model) renderFlatDetailPane(vis []*data.Bean, w, h int, focused bool) st
 // Backlog/FilterClear/Back handling that switch already does -- so `/`, `f`,
 // `X`, `b`, esc all keep working identically in flat mode (same shared
 // state, filtered set narrows/widens exactly like the Tree's own).
+// flatClickRow maps a mouse click to a flat-list row index (S6, mouse.go's
+// mouseFlatClick) -- the flat-list analog of treeClickRow (view_browse_repo.go):
+// IDENTICAL geometry reconstruction (browseRepoChrome + clickPaneGeometry,
+// Golden-Rule-Drift-Schutz), windowed via windowStart(len(vis), bodyH-1,
+// m.flatList.cursor) the SAME way flatRows itself windows (above) -- row 0 is
+// the search head line (treeSearchLine), never a row target, same PF-10
+// convention treeClickRow's own doc comment documents.
+//
+// B6 (S6): the persistent filter bar (box_filter_bar.go) sits between the
+// header divider and this split ONLY while boxFormEnabled() -- flat mode is
+// only ever reached from viewBrowseRepo (the filter bar's one call site), so
+// an unconditional boxFormEnabled() check mirrors treeClickRow's own
+// unconditional check exactly. Default off leaves this branch dead, existing
+// behavior byte-identical.
+func flatClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok bool) {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+	head, localKeys := m.browseRepoChrome(innerW)
+
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	if boxFormEnabled() {
+		originY += filterBarHeight
+	}
+
+	if msg.X < originX || msg.X >= originX+lw {
+		return 0, false // right Detail pane, or off-screen -- no flat-row target
+	}
+	clickRow := msg.Y - originY
+	if clickRow <= 0 {
+		return 0, false // above the pane, or row 0 == the search head line
+	}
+
+	windowRows := bodyH - 1
+	if windowRows < 0 {
+		windowRows = 0
+	}
+	pos := m.flatList.cursor
+	start := windowStart(len(vis), windowRows, pos)
+	visible := windowRows
+	if len(vis)-start < visible {
+		visible = len(vis) - start
+	}
+	rowIdx := clickRow - 1
+	if rowIdx < 0 || rowIdx >= visible {
+		return 0, false
+	}
+	return start + rowIdx, true
+}
+
 func (m model) keyFlat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	vis := m.flatVisible()
 	m.flatList.setLen(len(vis))

@@ -30,6 +30,33 @@ type scalarCell struct {
 	label, value, hotkey string
 }
 
+// gridColWidths computes the n column widths gridRow itself lays out at
+// `width` cells (S2e Change 3, review B1's own integer-division-remainder
+// rule, factored out here as of S6/B6): SINGLE SOURCE for gridRow's own box-
+// width loop AND mouse.go's box-form column hit-test (detailBoxFormClickRow)
+// -- a click can never drift from the actual rendered column boundaries
+// (Golden-Rule-Drift-Schutz, detailClickRow's own doc comment precedent,
+// mouse.go).
+func gridColWidths(n, width int) []int {
+	if n <= 0 {
+		return nil
+	}
+	gap := detailBoxFormGap
+	avail := width - (n-1)*gap
+	base := avail / n
+	rem := avail % n
+
+	widths := make([]int, n)
+	for i := 0; i < n; i++ {
+		w := base
+		if i < rem {
+			w++
+		}
+		widths[i] = w
+	}
+	return widths
+}
+
 // gridRow renders the given scalar cells as one horizontal row occupying
 // EXACTLY `width` cells (S2e Change 3, review B1): len(cells) columns, one-
 // space gaps between them, and the integer-division remainder spread across
@@ -40,18 +67,11 @@ func gridRow(cells []scalarCell, width int) string {
 	if n == 0 {
 		return ""
 	}
-	gap := detailBoxFormGap
-	avail := width - (n-1)*gap
-	base := avail / n
-	rem := avail % n
+	widths := gridColWidths(n, width)
 
 	boxes := make([]string, n)
 	for i, c := range cells {
-		colW := base
-		if i < rem {
-			colW++
-		}
-		boxes[i] = dropdownBox(c.label, c.value, c.hotkey, colW, false)
+		boxes[i] = dropdownBox(c.label, c.value, c.hotkey, widths[i], false)
 	}
 
 	gapCol := " \n \n "

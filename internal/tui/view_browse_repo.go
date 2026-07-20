@@ -1102,6 +1102,19 @@ func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool
 	head, localKeys := m.browseRepoChrome(innerW)
 
 	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	if boxFormEnabled() {
+		// B6 (S6, jira-style-ui experiment): boxFormEnabled()'s persistent
+		// filter bar (box_filter_bar.go) sits between the header divider and
+		// the Tree/Detail split ONLY while the flag is on (viewBrowseRepo,
+		// above) -- it reclaims its 3 rows from bodyH BEFORE the split
+		// renders, but clickPaneGeometry's own originY has no knowledge of
+		// it (that helper is shared with Backlog, which never shows the
+		// bar). treeClickRow is BROWSE-only (mouseTreeClick's own call
+		// site, mouse.go), so an unconditional boxFormEnabled() check here
+		// is correct without an extra m.view guard. Default off leaves this
+		// branch dead, existing Tree click tests/goldens byte-identical.
+		originY += filterBarHeight
+	}
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false // right Detail pane, or off-screen -- no Tree target
