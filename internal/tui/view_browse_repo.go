@@ -1030,17 +1030,13 @@ func (m model) viewBrowseRepo() string {
 	// critical). bt-81f0 (Notifications vereinheitlichen, Q1-Annahme):
 	// m.err lost this slot entirely -- Toast is the ONE visible channel for
 	// real load failures now, the status line carries ONLY this indicator.
-	indicator := ""
-	if m.watchUnavailable {
-		indicator = "watch unavailable — ctrl+r for manual reload"
-	}
-	status := statusBar(indicator, innerW)
+	status := m.statusLine(innerW)
 
 	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
 	// clickPaneGeometry helper treeClickRow (below) uses to map a click back
 	// to a row -- single source for the numeric pane geometry, not just the
 	// head/localKeys strings above (Golden-Rule-Drift-Schutz).
-	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	nodes := m.visibleNodes()
 
 	// S3 (jira-style-experiment, BT_BOXFORM): the persistent filter chip row
@@ -1126,7 +1122,7 @@ func (m model) viewBrowseRepo() string {
 	if boxFormEnabled() {
 		content += "\n" + filterBarRow
 	}
-	content += "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
+	content = appendStatusLine(content+"\n"+body+"\n"+div+"\n"+localKeys, status)
 	out := outerBorder(content, innerW, true)
 
 	return m.composeOverlays(out, w, h)
@@ -1158,7 +1154,7 @@ func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool
 	innerW := w - 2
 	head, localKeys := m.browseRepoChrome(innerW)
 
-	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	if boxFormEnabled() {
 		// B6 (S6, jira-style-ui experiment): boxFormEnabled()'s persistent
 		// filter bar (box_filter_bar.go) sits between the header divider and

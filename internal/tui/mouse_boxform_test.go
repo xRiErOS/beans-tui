@@ -82,7 +82,7 @@ func TestBoxFormOffDefaultTreeClickUnaffected(t *testing.T) {
 func boxFormClickAt(t *testing.T, m model, substr string) tea.MouseMsg {
 	t.Helper()
 	head, localKeys := m.browseRepoChrome(m.width - 2)
-	_, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
+	_, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.statusLine(m.width-2), m.settings.Layout.TreeWidth)
 	boundary := originX + lw
 	filterBarBottom := originY // filter bar occupies [originY, originY+filterBarHeight) when BT_BOXFORM is on
 	if boxFormEnabled() {

@@ -100,7 +100,14 @@ func treeWidthFloor(configured int) int {
 // callers AND its *ClickRow callers picks up a configured Baumbreite
 // consistently, the same Single-Source guarantee this doc comment's opening
 // paragraph already establishes for bodyH/lw/rw/originX/originY themselves.
-func clickPaneGeometry(w, h int, head, localKeys string, treeWidth int) (bodyH, lw, rw, originX, originY int) {
+//
+// status is the caller's OWN m.statusLine(innerW) string (view.go, bean
+// bt-oqsv): the footer's status row is no longer a permanently reserved
+// blank line, it exists only while it carries the watch-unavailable
+// indicator. It therefore has to be an INPUT here -- the old hardcoded "+2"
+// silently assumed the row was always present, and keeping it after the
+// reservation was dropped would offset every mouse click by exactly one row.
+func clickPaneGeometry(w, h int, head, localKeys, status string, treeWidth int) (bodyH, lw, rw, originX, originY int) {
 	if w <= 0 {
 		w = 80
 	}
@@ -109,8 +116,8 @@ func clickPaneGeometry(w, h int, head, localKeys string, treeWidth int) (bodyH, 
 	}
 	innerW := w - 2
 	innerH := h - 2
-	footH := lipgloss.Height(localKeys) + 2             // + status line + divider above footer
-	avail := innerH - lipgloss.Height(head) - footH - 1 // - divider under the top bar
+	footH := lipgloss.Height(localKeys) + 1 + statusLineHeight(status) // + divider above footer + optional status line (bt-oqsv)
+	avail := innerH - lipgloss.Height(head) - footH - 1                // - divider under the top bar
 	if avail < 4 {
 		avail = 18 // height unknown (init/tests) -> generous fallback, mirrors Chrome()
 	}
@@ -381,7 +388,7 @@ func detailClickRow(m model, b *data.Bean, msg tea.MouseMsg) (secIdx, fieldIdx i
 		head, localKeys = m.browseRepoChrome(innerW)
 	}
 
-	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 
 	if msg.X < originX+lw || msg.X >= originX+lw+rw {
 		return 0, 0, false // left pane, or off-screen -- no Detail target
@@ -636,7 +643,7 @@ func boxFormScrollBounds(m model, b *data.Bean) (total, height int) {
 		head, localKeys = m.browseRepoChrome(innerW)
 	}
 
-	bodyH, _, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, _, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	if m.view != viewBacklog {
 		bodyH -= filterBarHeight // B6 precedent: only viewBrowseRepo shows the filter bar
 		if bodyH < 1 {
@@ -697,7 +704,7 @@ func boxFormWheelHit(m model, msg tea.MouseMsg) bool {
 		head, localKeys = m.browseRepoChrome(innerW)
 	}
 
-	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	if m.view != viewBacklog {
 		originY += filterBarHeight // B6 precedent, detailBoxFormClickRow below
 	}
@@ -747,7 +754,7 @@ func detailBoxFormClickRow(m model, msg tea.MouseMsg) (target string, ok bool) {
 		head, localKeys = m.browseRepoChrome(innerW)
 	}
 
-	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	if m.view != viewBacklog {
 		originY += filterBarHeight // B6: viewBacklog never shows the filter bar
 	}

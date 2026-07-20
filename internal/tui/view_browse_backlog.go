@@ -286,16 +286,12 @@ func (m model) viewBacklog() string {
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	// bt-81f0 (Notifications vereinheitlichen, Q1-Annahme): m.err lost the
 	// status line's rendering slot -- Toast is the ONE visible channel now.
-	indicator := ""
-	if m.watchUnavailable {
-		indicator = "watch unavailable — ctrl+r for manual reload"
-	}
-	status := statusBar(indicator, innerW)
+	status := m.statusLine(innerW)
 
 	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
 	// clickPaneGeometry helper backlogClickRow (below) uses -- single source
 	// for the numeric pane geometry (Golden-Rule-Drift-Schutz).
-	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	vis := m.backlogVisible()
 
 	var body string
@@ -333,7 +329,7 @@ func (m model) viewBacklog() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listBox, detailBox)
 	}
 
-	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
+	content := appendStatusLine(head+"\n"+div+"\n"+body+"\n"+div+"\n"+localKeys, status)
 	out := outerBorder(content, innerW, true)
 
 	return m.composeOverlays(out, w, h)
@@ -438,7 +434,7 @@ func backlogClickRow(m model, vis []*data.Bean, msg tea.MouseMsg) (idx int, ok b
 	innerW := w - 2
 	head, localKeys := m.backlogChrome(innerW)
 
-	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false

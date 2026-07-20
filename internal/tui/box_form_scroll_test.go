@@ -177,7 +177,7 @@ func TestBoxFormWheelOverDetailPaneScrolls(t *testing.T) {
 	requireOverflow(t, m, b)
 
 	head, localKeys := m.browseRepoChrome(m.width - 2)
-	_, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
+	_, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.statusLine(m.width-2), m.settings.Layout.TreeWidth)
 
 	detailMsg := tea.MouseMsg{
 		Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress,

@@ -267,16 +267,12 @@ func (m model) viewTagManagement() string {
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	// bt-81f0 (Notifications vereinheitlichen, Q1-Annahme): m.err lost the
 	// status line's rendering slot -- Toast is the ONE visible channel now.
-	indicator := ""
-	if m.watchUnavailable {
-		indicator = "watch unavailable — ctrl+r for manual reload"
-	}
-	status := statusBar(indicator, innerW)
+	status := m.statusLine(innerW)
 
 	// Same shared geometry source viewBrowseRepo/viewBacklog use (mouse.go
 	// clickPaneGeometry) -- lw/rw are the SPLIT master-detail widths neither
 	// of THIS page's single pane needs (D08), only bodyH is consumed.
-	bodyH, _, _, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, _, _, _, _ := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 
 	// paneW is the SINGLE pane's own CONTENT-width param passed to
 	// renderPane/tagManagementRows -- mirrors viewBrowseRepo's own Vollbild
@@ -311,7 +307,7 @@ func (m model) viewTagManagement() string {
 	}
 	listBox := renderPane(pane{rows: listRows}, paneW, bodyH, true)
 
-	content := head + "\n" + div + "\n" + listBox + "\n" + div + "\n" + localKeys + "\n" + status
+	content := appendStatusLine(head+"\n"+div+"\n"+listBox+"\n"+div+"\n"+localKeys, status)
 	out := outerBorder(content, innerW, true)
 
 	return m.composeOverlays(out, w, h)
