@@ -44,6 +44,81 @@ import keybind "github.com/charmbracelet/bubbles/key"
 // mirroring treeFilterBox's own wording exactly.
 var filterMenuCategoryHint = keybind.NewBinding(keybind.WithKeys("tab", "shift+tab"), keybind.WithHelp("tab/shift+tab", "category"))
 
+// --- bean bt-z4w7 (B7): footer labels DERIVED from the active binding ---
+//
+// The bug this section closes is a CLASS, not two strings: a Footer Zone 3
+// entry was picked by hand from the global keymap next to the handler that
+// implements the key, so the label and the real binding drifted apart the
+// moment either side moved. Three instances existed at once --
+//
+//  1. the Value-Menu advertised "s" over an `o`/`u`-opened menu,
+//  2. the Blocking-Picker advertised keys.Toggle's "space/x" although
+//     bt-a3a8 (D6) narrowed its toggle to space-only,
+//  3. all three search-field pickers advertised keys.Up/keys.Down's "↑/i"
+//     and "↓/k" although "i"/"k" are literal, typeable characters there
+//     (keyParentPicker's own doc comment says so explicitly).
+//
+// The remedy is that every context-dependent footer key now comes from ONE
+// accessor that the KEY HANDLER matches against too -- the label cannot
+// describe a binding the handler does not have, because it IS that binding.
+// TestPickerFooterKeysAreReservedNotTyped (footer_binding_source_test.go)
+// holds the line generically: any advertised single-rune key that merely
+// gets typed into a picker's search query fails the build.
+//
+// These are deliberately standalone keybind.Bindings, NOT keyMap fields --
+// the same reasoning filterMenuCategoryHint documents above: they are
+// overlay-LOCAL relabelings of an existing global key, and adding them as
+// keyMap fields would trip TestHelpGroupsCoverEveryBindingExactlyOnce.
+
+// pickerNavUpHint/pickerNavDownHint are the ARROW-ONLY nav labels for the
+// three pickers that host an always-focused search field (Tag-/Parent-/
+// Blocking-Picker). Those handlers switch on raw tea.KeyUp/tea.KeyDown
+// precisely so "i"/"k" stay typeable inside the query -- so the global
+// keys.Up/keys.Down labels ("↑/i", "↓/k") name an alias that does not exist
+// in this context and would send the PO's cursor into the search box.
+var (
+	pickerNavUpHint   = keybind.NewBinding(keybind.WithKeys("up"), keybind.WithHelp("↑", "up"))
+	pickerNavDownHint = keybind.NewBinding(keybind.WithKeys("down"), keybind.WithHelp("↓", "down"))
+)
+
+// blockingPickerToggleHint is the Blocking-Picker's space-only membership
+// toggle -- matched by keyBlockingPicker AND rendered by
+// blockingPickerLocalBindings, so the two cannot disagree. Replaces the
+// shared keys.Toggle ("space/x Toggle facet"), whose "x" half stopped being
+// true for this picker when bt-a3a8 gave it a search field (D6 there), and
+// whose "facet" wording never described a blocking relation anyway.
+var blockingPickerToggleHint = keybind.NewBinding(keybind.WithKeys(" "), keybind.WithHelp("space", "Toggle blocking"))
+
+// valueMenuGroupKey returns the binding that OPENS -- and therefore also
+// closes -- the value menu for the given group (design decision a3's
+// "esc/<key> schliesst", now group-aware; see the a3-Nachtrag in
+// docs/plans/jira-style-experiment/design-spec.md). keyValueMenu matches
+// this, valueMenuLocalBindings renders it, and valueMenuBox's own inline
+// hint reads its Help().Key -- three surfaces, one source.
+//
+// An unrecognized/empty group falls back to keys.Status, mirroring
+// valueMenuTitle's own "Set value" defensive fallback: a zero-value model in
+// a render-only test must not panic, and `s` is the historical default.
+func valueMenuGroupKey(group string) keybind.Binding {
+	switch group {
+	case "type":
+		return keys.Type
+	case "priority":
+		return keys.Priority
+	}
+	return keys.Status
+}
+
+// valueMenuGroup reports which single group the open value menu is showing
+// (B11/B12 made the menu single-group, box_menu_value.go) -- the context
+// valueMenuGroupKey needs. "" for a closed/empty menu.
+func (m model) valueMenuGroup() string {
+	if len(m.menuItems) == 0 {
+		return ""
+	}
+	return m.menuItems[0].group
+}
+
 // filterMenuLocalBindings is the Facet-Filter-Menu's own footer set
 // (epic-E7-plan.md Task 7 Step 6, literal): keys.Toggle is exactly the
 // "space: select/toggle" hint Q04 asked for, at the concrete overlay (the
@@ -53,12 +128,18 @@ func filterMenuLocalBindings() []keybind.Binding {
 }
 
 // valueMenuLocalBindings is the Value-Menu overlay's own footer set
-// (epic-E7-plan.md Task 7 Step 6, literal). keys.Status doubles as a close
-// alias here (keyValueMenu, box_menu_value.go: opened by `s`, ALSO closes
-// on a second `s`, same as Back) -- a genuine local binding of this
-// overlay, not a stray global leaking through.
-func valueMenuLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Status, keys.Back}
+// (epic-E7-plan.md Task 7 Step 6). The group's OWN key doubles as a close
+// alias here (keyValueMenu, box_menu_value.go: opened by s/o/u, ALSO closes
+// on a second press of that same key, like Back) -- a genuine local binding
+// of this overlay, not a stray global leaking through.
+//
+// bean bt-z4w7: `group` is what makes the label true. This used to hardcode
+// keys.Status, so a Type-/Priority-Menu opened with o/u still told the PO to
+// press `s` -- and, worse, keyValueMenu really did accept `s` there, because
+// it matched the same hardcoded binding. Both sides now read
+// valueMenuGroupKey(group).
+func valueMenuLocalBindings(group string) []keybind.Binding {
+	return []keybind.Binding{keys.Up, keys.Down, keys.Enter, valueMenuGroupKey(group), keys.Back}
 }
 
 // tagPickerLocalBindings is the Tag-Picker overlay's own footer set.
@@ -83,24 +164,36 @@ func valueMenuLocalBindings() []keybind.Binding {
 // focused search field, so "n" is now just a literal, typeable character
 // (e.g. filtering for a tag containing "n") rather than a picker command.
 // Advertising it here would be actively misleading post-consolidation.
+//
+// bean bt-z4w7: nav is pickerNavUpHint/pickerNavDownHint, not keys.Up/
+// keys.Down -- "i"/"k" are typeable search characters here for exactly the
+// same reason "x" is (keyTagPicker switches on raw tea.KeyUp/tea.KeyDown).
 func tagPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.TagToggle, keys.Enter, keys.Back}
+	return []keybind.Binding{pickerNavUpHint, pickerNavDownHint, keys.TagToggle, keys.Enter, keys.Back}
 }
 
 // parentPickerLocalBindings is the Parent-Picker overlay's own footer set
 // (epic-E7-plan.md Task 7 Step 6, literal) -- genuinely Toggle-free:
 // keyParentPicker (box_picker_parent.go) is a single-select list, no
 // space/x case at all.
+//
+// bean bt-z4w7: arrow-only nav labels, see tagPickerLocalBindings.
 func parentPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Enter, keys.Back}
+	return []keybind.Binding{pickerNavUpHint, pickerNavDownHint, keys.Enter, keys.Back}
 }
 
 // blockingPickerLocalBindings mirrors tagPickerLocalBindings' own Toggle
-// deviation -- keyBlockingPicker (box_picker_blocking.go) also wires
-// keys.Toggle (multi-select blocking-relation membership,
-// toggleBlockPending).
+// deviation -- keyBlockingPicker (box_picker_blocking.go) also wires a
+// multi-select membership toggle (toggleBlockPending).
+//
+// bean bt-z4w7: that toggle is blockingPickerToggleHint (space-only), NOT
+// the shared keys.Toggle this list used to advertise. bt-a3a8 (D6) gave
+// this picker a search field and dropped "x" from its toggle so the letter
+// stays typeable -- the footer kept saying "space/x Toggle facet" for a key
+// combination that no longer existed. Nav is arrow-only for the same
+// reason (see tagPickerLocalBindings).
 func blockingPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, keys.Toggle, keys.Enter, keys.Back}
+	return []keybind.Binding{pickerNavUpHint, pickerNavDownHint, blockingPickerToggleHint, keys.Enter, keys.Back}
 }
 
 // confirmGateLocalBindings is the shared footer set for the two Confirm-Gate
@@ -160,11 +253,14 @@ func fullscreenListLocalBindings() []keybind.Binding {
 }
 
 // overlayLocalBindings dispatches m.overlay to its own footer set --
-// extracted helper for contextualLocalHint's overlay case, below.
-func overlayLocalBindings(o overlayID) []keybind.Binding {
-	switch o {
+// extracted helper for contextualLocalHint's overlay case, below. A method
+// on model (bean bt-z4w7) rather than a free function taking overlayID: the
+// Value-Menu's set now depends on WHICH group is open, which only the model
+// knows (m.valueMenuGroup()).
+func (m model) overlayLocalBindings() []keybind.Binding {
+	switch m.overlay {
 	case overlayValueMenu:
-		return valueMenuLocalBindings()
+		return valueMenuLocalBindings(m.valueMenuGroup())
 	case overlayTagPicker:
 		return tagPickerLocalBindings()
 	case overlayParentPicker:
@@ -195,7 +291,7 @@ func (m model) contextualLocalHint(viewLocal []keybind.Binding) string {
 	case m.filterOpen:
 		return renderBindings(filterMenuLocalBindings())
 	case m.overlay != overlayNone:
-		return renderBindings(overlayLocalBindings(m.overlay))
+		return renderBindings(m.overlayLocalBindings())
 	case m.searchActive:
 		return renderBindings(searchLocalBindings())
 	case m.paletteOpen:

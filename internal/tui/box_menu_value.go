@@ -149,9 +149,18 @@ func (m model) openValueMenu(group string) model {
 
 // keyValueMenu drives the open value menu: up/down move the cursor
 // (navKey), enter applies the cursored value and closes (immediate-apply
-// Enter semantics, design decision a3), esc/s close WITHOUT mutating
-// anything (mirrors keyFilterMenu's esc/enter/f close-without-clearing
-// precedent, box_filter_facets.go).
+// Enter semantics, design decision a3), esc and the group's OWN key close
+// WITHOUT mutating anything (mirrors keyFilterMenu's esc/enter/f
+// close-without-clearing precedent, box_filter_facets.go).
+//
+// a3-NACHTRAG (bean bt-z4w7, B7): decision a3 was written as "esc/s
+// schliesst" back when `s` was the only key that could open this menu. S4
+// added o=Type and u=Priority, and the literal `s` became wrong twice over
+// -- an o-opened menu answered to a key its own footer had no business
+// showing. The close alias is now the key that OPENED the menu, resolved
+// through valueMenuGroupKey (footer_context.go) -- the SAME accessor the
+// footer and the inline hint read, so the three can no longer disagree.
+// This deliberately revises a3 rather than quietly patching a label.
 func (m model) keyValueMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch navKey(msg.String()) {
 	case "up":
@@ -162,7 +171,7 @@ func (m model) keyValueMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch {
-	case keybind.Matches(msg, keys.Back), keybind.Matches(msg, keys.Status):
+	case keybind.Matches(msg, keys.Back), keybind.Matches(msg, valueMenuGroupKey(m.valueMenuGroup())):
 		m.overlay = overlayNone
 		return m, nil
 	case keybind.Matches(msg, keys.Enter):
@@ -240,7 +249,12 @@ func valueMenuTitle(items []valueMenuItem) string {
 // group is open.
 func (m model) valueMenuBox() string {
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("enter:apply  esc/s:cancel") + "\n")
+	// bean bt-z4w7: the cancel key is READ OFF the binding keyValueMenu
+	// actually matches (valueMenuGroupKey, footer_context.go) instead of the
+	// hardcoded "s" this line used to carry -- a Priority menu opened with
+	// `u` said "esc/s:cancel" while the outer Footer Zone 3 said the same
+	// wrong thing, both describing a group they were not showing.
+	b.WriteString(theme.Muted.Render("enter:apply  esc/"+valueMenuGroupKey(m.valueMenuGroup()).Help().Key+":cancel") + "\n")
 
 	var cur *data.Bean
 	if m.idx != nil {

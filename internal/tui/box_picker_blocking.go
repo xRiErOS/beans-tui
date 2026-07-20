@@ -104,7 +104,7 @@ func (m model) openBlockingPicker() (model, tea.Cmd) {
 // NOT navKey, whose "i"/"k" letter aliases would become permanently
 // untypeable here (keyTagPicker's own rationale, applied verbatim); esc
 // (discard) and enter (apply the pending diff) via keybind so a rebind stays
-// correct; and space via keys.TagToggle.
+// correct; and space via blockingPickerToggleHint.
 //
 // ERRATUM vs. this picker's pre-bt-a3a8 behavior: toggle was keys.Toggle,
 // which binds BOTH " " and "x". Intercepting "x" ahead of a focused
@@ -116,6 +116,13 @@ func (m model) openBlockingPicker() (model, tea.Cmd) {
 // contain "x", and space is safe to reserve because it can never be a
 // meaningful leading search character. The filter menu, which still has no
 // input field, keeps the full space/x Toggle unchanged.
+//
+// bean bt-z4w7 (B7): the narrowing above reached the HANDLER in bt-a3a8 but
+// never the FOOTER, which kept advertising keys.Toggle's "space/x Toggle
+// facet" for a combination that no longer existed. Both sides now match/
+// render the one blockingPickerToggleHint (footer_context.go) -- borrowing
+// keys.TagToggle worked key-wise but described the wrong domain ("Toggle
+// tag" in a blocking picker) and left the same two-sources gap open.
 //
 // The cursor and the toggle both address m.blockFiltered, not m.blockItems
 // -- "toggles what's ON SCREEN", so a row narrowed down by typing is the row
@@ -134,7 +141,7 @@ func (m model) keyBlockingPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		m.blockFilter.input.Blur()
 		return m, nil
-	case keybind.Matches(msg, keys.TagToggle):
+	case keybind.Matches(msg, blockingPickerToggleHint):
 		return m.toggleBlockPending(), nil
 	case keybind.Matches(msg, keys.Enter):
 		return m.applyBlockingPickerDiff()

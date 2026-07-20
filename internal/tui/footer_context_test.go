@@ -137,13 +137,25 @@ func TestContextualLocalHintOverlayParentPickerOmitsToggle(t *testing.T) {
 
 // TestContextualLocalHintOverlayBlockingPickerShowsToggle mirrors the
 // Tag-Picker deviation above -- keyBlockingPicker (box_picker_blocking.go)
-// also wires keys.Toggle (multi-select blocking-relation membership).
+// also wires a multi-select blocking-relation membership toggle.
+//
+// REVISED (bean bt-z4w7, B7): this test used to assert "space/x Toggle
+// facet" and was itself part of the bug -- it locked in the SHARED
+// keys.Toggle label after bt-a3a8 (D6) had already narrowed this picker's
+// toggle to space-only, so the footer confidently advertised an "x" that
+// merely typed into the new search field. The assertion now names
+// blockingPickerToggleHint, the one binding keyBlockingPicker actually
+// matches. The general form of this guard lives in
+// footer_binding_source_test.go's TestPickerFooterKeysAreReservedNotTyped.
 func TestContextualLocalHintOverlayBlockingPickerShowsToggle(t *testing.T) {
 	m := model{overlay: overlayBlockingPicker}
 	got := m.contextualLocalHint(viewLocalStub())
 	got = stripHint(got)
-	if !strings.Contains(got, "space/x Toggle facet") {
-		t.Errorf("overlayBlockingPicker: contextualLocalHint = %q, want the Toggle hint", got)
+	if !strings.Contains(got, "space Toggle blocking") {
+		t.Errorf("overlayBlockingPicker: contextualLocalHint = %q, want the space-only toggle hint", got)
+	}
+	if strings.Contains(got, "space/x") {
+		t.Errorf("overlayBlockingPicker: contextualLocalHint = %q, must NOT show the space/x alias -- x is typeable text here (bt-a3a8 D6)", got)
 	}
 }
 
