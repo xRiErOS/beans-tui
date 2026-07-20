@@ -99,5 +99,10 @@ S1–S6 🟢 — **das ganze jira-Modell steht außer S7.** Detail-Box-Form, Fil
 - **80-Spalten-Smoke bestanden** (tmux -x 80 gegen sproutling): kein Overflow, kein Wrap-Bug, feste 3|2 hält, Labels/Werte clampen graziös (Priority→Priorit etc.). **B9/I02 GELÖST.** Capture: scratchpad/cap_80.txt. Damit bei 80 + ~130 Spalten validiert.
 - Restkosmetik (kein Bug): bei ≤80 Spalten clampen Feld-Labels/Werte (bewusster D12-Tradeoff). Optionaler Polish später: Kurz-Labels oder 2-up bei extremer Enge.
 
+## Operationalisiert in beans (2026-07-20, N1)
+Arbeit wird ab jetzt über **beans** gesteuert, nicht mehr über diese Datei. Epic: **`bt-vy1q`** (trägt den gemeinsamen Kontext + Constraints + erledigte Slices mit SHAs).
+Offene Kinder: `bt-ze10` Detail-Scroll (F1, high) · `bt-fy5d` Footer entschlacken (N2) · `bt-pl5p` Projekt-Slug aus IDs (N5) · `bt-oqsv` leere Footer-Zeile (N6) · `bt-ty48` GIF Body-Scroll (N3, blocked-by ze10) · `bt-z4w7` Value-Menü-Alias (B7) · `bt-s90e` Fullscreen ignoriert flatView (B8) · `bt-dovm` S7 huh-Ersatz (draft) · `bt-2o9a` Merge-Entscheidung (draft).
+`beans list --ready` zeigt den nächsten Schritt. Diese STATE.md bleibt Kontext-/Historien-Anker.
+
 ## Nächste Aktion (für Resume)
-WARTET auf Nutzer-Entscheidung zu S7-Timing + Merge (+ optional 80-Spalten-Smoke). Bei „S7 jetzt": großer Umbau, eigene Slice-Kette planen (Create-Form inline, Picker→eigene maus-native Popups, huh + langsame huh-Drive-Tests entfernen). Bei „erst validieren": VHS-80/100-Smoke + Live-Test, dann entscheiden. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
+`beans list --ready` unter Epic `bt-vy1q`. S7 (`bt-dovm`) + Merge (`bt-2o9a`) stehen auf draft — brauchen PO-Freigabe. Bei „S7 jetzt": großer Umbau, eigene Slice-Kette planen (Create-Form inline, Picker→eigene maus-native Popups, huh + langsame huh-Drive-Tests entfernen). Bei „erst validieren": VHS-80/100-Smoke + Live-Test, dann entscheiden. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
