@@ -316,6 +316,125 @@ func (m model) boxFormNav(b *data.Bean, dir string) model {
 	return m
 }
 
+// boxFormFieldRect (Slice A, bt-f0y9 "feld-verankertes Inline-Dropdown", D09
+// revidiert) returns a field's absolute SCREEN rect (x, y, w, h) exactly as
+// detailBoxForm renders it today -- read-only, reproduces existing geometry,
+// does not change or call into any render path. Verified render-grounded
+// (box_nav_field_test.go's TestBoxFormFieldRectMatchesRenderedBoxCorners
+// locates the real "╭" corner in m.View() and asserts the returned x/y lands
+// exactly on it, at 80 AND 120 columns) rather than derived purely from
+// reading the existing click-side arithmetic -- see the ERRATUM paragraph
+// below for why.
+//
+//   - Row span (Y): boxFormFieldSpan (box_detail_form.go) minus
+//     boxFormEffectiveScroll (mouse.go), against clickPaneGeometry's originY
+//     corrected for the box-form filter bar the SAME way detailBoxFormClickRow
+//     is (B6, filterBarHeight, ONLY viewBrowseRepo ever shows the bar). This
+//     half matches detailBoxFormClickRow's own contentRow = clickRow +
+//     offset exactly, just inverted (screenRow = contentRow - offset) --
+//     confirmed render-grounded, no deviation here.
+//   - Pane accW: boxFormPaneMetrics (mouse.go) already branches on
+//     m.fullscreen == fullscreenDetail (bt-s90e) -- reused verbatim so this
+//     function and boxFormPaneMetrics' own callers (boxFormNav,
+//     boxFormScrollBounds) can never disagree about the pane's width.
+//   - Column span within the field's grid row: gridColWidths (box_detail_
+//     form.go) + detailBoxFormGap, walked forward (colX = Σwidths[0:col] +
+//     col*gap) -- gridColAt (mouse.go) is the SAME table's inverse direction.
+//   - Pane left edge (X): NOT originX+lw (detailBoxFormClickRow's own click
+//     boundary, mouse.go) -- see ERRATUM below. Instead: Split mode (m.
+//     fullscreen != fullscreenDetail), the Detail pane's own left border sits
+//     at originX+lw+2 (the Tree/Backlog/Flat pane occupies lw+2 columns:
+//     border+lw content+border, JoinHorizontal butts the Detail pane directly
+//     against it with no gap), and detailBoxForm's own content -- the
+//     accW-wide string dropdownBox/panelBox draw, which begins with its own
+//     "╭"/"│" -- starts ONE column further right of that, at originX+lw+3.
+//     fullscreenDetail (bt-s90e): there is no preceding Tree/Backlog pane at
+//     all (renderFullscreenBody's ONE full-width pane), so content starts at
+//     originX+1.
+//
+// ERRATUM (Grounding-Kultur, checked rather than assumed): the Grounding's
+// own "trivial from gridColWidths" note implicitly assumed the pane's
+// content starts at originX+lw (Split) / originX (fullscreen) -- the SAME
+// boundary detailBoxFormClickRow's own `msg.X < originX+lw` gate uses. A
+// render-grounded probe (ansi-stripped m.View(), a real "╭" search) found
+// this is off by +3 columns in Split mode (+1 in fullscreen) from where
+// detailBoxForm ACTUALLY draws: detailBoxFormClickRow's own X arithmetic
+// only ever gates a coarse "which pane" decision and, past that, buckets via
+// gridColAt against ~14-15-cell-wide columns -- a 3-cell systematic
+// undershoot never crosses a bucket boundary for any EXISTING test (all
+// click near a hotkey badge, comfortably mid-box) and so was never caught.
+// boxFormFieldRect exists specifically to hand Slice C/B a rect a popup gets
+// ANCHORED at, where a 3-column miss would be a visibly wrong overlay
+// position -- so this function computes the geometrically exact origin
+// (render-verified) rather than copying detailBoxFormClickRow's imprecise
+// one. The two do not silently diverge in BEHAVIOR: a click at this rect's
+// own center still round-trips through detailBoxFormClickRow to the SAME
+// field (verified in the same test, both at 80 and 120 columns) precisely
+// because the pre-existing 3-cell slack keeps every center-click inside the
+// correct bucket. detailBoxFormClickRow itself is NOT touched by this slice
+// (see design-spec.md discussion under bt-f0y9 "## Notes for Slice C" for
+// whether its own boundary should ever be tightened).
+//
+// No overflow/clip handling here (a field scrolled fully out of the pane, or
+// a rect a caller would place a popup at that runs off the bottom of the
+// terminal) -- that is Slice B's placeOverlayAt concern, this function only
+// ever answers "where does detailBoxForm actually draw this box right now",
+// on- or off-screen alike. ok=false for a nil bean or an out-of-range field
+// index -- callers get a clean "no rect" rather than a garbage zero rect.
+func boxFormFieldRect(m model, b *data.Bean, field int) (x, y, w, h int, ok bool) {
+	if b == nil || field < 0 || field >= len(boxFormFieldOrder) {
+		return 0, 0, 0, 0, false
+	}
+
+	ww, hh := m.width, m.height
+	if ww <= 0 {
+		ww = 80
+	}
+	if hh <= 0 {
+		hh = 24
+	}
+	innerW := ww - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+
+	_, lw, _, originX, originY := clickPaneGeometry(ww, hh, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
+	if boxFormEnabled() && m.view != viewBacklog {
+		originY += filterBarHeight // B6: same correction detailBoxFormClickRow applies (mouse.go)
+	}
+
+	accW, _ := boxFormPaneMetrics(m, b) // fullscreenDetail-aware accW (bt-s90e)
+
+	// Pane's own left border column (see ERRATUM above): Split mode butts
+	// the Detail pane directly against the Tree/Backlog/Flat pane's own
+	// lw+2-wide box; fullscreenDetail has no preceding pane at all.
+	paneLeftBorder := originX
+	if m.fullscreen != fullscreenDetail {
+		paneLeftBorder = originX + lw + 2
+	}
+	contentX := paneLeftBorder + 1 // one column past the pane's own left border/corner
+
+	f := boxFormFieldOrder[field]
+	widths := gridColWidths(boxFormRowCols(f.row), accW)
+	if f.col < 0 || f.col >= len(widths) {
+		return 0, 0, 0, 0, false
+	}
+	colX := 0
+	for i := 0; i < f.col; i++ {
+		colX += widths[i] + detailBoxFormGap
+	}
+
+	blocks := boxFormBlocks(m.idx, b, accW, -1) // cursor never changes line counts
+	start, height := boxFormFieldSpan(blocks, field)
+	rowY := start - boxFormEffectiveScroll(m, b)
+
+	return contentX + colX, originY + rowY, widths[f.col], height, true
+}
+
 // boxFormActivateCursor fires the cursored field's own editor -- enter's
 // half of Ziel 4, dispatched through the SAME activateBoxFormTarget
 // (mouse.go) a click on that box takes, so keyboard and mouse can never open

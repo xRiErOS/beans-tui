@@ -14,12 +14,14 @@ package tui
 // suites deliberately share the long-Body fixture.
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -525,5 +527,108 @@ func TestBoxFormFieldNavInertWithoutFlag(t *testing.T) {
 	m = step(t, m, keyMsg(tea.KeyEnter))
 	if m.boxFormCursor != 0 || m.boxFormCursorBean != "" {
 		t.Fatalf("boxFormCursor/boxFormCursorBean = %d/%q, want 0/\"\" (accordion mode must never touch the box-form cursor)", m.boxFormCursor, m.boxFormCursorBean)
+	}
+}
+
+// --- Slice A (bt-f0y9, D09 revidiert): forward field->screen-rect geometry ---
+
+// boxFormRectModel builds a fixtureModel with BT_BOXFORM=1, tk-2 focused, at
+// the given terminal width (80/120, S6 grounding's own boundary widths) --
+// unscrolled (fixtureBeans' tk-2 has no long Body, unlike
+// boxFormLongBodyBeans), so Status/Type/Priority sit at their unscrolled
+// render position and boxFormEffectiveScroll(m, b) is 0.
+func boxFormRectModel(t *testing.T, width int) model {
+	t.Helper()
+	t.Setenv("BT_BOXFORM", "1")
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: width, Height: 30})
+	m = focusBean(m, "tk-2")
+	return m
+}
+
+// TestBoxFormFieldRectMatchesRenderedBoxCorners is the RED-first, render-
+// grounded proof for boxFormFieldRect (Slice A): for each of Status/Type/
+// Priority, at BOTH 80 and 120 columns, the returned (x, y, w, h) rect's
+// TOP-LEFT corner must be the box's own "╭" corner in the REAL rendered
+// View() (never hand-computed against the same formula the function under
+// test uses -- mouse_test.go's screenLines/ansi.Cut precedent), and a
+// left-click smack in the middle of that rect must resolve back to the SAME
+// field via detailBoxFormClickRow (mouse.go) -- the forward rect and the
+// pre-existing inverse click resolution can never independently drift
+// (Golden-Rule-Drift-Schutz, the Slice-Vorschlag's own cross-check ask).
+func TestBoxFormFieldRectMatchesRenderedBoxCorners(t *testing.T) {
+	cases := []struct {
+		field, hotkey, target string
+	}{
+		{"status", "(s)", boxFormTargetStatus},
+		{"type", "(o)", boxFormTargetType},
+		{"priority", "(u)", boxFormTargetPriority},
+	}
+	widths := []int{80, 120}
+
+	for _, width := range widths {
+		width := width
+		for _, tc := range cases {
+			tc := tc
+			t.Run(fmt.Sprintf("w=%d/%s", width, tc.field), func(t *testing.T) {
+				m := boxFormRectModel(t, width)
+				b := m.focusedBean()
+				if b == nil {
+					t.Fatalf("setup: focusedBean() is nil")
+				}
+
+				x, y, w, h, ok := boxFormFieldRect(m, b, fieldIdx(t, tc.field))
+				if !ok {
+					t.Fatalf("boxFormFieldRect(%s) ok=false, want true", tc.field)
+				}
+				if w <= 0 || h <= 0 {
+					t.Fatalf("boxFormFieldRect(%s) = (%d,%d,%d,%d), want positive w/h", tc.field, x, y, w, h)
+				}
+
+				lines := screenLines(m)
+				if y < 0 || y >= len(lines) {
+					t.Fatalf("boxFormFieldRect(%s) y=%d out of the rendered View()'s %d lines", tc.field, y, len(lines))
+				}
+				corner := ansi.Cut(lines[y], x, x+1)
+				if corner != "╭" {
+					t.Fatalf("boxFormFieldRect(%s) top-left = %q at (x=%d,y=%d), want the box's own \"╭\" corner\nrow: %q", tc.field, corner, x, y, lines[y])
+				}
+				// bottomBorder row: badge lives on it, confirms h spans the
+				// real 3-line dropdownBox and never drifts from boxFormFieldSpan.
+				bottomRow := y + h - 1
+				if bottomRow < 0 || bottomRow >= len(lines) {
+					t.Fatalf("boxFormFieldRect(%s) bottom row %d out of range", tc.field, bottomRow)
+				}
+				if !strings.Contains(lines[bottomRow], tc.hotkey) {
+					t.Fatalf("boxFormFieldRect(%s) bottom row %q does not contain badge %q", tc.field, lines[bottomRow], tc.hotkey)
+				}
+
+				// Reciprocity: a click in the middle of the returned rect must
+				// resolve back through detailBoxFormClickRow to the SAME target
+				// (the Slice-Vorschlag's own cross-check, forward vs. the
+				// pre-existing inverse).
+				msg := tea.MouseMsg{X: x + w/2, Y: y + h/2, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}
+				target, ok := detailBoxFormClickRow(m, msg)
+				if !ok || target != tc.target {
+					t.Fatalf("detailBoxFormClickRow(rect center of %s) = (%q,%v), want (%q,true)", tc.field, target, ok, tc.target)
+				}
+			})
+		}
+	}
+}
+
+// TestBoxFormFieldRectNilBeanNotOk guards the defensive nil-bean/out-of-range
+// contract: no garbage zero-rect, a clean ok=false.
+func TestBoxFormFieldRectNilBeanNotOk(t *testing.T) {
+	m := boxFormRectModel(t, 100)
+	if _, _, _, _, ok := boxFormFieldRect(m, nil, fieldIdx(t, "status")); ok {
+		t.Fatal("boxFormFieldRect(nil bean) ok=true, want false")
+	}
+	b := m.focusedBean()
+	if _, _, _, _, ok := boxFormFieldRect(m, b, -1); ok {
+		t.Fatal("boxFormFieldRect(field=-1) ok=true, want false")
+	}
+	if _, _, _, _, ok := boxFormFieldRect(m, b, len(boxFormFieldOrder)); ok {
+		t.Fatal("boxFormFieldRect(field=out-of-range) ok=true, want false")
 	}
 }
