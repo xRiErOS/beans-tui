@@ -114,3 +114,56 @@ Offene Kinder: `bt-ze10` Detail-Scroll (F1, high) · `bt-fy5d` Footer entschlack
 2. Reihenfolge-Empfehlung: `bt-ze10` (falls offen) → `bt-ty48` (GIF, blocked-by ze10) → `bt-1o4g` (Feld-Nav, blocked-by ze10) → `bt-a3a8` (Picker-Suche, high) → Platz-Trilogie `bt-fy5d`/`bt-pl5p`/`bt-oqsv` → `bt-z4w7`/`bt-s90e`.
 3. `bt-dovm` (S7 huh-Ersatz) + `bt-2o9a` (Merge) stehen auf **draft** — brauchen PO-Freigabe, nicht eigenmächtig starten.
 4. Subagenten-Dispatch-Muster: voller Testlauf im VORDERGRUND anweisen (Agenten detachen sonst vor Testende und müssen per SendMessage resumed werden). Bei „S7 jetzt": großer Umbau, eigene Slice-Kette planen (Create-Form inline, Picker→eigene maus-native Popups, huh + langsame huh-Drive-Tests entfernen). Bei „erst validieren": VHS-80/100-Smoke + Live-Test, dann entscheiden. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
+
+## Stand 2026-07-20 (nach Kompaktierung) — PO-Abnahme + Parallelbetrieb
+
+### PO-Entscheidungen
+- **Spike ist abgenommen.** Nach der Validierung gegen sproutling (VHS-GIF + 80-Spalten-Smoke)
+  gilt das Experiment als erfolgreich. `experiment/jira-style-ui` wird **vollstaendig** auf
+  `main` gemerged. Damit ist die Richtungsfrage beantwortet, offen bleibt nur das Timing
+  (bt-2o9a, draft -> todo).
+- **bt-ce7i geschlossen (Option B):** die ~35 fremden `.beans`-Aenderungen aus `d4a5367`
+  bleiben, wo sie sind — sie kommen mit dem Merge ohnehin auf main. Kein History-Rewrite.
+  Die Lehre bleibt in Kraft: in `.beans/` nur explizite Einzelpfade stagen, nie ein Glob.
+
+### Erledigt
+- **bt-ze10 (F1, Detail-Scroll) 🟢** — Commit `8e5a869`. Geclampter Scroll-Viewport fuer die
+  Box-Form-Detail-Pane, komplett hinter `boxFormEnabled()`. Neue Felder `boxFormScroll` +
+  `boxFormScrollBean` (abgeleiteter Reset per Bean-ID-Vergleich statt Nachziehen an jeder
+  Cursor-Bewegung). Wiederverwendet das vorhandene `scrollView`-Primitiv. Antrieb: up/down in
+  `keyDetailFocus` + Mausrad ueber der Pane (`boxFormWheelHit`), beides ueber die eine
+  Funktion `adjustBoxFormScroll`. Neue Tests `box_form_scroll_test.go` (7). Golden unveraendert.
+  **Scope-Cut:** Fullscreen scrollt NICHT — als Prelude in bt-s90e protokolliert (Commit `7cd3042`).
+
+### Grounding (Investigatoren, read-only) — in die beans gegossen
+- **bt-a3a8** (Commit `2efddb5`): Kernbefund — **die Suche existiert schon** im Tag-Picker
+  (`box_picker_tag.go`, `textinput` + `filterTagItems`). Die Aufgabe ist ein Port, kein Neubau.
+  Filter-Strip aus `gridRow`/`scalarCell`/`dropdownBox` wiederverwendbar.
+- **Trilogie bt-fy5d/bt-oqsv/bt-pl5p** (Commit `b72ad49`): **muss als EIN Paket laufen** —
+  die drei teilen sechs Golden-Dateien. Fallstricke: `mouse.go:112` (`footH ... + 2`) haengt an
+  der Footer-Hoehe (sonst Klick-Offset); ID wird an ZWEI Stellen gerendert (`treeRowText` +
+  `backlogRowText`); Footer-Ausduennung darf nur die Anzeige treffen, nicht die
+  keymap-Registrierung (Drift-Guard).
+
+### Laufend (2 Implementer parallel)
+- **Trilogie** (`bt-fy5d`+`bt-oqsv`+`bt-pl5p`) im **Haupt-Tree** auf `experiment/jira-style-ui`.
+- **bt-a3a8** (Picker-Suche) in einem **isolierten Worktree**, eigener Branch.
+  Muss beim Zusammenfuehren zurueckgemerged werden; Golden-Konflikte moeglich, deshalb wurde
+  ihm untersagt, die geteilten Golden zu regenerieren.
+
+### Parallelisierungs-Regel (gelernt)
+Der Flaschenhals ist der EINE Working Tree, nicht die Agentenzahl. `types.go`/`update.go`/
+`view_browse_repo.go`/`mouse.go` werden von fast jedem bean beruehrt. Read-only-Arbeit
+(Grounding, Scope, Review) laeuft gefahrlos parallel; Implementierung entweder sequenziell
+im Haupt-Tree oder in Worktrees mit disjunkten Dateimengen.
+
+### Offen danach
+`bt-ty48` (GIF Body-Scroll — jetzt entblockt, ze10 fertig) · `bt-1o4g` (Feld-Navigation,
+entblockt) · `bt-s90e` (Fullscreen: flatView + Scroll, zwei Luecken zusammen) · `bt-z4w7`
+(Value-Menue-Alias) · `bt-dovm` (S7 huh-Ersatz, draft, braucht PO-Freigabe) · `bt-2o9a` (Merge).
+
+### Offene Frage an den PO
+Wenn der Branch komplett auf main geht: soll `BT_BOXFORM` weiter default-aus sein? Ein
+abgenommenes Feature hinter einem Env-Flag zu verstecken ist fragwuerdig. Optionen: Default
+an (Flag als Notausgang) / Flag ganz raus / so lassen. Noch nicht entschieden, gehoert vor
+den Merge.
