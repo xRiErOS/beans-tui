@@ -96,7 +96,8 @@ S1–S6 🟢 — **das ganze jira-Modell steht außer S7.** Detail-Box-Form, Fil
 
 ## Validierung (2026-07-20)
 - **VHS-GIF gerendert** gegen sproutling (114 beans, echte Daten): Box-Form voll bestätigt — Title/Status(s)/Type(o)/Priority(u)/Parent(a)/Tags(t)/Body, 3|2-Grid, Filter-Leiste, salient. Datei: `~/Obsidian/Vault/lean-stack/beans-tui/beans-tui-boxform.gif` (+ `boxform-demo.tape`). PATH-Fix nötig (vhs-zsh sourced ~/.zshrc nicht → `export PATH=/opt/homebrew/bin:$PATH`).
-- Offen: **80-Spalten**-Smoke (B9/I02) noch nicht gefahren (GIF war ~130 Spalten). tmux `capture-pane` bei -x 80 gegen sproutling = exakter Text.
+- **80-Spalten-Smoke bestanden** (tmux -x 80 gegen sproutling): kein Overflow, kein Wrap-Bug, feste 3|2 hält, Labels/Werte clampen graziös (Priority→Priorit etc.). **B9/I02 GELÖST.** Capture: scratchpad/cap_80.txt. Damit bei 80 + ~130 Spalten validiert.
+- Restkosmetik (kein Bug): bei ≤80 Spalten clampen Feld-Labels/Werte (bewusster D12-Tradeoff). Optionaler Polish später: Kurz-Labels oder 2-up bei extremer Enge.
 
 ## Nächste Aktion (für Resume)
 WARTET auf Nutzer-Entscheidung zu S7-Timing + Merge (+ optional 80-Spalten-Smoke). Bei „S7 jetzt": großer Umbau, eigene Slice-Kette planen (Create-Form inline, Picker→eigene maus-native Popups, huh + langsame huh-Drive-Tests entfernen). Bei „erst validieren": VHS-80/100-Smoke + Live-Test, dann entscheiden. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
