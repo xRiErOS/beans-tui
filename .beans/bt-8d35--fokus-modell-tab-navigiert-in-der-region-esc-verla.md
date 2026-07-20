@@ -1,11 +1,11 @@
 ---
 # bt-8d35
 title: 'Fokus-Modell: tab navigiert in der Region, esc verlaesst sie'
-status: draft
+status: todo
 type: feature
 priority: high
 created_at: 2026-07-20T09:30:49Z
-updated_at: 2026-07-20T09:30:49Z
+updated_at: 2026-07-20T09:47:31Z
 parent: bt-vy1q
 ---
 
@@ -76,3 +76,37 @@ Verlassen: `esc` -> Tree fokussiert.
 - [ ] Verhalten in Backlog/Review/Fullscreen geprueft, nicht nur in Browse
 - [ ] tmux-Smoke bei 80 Spalten
 - [ ] voller Testlauf gruen
+
+
+## PO-Entscheidungen 2026-07-20 — die drei offenen Punkte sind geklaert
+
+**1. Oeffnen: `enter`, ueberall.** Konsistenz schlaegt Bequemlichkeit. `space` oeffnet NICHT.
+Im offenen Mehrfachauswahl-Menue schaltet `space` einen Wert um (wie im Tag-Picker heute).
+
+**2. Zuruecksetzen: `X`.** Kein `ctrl+x`. Die vorhandene `FilterClear`-Bindung (D07,
+gross = View/Global) wird wiederverwendet.
+**Folge-Constraint:** damit darf der Filter-Strip **keine tippbaren Felder** bekommen —
+ein Texteingabefeld wuerde das `X` verschlucken und den Ctrl-Akkord erzwingen. Wenn spaeter
+eine Titel-/Freitextsuche in den Strip soll, ist diese Entscheidung neu zu bewerten.
+
+**3. Pfeiltasten im Detail scrollen die GESAMTE Ansicht.** Sie bewegen NICHT mehr den
+Feld-Cursor — das uebernimmt `tab`/`shift+tab`.
+
+### Was das fuer bt-1o4g bedeutet (wichtig, kein Voll-Rueckbau)
+bt-1o4g (Commit `75d791a`) hat zwei Dinge gebaut:
+- die Pfeiltasten-Bindung auf `boxFormNav` -> **wird ersetzt**, Pfeile scrollen kuenftig
+  wieder ueber `adjustBoxFormScroll` (das ist exakt der Zustand von bt-ze10)
+- die **Scroll-Mitnahme** ("reveal-then-move", fokussiertes Feld darf nie ausserhalb des
+  Viewports liegen) -> **BLEIBT und wird an `tab` gehaengt**. Springt `tab` auf ein Feld
+  ausserhalb des sichtbaren Bereichs, muss der Viewport nachziehen. Ohne das waere die
+  Tab-Navigation blind.
+- `boxFormFieldOrder` / `boxFormFieldAt` / `activateBoxFormTarget` -> **bleiben unveraendert**.
+  Die Feld-Reihenfolge, die `tab` abwandert, ist dieselbe Tabelle, die Maus und Render
+  benutzen. Keine zweite Liste anlegen.
+
+Der Test `TestBoxFormCursorStaysVisibleWhileNavigating` gilt weiter — nur getrieben von
+`tab` statt von den Pfeilen. `TestBoxFormDownScrollsThroughATallField` (exakt-plusminus-1
+am Pfeil) gilt ebenfalls weiter, denn die Pfeile scrollen ja wieder.
+
+## Status
+Draft aufgehoben — umsetzbar.
