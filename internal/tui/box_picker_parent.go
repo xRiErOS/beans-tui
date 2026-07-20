@@ -16,6 +16,7 @@ import (
 	"github.com/xRiErOS/beans-tui/internal/data"
 	"github.com/xRiErOS/beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -77,17 +78,26 @@ func buildParentItems(idx *data.Index, b *data.Bean) []pickerItem {
 // newParentPickerModel:175-182). mutTarget captures the bean ID only, never
 // the etag (design decision d) -- a watch-reload between open and the
 // eventual enter is honored automatically via beanETag.
-func (m model) openParentPicker() model {
+//
+// bean bt-a3a8: opening also installs a FRESH pickerFilter and seeds
+// parentFiltered from it (the full list, since the query starts empty), so
+// the current-parent cursor seed below still runs against everything that
+// is actually on screen. Returns textinput.Blink for the now-always-focused
+// search field (openTagPicker's own convention) -- hence the new tea.Cmd
+// return where this used to hand back a bare model.
+func (m model) openParentPicker() (model, tea.Cmd) {
 	b := m.focusedBean()
 	if b == nil {
-		return m
+		return m, nil
 	}
 	m.mutTarget = b.ID
 	m.parentItems = buildParentItems(m.idx, b)
+	m.parentFilter = newPickerFilter()
+	m.parentFiltered = filterPickerItems(m.idx, m.parentItems, m.parentFilter, true)
 
 	m.menu = listState{}
-	m.menu.setLen(len(m.parentItems))
-	for i, it := range m.parentItems {
+	m.menu.setLen(len(m.parentFiltered))
+	for i, it := range m.parentFiltered {
 		if it.id == b.Parent {
 			m.menu.cursor = i
 			break
@@ -95,29 +105,58 @@ func (m model) openParentPicker() model {
 	}
 
 	m.overlay = overlayParentPicker
-	return m
+	return m, textinput.Blink
 }
 
-// keyParentPicker drives the open Parent-Picker: up/down move the cursor
-// (navKey), enter applies the cursored row immediately (SetParent/
-// RemoveParent) and closes, esc closes without mutating anything.
+// parentPickerCursorItem resolves the cursored row of the FILTERED list --
+// the single place the Parent-Picker turns a cursor into a selection, shared
+// by applyParentPickerSelection and its tests (bean bt-a3a8: before
+// filtering existed, the cursor indexed parentItems directly at every call
+// site, which would now silently select the wrong bean).
+func (m model) parentPickerCursorItem() (pickerItem, bool) {
+	if m.menu.cursor < 0 || m.menu.cursor >= len(m.parentFiltered) {
+		return pickerItem{}, false
+	}
+	return m.parentFiltered[m.menu.cursor], true
+}
+
+// keyParentPicker drives the open Parent-Picker. Since bean bt-a3a8 the
+// overlay hosts an always-focused search field (box_picker_filter.go), so
+// only a small reserved set is intercepted ahead of it and everything else
+// belongs to the input -- see keyBlockingPicker's doc comment for the full
+// rationale, which applies here verbatim. Two differences from that picker,
+// both structural: there is no space-toggle (single-select, so space is just
+// another typeable character in a title search), and enter applies the
+// cursored row IMMEDIATELY (SetParent/RemoveParent) rather than diffing.
+//
+// Raw tea.KeyUp/tea.KeyDown deliberately, NOT navKey: "i"/"k" must stay
+// literal typeable characters inside the search field.
 func (m model) keyParentPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch navKey(msg.String()) {
-	case "up":
+	switch msg.Type {
+	case tea.KeyUp:
 		m.menu.move(-1)
 		return m, nil
-	case "down":
+	case tea.KeyDown:
 		m.menu.move(1)
 		return m, nil
 	}
 	switch {
 	case keybind.Matches(msg, keys.Back):
 		m.overlay = overlayNone
+		m.parentFilter.input.Blur()
 		return m, nil
 	case keybind.Matches(msg, keys.Enter):
 		return m.applyParentPickerSelection()
 	}
-	return m, nil
+
+	f, cmd, changed := m.keyPickerFilter(m.parentFilter, msg)
+	m.parentFilter = f
+	if changed {
+		m.parentFiltered = filterPickerItems(m.idx, m.parentItems, m.parentFilter, true)
+		m.menu = listState{}
+		m.menu.setLen(len(m.parentFiltered))
+	}
+	return m, cmd
 }
 
 // applyParentPickerSelection dispatches SetParent (a real row) or
@@ -132,10 +171,10 @@ func (m model) keyParentPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // guard as applyValueMenuSelection/applyTagPickerDiff).
 func (m model) applyParentPickerSelection() (tea.Model, tea.Cmd) {
 	m.overlay = overlayNone
-	if m.menu.cursor < 0 || m.menu.cursor >= len(m.parentItems) {
+	it, ok0 := m.parentPickerCursorItem()
+	if !ok0 {
 		return m, nil
 	}
-	it := m.parentItems[m.menu.cursor]
 	id := m.mutTarget
 	etag, ok := m.beanETag(id)
 	if !ok {
@@ -177,18 +216,25 @@ func (m model) applyParentPickerSelection() (tea.Model, tea.Cmd) {
 // modal past 14 screen lines. Accepted per the bean's own note: most bean
 // titles stay single-line even at 85% width, height (parentPickerRowBudget)
 // deliberately stays untouched (PO: "Höhe passt").
+//
+// bt-a3a8: the search/chip chrome now sits above the rows and the window
+// shrinks to pickerFilteredRowBudget to pay for it (see blockingPickerBox's
+// twin note). The "(No parent)" clear row stays pinned at index 0 no matter
+// what is typed (filterPickerItems' keepFirstSynthetic) -- it is an ACTION,
+// not a candidate.
 func (m model) parentPickerBox() string {
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("enter:set  esc:cancel") + "\n")
+	b.WriteString(pickerFilterHint("enter:set") + "\n")
 
 	w := wideModalWidth(m.width)
 	contW := w - 2 // modalBox's own Padding(0,1) overhead -- border adds no further inner-width cost (empirically verified: Width() already absorbs padding, Border() only adds outside it)
 	if contW < 8 {
 		contW = 8
 	}
+	b.WriteString(m.parentFilter.chrome(contW))
 
-	rows := make([]string, len(m.parentItems))
-	for i, it := range m.parentItems {
+	rows := make([]string, len(m.parentFiltered))
+	for i, it := range m.parentFiltered {
 		title := it.title
 		if it.id == "" {
 			title = theme.Dim.Render(title)
@@ -203,13 +249,17 @@ func (m model) parentPickerBox() string {
 		}
 		rows[i] = hangingIndentWrap(prefix, title, contW)
 	}
-	rows = windowAround(rows, parentPickerRowBudget, m.menu.cursor)
+	rows = pickerRowWindow(rows, m.menu.cursor, m.height)
 	b.WriteString(strings.Join(rows, "\n"))
 	if len(rows) > 0 {
 		b.WriteString("\n")
 	}
-	if len(m.parentItems) == 1 {
-		b.WriteString(theme.Muted.Render("(no eligible parent types)") + "\n")
+	if len(m.parentFiltered) <= 1 {
+		if len(m.parentItems) == 1 {
+			b.WriteString(theme.Muted.Render("(no eligible parent types)") + "\n")
+		} else {
+			b.WriteString(theme.Muted.Render("(no match)") + "\n")
+		}
 	}
 	return modalPanel("Assign parent", b.String(), "", w, theme.Mauve)
 }

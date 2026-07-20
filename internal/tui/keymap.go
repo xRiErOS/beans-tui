@@ -92,6 +92,32 @@ type keyMap struct {
 	// so the two coexist without tripping that drift guard.
 	TagToggle keybind.Binding // space — toggle tag (Tag-Picker, space-only)
 
+	// PickerFacet* (bean bt-a3a8, PO-Nebenbefund N7) are the Blocking-/
+	// Parent-Picker's OWN chip-strip cycles (box_picker_filter.go). They are
+	// deliberately CTRL-CHORDS, not the mnemonic bare letters t/s/p: both
+	// pickers now host an always-focused search field, and a bare letter
+	// intercepted ahead of a textinput becomes permanently untypeable there
+	// -- the exact bug Review-R1 B01 found in the Tag-Picker (bean bt-9ipw,
+	// see TagToggle's doc-stamp above). A ctrl-chord can never be consumed
+	// as a literal character, so the control layer and the typing layer are
+	// structurally incapable of colliding. Tags takes ctrl+g because "t" was
+	// already spent on Type here; Status takes ctrl+n because design-spec.md
+	// §7 FORBIDS ctrl+s outright (XOFF/XON flow control -- on many terminal/
+	// tmux configs the sequence never reaches the app at all, guarded by
+	// TestKeymapNoCtrlSQ). Both non-mnemonic choices are self-documenting on
+	// screen: each chip renders its own hotkey badge (dropdownBox's hotkey
+	// slot, pickerFilter.strip), so nothing depends on the PO guessing them.
+	//
+	// Like NewTag/TagToggle these are OVERLAY-LOCAL, not global checkpoint
+	// keys: keyPickerFilter (box_picker_filter.go) dispatches on the raw
+	// tea.KeyType, and these typed Bindings exist so the Help-Overlay
+	// (helpGroups) documents them at all -- a raw msg.Type switch cannot be
+	// rendered.
+	PickerFacetType     keybind.Binding // ctrl+t — cycle the picker's Type chip
+	PickerFacetStatus   keybind.Binding // ctrl+n — cycle the picker's Status chip
+	PickerFacetPriority keybind.Binding // ctrl+p — cycle the picker's Priority chip
+	PickerFacetTag      keybind.Binding // ctrl+g — cycle the picker's Tags chip
+
 	// RenameTag (E10 Task 5, bean bt-y9my, epic bt-362n D13/D14) is a
 	// Tag-Management-page-LOCAL binding on "e" -- the SAME raw key as the
 	// GLOBAL Editor binding ("e"/"ctrl+e"), but a disjoint, mutually
@@ -171,6 +197,11 @@ func newKeyMap() keyMap {
 
 		TagToggle: keybind.NewBinding(keybind.WithKeys(" "), keybind.WithHelp("space", "Toggle tag")),
 
+		PickerFacetType:     keybind.NewBinding(keybind.WithKeys("ctrl+t"), keybind.WithHelp("^t", "picker: type filter")),
+		PickerFacetStatus:   keybind.NewBinding(keybind.WithKeys("ctrl+n"), keybind.WithHelp("^n", "picker: status filter")),
+		PickerFacetPriority: keybind.NewBinding(keybind.WithKeys("ctrl+p"), keybind.WithHelp("^p", "picker: priority filter")),
+		PickerFacetTag:      keybind.NewBinding(keybind.WithKeys("ctrl+g"), keybind.WithHelp("^g", "picker: tag filter")),
+
 		RenameTag: keybind.NewBinding(keybind.WithKeys("e"), keybind.WithHelp("e", "Rename")),
 
 		Fullscreen: keybind.NewBinding(keybind.WithKeys("v"), keybind.WithHelp("v", "fullscreen")),
@@ -198,6 +229,12 @@ func (k keyMap) helpGroups() []helpGroup {
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen, k.HistoryBack, k.HistoryForward}},
 		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit, k.FlatView}},
 		{"Actions", []keybind.Binding{k.Status, k.Type, k.Priority, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.TagToggle, k.Sort, k.NewTag, k.RenameTag}},
+		// bean bt-a3a8: the Blocking-/Parent-Picker's own chip-strip cycles.
+		// Their own group rather than an append to "Actions" -- they are
+		// overlay-local controls that only exist while a picker is open, and
+		// burying four ctrl-chords at the tail of a 15-item global action
+		// list would read as if they worked anywhere.
+		{"Picker filter", []keybind.Binding{k.PickerFacetType, k.PickerFacetStatus, k.PickerFacetPriority, k.PickerFacetTag}},
 	}
 }
 

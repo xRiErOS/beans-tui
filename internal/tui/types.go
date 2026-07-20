@@ -367,6 +367,17 @@ type model struct {
 	// pending/original diff state here, a bean has exactly one parent.
 	parentItems []pickerItem
 
+	// parentFilter/parentFiltered (bean bt-a3a8, PO-Nebenbefund N7): the
+	// picker's own throwaway search+chip state and the subset of
+	// parentItems it currently admits. m.menu's cursor runs over
+	// parentFiltered, NOT parentItems -- "select what's on screen", the
+	// same semantics toggleTagPending gained under bt-9ipw/D01. The state
+	// is deliberately PICKER-LOCAL (box_picker_filter.go D1): it never
+	// touches m.filterStatus/Type/Priority/Tag, so opening a picker cannot
+	// re-filter the Browse view behind it.
+	parentFilter   pickerFilter
+	parentFiltered []pickerItem
+
 	// Blocking-Picker `B` (E3 Task 3, bean bt-p1uz, box_picker_blocking.go):
 	// blockItems lists every OTHER bean (self excluded, deliberately NO
 	// descendant/cycle exclusion -- design decision g: port-parity with
@@ -379,6 +390,14 @@ type model struct {
 	blockItems    []pickerItem
 	blockOriginal map[string]bool
 	blockPending  map[string]bool
+
+	// blockFilter/blockFiltered (bean bt-a3a8): the Blocking-Picker's own
+	// half of the same picker-local search+chip state parentFilter
+	// documents above. blockFiltered is what the cursor and every toggle
+	// address -- blockItems stays the untouched full candidate source, so
+	// clearing the query restores the whole list without a rebuild.
+	blockFilter   pickerFilter
+	blockFiltered []pickerItem
 
 	// huh-Form-Hosting (E3 Task 4, bean bt-y4ly, Port devd forms_shared.go):
 	// form is the embedded huh sub-model (nil when no form is open, the

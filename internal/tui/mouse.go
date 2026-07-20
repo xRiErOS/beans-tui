@@ -816,7 +816,7 @@ func (m model) mouseBoxFormDetailClick(b *data.Bean, msg tea.MouseMsg) (tea.Mode
 	case boxFormTargetPriority:
 		return m.openValueMenu("priority"), nil
 	case boxFormTargetParent:
-		return m.openParentPicker(), nil
+		return m.openParentPicker()
 	case boxFormTargetTags:
 		return m.openTagPicker()
 	case boxFormTargetEditor:

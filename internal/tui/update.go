@@ -788,10 +788,12 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Assign) {
-			return true, m.openParentPicker(), nil
+			nm, cmd := m.openParentPicker()
+			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Blocking) {
-			return true, m.openBlockingPicker(), nil
+			nm, cmd := m.openBlockingPicker()
+			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Editor) {
 			// D01 (design-spec.md §15 PF-17, bean bt-z4b1, supersedet E8-
