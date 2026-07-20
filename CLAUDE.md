@@ -7,6 +7,7 @@ eine Autorität; v0.4.2 exponiert keine importierbaren Packages (alles `internal
 
 ## Pointer
 
+- **Sprache/Begriffe: `docs/GLOSSARY.md`** — verbindlich (boxed field, Box-Titel, Box-Badge, Region, Golden, Smoke …). Vor UI-Arbeit lesen; neue Elemente dort nachtragen.
 - Design (Quelle der Wahrheit): `docs/plans/v1-port/design-spec.md`
 - Plan: `docs/plans/v1-port/implementation-plan.md`
 - Stand/Weichen: `docs/SSTD.md` · Arbeit: `.beans/` (`beans list --ready`)
