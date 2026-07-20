@@ -83,6 +83,18 @@ brauchbar als Referenz, die Bezeichner nicht.
 | **Command-Palette** | Der globale Befehlsaufruf, Taste `K`. | `overlay_palette.go` |
 | **Toast** | Kurze Einblendung für Rückmeldungen; hat die frühere reservierte Statuszeile abgelöst. | — |
 
+## Layout und Scrollen
+
+- **Hängender Einzug** — Umbruch einer Listenzeile, bei dem die Folgezeilen auf der
+  Spalte des Titels beginnen statt am Zeilenanfang.
+- **Zeilen-Budget** — eine Höhenbegrenzung, die gerenderte Terminal**zeilen** zählt; das
+  Gegenstück ist der **Element-Cap**, der Listen**einträge** zählt. Nur das Zeilen-Budget
+  begrenzt Höhe verlässlich — sobald Titel umbrechen, erzeugt ein Eintrag mehrere Zeilen.
+- **Scroll-Mitnahme** — Regel, dass der Viewport dem Fokus folgt: ein fokussiertes Feld
+  darf nie außerhalb des sichtbaren Bereichs liegen. Beim Wandern über ein Feld, das höher
+  als der Ausschnitt ist, wird es erst vollständig gezeigt und dann weitergesprungen
+  (*reveal-then-move*).
+
 ## Arbeitsweise
 
 | Begriff | Bedeutung |
