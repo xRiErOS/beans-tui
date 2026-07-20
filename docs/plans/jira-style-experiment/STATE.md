@@ -104,5 +104,13 @@ Arbeit wird ab jetzt über **beans** gesteuert, nicht mehr über diese Datei. Ep
 Offene Kinder: `bt-ze10` Detail-Scroll (F1, high) · `bt-fy5d` Footer entschlacken (N2) · `bt-pl5p` Projekt-Slug aus IDs (N5) · `bt-oqsv` leere Footer-Zeile (N6) · `bt-ty48` GIF Body-Scroll (N3, blocked-by ze10) · `bt-z4w7` Value-Menü-Alias (B7) · `bt-s90e` Fullscreen ignoriert flatView (B8) · `bt-dovm` S7 huh-Ersatz (draft) · `bt-2o9a` Merge-Entscheidung (draft).
 `beans list --ready` zeigt den nächsten Schritt. Diese STATE.md bleibt Kontext-/Historien-Anker.
 
+## Laufender Stand bei Kontext-Kompaktierung (2026-07-20)
+- **In Arbeit:** `bt-ze10` (Detail-Scroll) — ein Implementer-Subagent wurde dafür dispatcht und lief zum Zeitpunkt der Kompaktierung. Bei Wiederaufnahme ZUERST prüfen: `git log --oneline -5` + `beans show bt-ze10` — hat er committet und das bean auf `completed` gesetzt? Falls das bean auf `in-progress` steht und kein Scroll-Commit existiert, ist die Arbeit NICHT erledigt → neu dispatchen.
+- **Offener Fehler:** `bt-ce7i` — Commit `d4a5367` hat versehentlich ~35 fremde `.beans`-Dateien mitgenommen (Glob statt Einzelpfade). PO muss A/B/C wählen. Kein Datenverlust, nur falsch einsortiert.
+- **Regel ab sofort:** in `.beans/` nur explizite Einzelpfade stagen, nie `git add .beans/*` — das Repo trägt dauerhaft fremde uncommittete bean-Änderungen.
+
 ## Nächste Aktion (für Resume)
-`beans list --ready` unter Epic `bt-vy1q`. S7 (`bt-dovm`) + Merge (`bt-2o9a`) stehen auf draft — brauchen PO-Freigabe. Bei „S7 jetzt": großer Umbau, eigene Slice-Kette planen (Create-Form inline, Picker→eigene maus-native Popups, huh + langsame huh-Drive-Tests entfernen). Bei „erst validieren": VHS-80/100-Smoke + Live-Test, dann entscheiden. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
+1. `beans list --ready` unter Epic `bt-vy1q` (das Epos trägt allen gemeinsamen Kontext + Constraints).
+2. Reihenfolge-Empfehlung: `bt-ze10` (falls offen) → `bt-ty48` (GIF, blocked-by ze10) → `bt-1o4g` (Feld-Nav, blocked-by ze10) → `bt-a3a8` (Picker-Suche, high) → Platz-Trilogie `bt-fy5d`/`bt-pl5p`/`bt-oqsv` → `bt-z4w7`/`bt-s90e`.
+3. `bt-dovm` (S7 huh-Ersatz) + `bt-2o9a` (Merge) stehen auf **draft** — brauchen PO-Freigabe, nicht eigenmächtig starten.
+4. Subagenten-Dispatch-Muster: voller Testlauf im VORDERGRUND anweisen (Agenten detachen sonst vor Testende und müssen per SendMessage resumed werden). Bei „S7 jetzt": großer Umbau, eigene Slice-Kette planen (Create-Form inline, Picker→eigene maus-native Popups, huh + langsame huh-Drive-Tests entfernen). Bei „erst validieren": VHS-80/100-Smoke + Live-Test, dann entscheiden. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
