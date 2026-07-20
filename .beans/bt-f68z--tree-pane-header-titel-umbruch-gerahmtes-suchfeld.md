@@ -1,11 +1,11 @@
 ---
 # bt-f68z
 title: 'Tree-Pane: Header, Titel-Umbruch, gerahmtes Suchfeld'
-status: todo
+status: in-progress
 type: feature
 priority: high
 created_at: 2026-07-20T09:22:58Z
-updated_at: 2026-07-20T09:22:58Z
+updated_at: 2026-07-20T09:48:49Z
 parent: bt-vy1q
 ---
 
