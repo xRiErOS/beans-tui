@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-20T18:05:08Z
-updated_at: 2026-07-20T19:01:57Z
+updated_at: 2026-07-20T20:29:07Z
 parent: bt-vy1q
 ---
 
@@ -235,3 +235,217 @@ grün · `command go test ./...` (VOLL, kein `-short`) grün, `internal/tui`
   Klick/Palette, alle 4 Pfade) mitgesetzt wird, damit `composeOverlays`
   weiß, an welchem `boxFormFieldOrder`-Index es `boxFormFieldRect`
   aufrufen soll.
+
+
+
+## Slice C Fortschritt (2026-07-20, Implementer-Dispatch)
+
+**Commit `4abee07` — `feat(boxform): Value-Menue feld-verankert statt zentriert (Slice C)`.**
+`internal/tui/box_menu_value.go`, `internal/tui/types.go`,
+`internal/tui/view_browse_repo.go`, `internal/tui/box_menu_value_anchor_test.go`.
+
+**Model-Feld:** `m.valueMenuAnchorField int` (types.go). Gesetzt in
+`openValueMenu(group)` (box_menu_value.go) über die NEUE statische
+Zuordnung `boxFormFieldIndexForGroup(group)` — alle vier Trigger-Pfade
+(Tastatur s/o/u, Feld-Cursor-Enter, Maus-Klick, Palette) rufen bereits
+exakt `openValueMenu(group)` (S6-Grounding §4 bestätigt) → EIN Änderungsort
+statt vier.
+
+**Positionierung:** `placeValueMenuOverlay` (box_menu_value.go), verdrahtet
+in `composeOverlays`s `overlayValueMenu`-Case (view_browse_repo.go). Bei
+`boxFormEnabled()` + auflösbarem `boxFormFieldRect`: `placeOverlayAt` an
+`(x, valueMenuPopupY(rect))`, sonst Fallback auf das alte zentrierte
+`placeOverlay` (accordion-Modus unverändert, kein boxed field zum
+Verankern).
+
+**Flip-up:** `valueMenuPopupY(anchorY, anchorH, fgH, canvasH)` — Standard
+unten; klappt nach OBEN, wenn unten kein Platz UND `anchorY>0` (irgendein
+Platz oben vorhanden); fällt nur bei `anchorY==0` (Feld sitzt bereits ganz
+oben) auf "unten, unten geclippt" zurück. **Wichtige Design-Entscheidung:**
+Das Klappen verlangt NICHT, dass der Popup oben vollständig passt —
+Status/Type/Priority sitzen real immer bei y≈10 (S6-ERRATUM,
+box_nav_field.go), ein Popup mit 12 Zeilen (`fgH`) passt dort NIE
+vollständig oberhalb. Ein "nur klappen wenn vollständig passt"-Kriterium
+hätte den Klapp-Zweig für genau diese drei Felder permanent totgelegt.
+Ein teilweise oben abgeschnittener Popup nutzt `placeOverlayAt`s
+bestehenden Silent-Overflow-Drop (Slice B) — kein neuer Mechanismus.
+
+**X-Präzision:** ausschließlich `boxFormFieldRect` verwendet (NIE
+`detailBoxFormClickRow`s X gemischt, wie im Slice-A/B-ERRATUM verlangt).
+Zusätzlich ein defensiver rechter-Rand-Clamp (`placeValueMenuOverlay`):
+der ~42 Zellen breite Popup (`clampModalWidth(40,...)`) ist unabhängig
+von der ~15 Zellen breiten Feld-Box und würde bei Type/Priority auf
+80 Spalten rechts aus dem Bildschirm ragen — reiner Canvas-Clamp, KEIN
+Resize/Reflow auf Feldbreite (siehe Notes for Reviewer).
+
+**Tests (`box_menu_value_anchor_test.go`), RED (compile fail:
+`undefined: valueMenuPopupY`/`boxFormFieldIndexForGroup`) → GREEN:**
+- `valueMenuPopupY`: 4 reine Branch-Tests (unten passt, klappt+passt
+  vollständig, klappt+teilweise geclippt, kein-Platz-oben-Fallback).
+- `boxFormFieldIndexForGroup`: Mapping-Test + unbekannte Gruppe → -1.
+- Je EIN render-geerdeter Test pro Trigger-Pfad (Tastatur `s`,
+  Feld-Cursor-Enter auf "type", Maus-Klick auf "(u)", Palette
+  `actionID:"type"`), 80 UND 120 Spalten: Popup-Bottom-Border-Ecke "╰"
+  exakt bei der aus `boxFormFieldRect`+`valueMenuPopupY` berechneten
+  Position (inkl. Rand-Clamp), NICHT an der alten zentrierten Position.
+- Flip-up render-geerdet (`h=20`, erzwingt Überlauf unten): bestätigt
+  sowohl die Position (gleicher Ecke-Check) als auch dass der Y-Wert
+  tatsächlich < Feld-Oberkante ist (Klapp-Zweig feuerte).
+- `TestValueMenuStaysCenteredWithoutBoxFormFlag`: Accordion-Modus bleibt
+  byte-genau zentriert (alte `(bgW-fgW)/2,(bgH-fgH)/2`-Formel).
+
+**Wichtiger methodischer Fund während der Testkonstruktion:** Ein erster
+Testansatz verglich `m.View()` gegen ein "Baseline"-Rendering mit
+`m.overlay=overlayNone` — das schlug FLÄCHENDECKEND fehl, weil die Footer-
+Zeile selbst von `m.overlay` abhängt (`footer_context.go`s
+`overlayLocalBindings`) — das Baseline hatte also eine ANDERE Chrome, nicht
+nur eine andere Overlay-Schicht. Ersetzt durch direkte Landmark-Suche
+(Popup-Eckzeichen via `ansi.Cut`, wie Slice A) — robuster und ohne diese
+Kopplung.
+
+**Goldens:** `command go test ./internal/tui -run Golden -update` erzeugt
+NULL Diff (`git status`/`git diff --stat` auf `testdata/` leer) — kein
+Golden-Fixture rendert den geöffneten Value-Menu-Zustand, also keine
+Golden-Änderung nötig oder erfolgt.
+
+**Gates:** `command go build -o bin/bt .` grün · `command go vet ./...`
+grün · `command go test ./...` (VOLL, im Vordergrund) grün,
+`internal/tui` 151.6s.
+
+## Notes for Reviewer
+
+- **Flip-Semantik ist NICHT "voll passt oder klappt nicht"** — sie ist
+  "klappt sobald unten überläuft UND oben überhaupt Platz ist (auch nur
+  1 Zeile)", mit stillem Clip oben falls nötig. Das ist eine bewusste
+  Abweichung von einer strengeren "nur klappen wenn komplett sichtbar"-
+  Regel, weil letztere für Status/Type/Priority (reale y≈10, Popup-Höhe
+  12) NIE greifen würde. Bitte explizit prüfen, ob das PO-Vorgabe
+  "Standard-Dropdown-Verhalten" trifft, oder ob eine strengere Regel
+  gewünscht war (dann bräuchte D09 vermutlich eine schmalere Popup-Höhe
+  oder ein Redesign, kein reiner Slice-C-Fix mehr).
+- **Rechter-Rand-Clamp ist ein Sicherheitsnetz, keine Lösung der offenen
+  Breiten-Frage** aus dem ursprünglichen S6-Grounding (§3: Popup massiv
+  breiter als die ~15-Zellen-Box, sollte es umbrechen/schrumpfen?). Dieser
+  Slice beantwortet das NICHT — er verhindert nur, dass der Popup sichtbar
+  über den rechten Bildschirmrand hinausragt.
+- **Alle 4 Trigger-Pfade belegt** (s.o.), inkl. Cross-Check dass
+  `m.valueMenuAnchorField` unabhängig vom Pfad korrekt via
+  `boxFormFieldIndexForGroup` gesetzt wird (EIN Änderungsort, wie geplant).
+- **Fullscreen:** `boxFormFieldRect` behandelt `fullscreenDetail` bereits
+  konsistent (Slice A) — `placeValueMenuOverlay` ruft es unverändert auf,
+  sollte also auch im Vollbild korrekt verankern (Tastatur/Palette öffnen
+  dort ja weiterhin, Klick ist laut F01 tot). NICHT eigens render-geerdet
+  getestet in diesem Slice (Scope-Entscheidung: Zeitbudget auf die vier
+  Trigger-Pfade + Flip-up konzentriert, wie vom Supervisor vorgegeben) —
+  falls das Review-Gate Fullscreen als Pflichtabdeckung sieht, fehlt dort
+  noch ein expliziter Test.
+- **Golden-Diff:** keiner (s.o.) — kein Fixture deckt den offenen
+  Value-Menu-Zustand ab. Falls der Reviewer das für lückenhaft hält
+  (Golden-Abdeckung des NEUEN Anker-Renderings fehlt komplett), wäre das
+  ein sinnvoller Slice-D/E-Nachtrag (ein neues Golden mit offenem,
+  verankertem Value-Menu).
+- **Enter-sofort-anwenden/Esc-ohne-Mutation** (`keyValueMenu`/
+  `applyValueMenuSelection`) unverändert — bestehende Tests dafür (in
+  `box_menu_value_test.go`) liefen im vollen Lauf grün mit.
+
+
+
+## Slice C — B01/B02-Fix (2026-07-20, Re-Review-Runde)
+
+**Commit `27dc35d` — `fix(boxform): Value-Menue Inline-Popup Breite+Flip (B01/B02, Slice C)`.**
+`internal/tui/box_menu_value.go`, `internal/tui/box_nav_field.go`,
+`internal/tui/box_menu_value_anchor_test.go`,
+`internal/tui/box_menu_value_golden_test.go` (neu),
+`internal/tui/testdata/value_menu_anchored.golden` (neu).
+
+**B01 (high) — Chrome-Überschreiben durch Flip-up behoben.**
+`valueMenuPopupY` bekommt einen neuen Parameter `minY` (Chrome-Fußboden,
+`boxFormPopupChromeFloor` in `box_nav_field.go` — eine Zeile hinter der
+Trennlinie, view-/Vollbild-unabhängig, da `clickPaneGeometry`s `originY`
+selbst schon dokumentiert "+1 Pane-Oberrahmen" enthält und der Fußboden
+genau EINE Zeile davor sitzt). Klappt nur noch, wenn der GESAMTE Popup
+oberhalb passt (`above>=minY`); sonst bleibt er unten (Clip am unteren
+Rand über `placeOverlayAt`s bestehenden Silent-Overflow-Drop) — NIE mehr
+negatives Y, NIE mehr Chrome überschrieben.
+
+**B02 (medium-high) + Breiten-Entscheidung (PO 2026-07-20) — Popup schrumpft
+auf Inhaltsbreite, linksbündig.**
+Neue Funktion `valueMenuContentWidth(title, body)` — Breite = breiteste
+Zeile (Hint/Titel/Item) + 2 (Padding). `valueMenuBox()` nutzt sie jetzt
+statt der fixen `clampModalWidth(40, m.width)` (Ergebnis real ~29 statt
+42 Zellen). `placeValueMenuOverlay` positioniert linksbündig an
+`boxFormFieldRect(...).x`; NUR bei Rechts-Überlauf nach links geschoben,
+NIE unter `boxFormPaneContentLeft(m)` (neue Helper-Funktion,
+`box_nav_field.go`, aus `boxFormFieldRect`s eigener Pane-Ursprungs-Geometrie
+extrahiert — Golden-Rule-Drift-Schutz).
+
+**Refactor (Drift-Schutz):** `boxFormFieldRect`s Pane-Ursprungs-Geometrie in
+zwei wiederverwendbare Helfer aufgeteilt: `boxFormPaneContentLeft(m)`
+(linke Content-Kante) und `boxFormPopupChromeFloor(m)` (Chrome-Fußboden).
+Beide werden jetzt sowohl von `boxFormFieldRect` selbst als auch von
+`placeValueMenuOverlay` verwendet — kann nicht mehr unabhängig
+auseinanderdriften.
+
+**Tests (alle GREEN, RED zuerst durch Signaturänderung
+`valueMenuPopupY` bestätigt — Compile-Fail):**
+- `TestValueMenuPopupYNeverCrossesChromeFloor` (B01, reine Funktion):
+  Szenario aus dem Reviewer-Bug (anchorY=10, fgH=12, minY=3) bleibt
+  bei `below=13`, NICHT geflippt.
+- `TestValueMenuFlipDoesNotCorruptChrome` (B01, render-geerdet, 80×24):
+  ALLE Zeilen 0..`boxFormPopupChromeFloor` byte-identisch zum
+  Vor-Öffnen-Baseline (nicht nur eine Ecke).
+- `TestValueMenuFlipStaysBelowWhenFullFitAboveIsImpossible`: dokumentiert
+  render-geerdet, dass für Status/Type/Priority ein vollständiger
+  Oben-Fit real unerreichbar ist (y bleibt unten).
+- `TestValueMenuTypeAndPriorityPopupsSitAtDifferentFieldNearColumns` (B02,
+  render-geerdet, 80 Spalten): Type(x=46, ungeklemmt) ≠ Priority(x=51,
+  leicht geklemmt) — beide feld-nah (Delta ≤20).
+- `TestValueMenuContentWidthSizesToLongestLine` +
+  `TestValueMenuBoxWidthIsUnderOldFixedFortyAndMatchesContent`
+  (Breite < 42, == Inhaltsbreite).
+- `TestValueMenuAnchoredInFullscreenDetail` (Q01): echter `v`→`s`-Roundtrip,
+  Anker-Geometrie im Vollbild korrekt (boxFormFieldRect bereits
+  Vollbild-bewusst aus Slice A).
+- Alle 4 Trigger-Pfad-Tests aus dem ursprünglichen Slice-C-Durchlauf
+  bleiben grün (Keyboard/Feld-Cursor-Enter/Klick/Palette), 80+120 Spalten.
+
+**Golden (Q02):** `testdata/value_menu_anchored.golden` NEU angelegt
+(nach dem Fix, nicht davor — friert also den KORREKTEN Zustand ein):
+100×30, Status-Menü offen, `goldenTreeModel`-Fixture. Alle
+VORHANDENEN Goldens per `-update` gegengeprüft — `git diff --stat` auf
+`testdata/` zeigt NULL Diff für alle bestehenden Dateien, nur das neue
+Fixture ist hinzugekommen.
+
+**Gates:** `command go build -o bin/bt .` grün · `command go vet ./...`
+grün · `command go test ./...` (VOLL, Vordergrund) grün,
+`internal/tui` 151.7s.
+
+## Notes for Reviewer (Re-Review-Fokus)
+
+- **B01-Fix-Prinzip:** Flip erfordert jetzt VOLLSTÄNDIGEN Platz oberhalb
+  des Chrome-Fußbodens — für Status/Type/Priority (reale y≈10, Popup-Höhe
+  jetzt nur noch ~12 Zeilen dank Breiten-Fix, aber Höhe unverändert) ist
+  das real NIE erreichbar (Chrome-Fußboden ≈3-7). Der Flip-Zweig ist damit
+  für DIESE drei Felder faktisch tot Code (nur an synthetischen
+  Unit-Test-Werten belegt) — Popup bleibt bei zu wenig Platz immer unten
+  und clippt unten. Das ist die Konsequenz aus "niemals Chrome
+  überschreiben" und sollte explizit abgenommen werden (Alternative wäre
+  eine geringere Popup-Höhe, aber das war nicht Teil des Fix-Auftrags).
+- **B02-Fix:** Type/Priority sitzen jetzt bei x=46/x=51 (80 Spalten,
+  ungeklemmt/leicht geklemmt) statt beide bei 38. Preis: der Popup
+  überlappt bei sehr rechtsständigen Feldern (Priority) leicht in Richtung
+  der Feldbox selbst statt frei daneben — bei Bedarf wäre ein
+  "occlude the field itself"-Sonderfall denkbar, war aber nicht verlangt.
+- **Golden-Diff:** NUR ein neues Fixture hinzugekommen
+  (`value_menu_anchored.golden`), alle bestehenden byte-identisch. Bitte
+  das neue Golden visuell gegenprüfen (ASCII-Dump im Report unten) —
+  insbesondere dass Zeile 0-9 (App-Chrome, Filter-Strip, Title-Box)
+  unverändert zur Nicht-Popup-Ansicht sind und der Popup sauber unter der
+  Status-Box (Zeile 12, Badge "(s)") beginnt.
+- **Kosmetischer Nebenbefund (kein neuer Bug):** Wo der schmalere Popup
+  über die Parent/Tags-Zeile (rowB, 2-spaltiges Grid) überlappt, bleibt
+  ein einzelnes Rahmenzeichen der darunterliegenden Box sichtbar direkt
+  neben der Popup-eigenen Ecke (sichtbar im neuen Golden, Zeile 13) — das
+  ist dieselbe Compositing-Eigenschaft, die JEDES Overlay über
+  unregelmäßigem Hintergrund hat (nicht neu durch Slice C, nicht durch
+  diesen Fix verursacht), kein Verhaltensfehler.
