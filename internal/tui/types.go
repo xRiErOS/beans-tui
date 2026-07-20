@@ -246,6 +246,23 @@ type model struct {
 	backlogList listState
 	backlogSort string
 
+	// Nested/Flat Browse toggle `G` (jira-style-ui experiment S5, D07
+	// uppercase = view/global group): flatView switches the Browse view's
+	// LEFT pane between the Tree (nested, default) and a flat, sorted list
+	// (columns) -- the master-detail split and the Detail pane itself are
+	// UNCHANGED (unlike the full-screen Backlog view, view_browse_backlog.go
+	// -- flat mode here is still Browse, master-detail stays intact). flatList
+	// is a minimal index-based cursor (listState, mirrors backlogList's own
+	// shape/rationale) over flatVisible()'s bean slice -- kept deliberately
+	// SEPARATE from the Tree's cursorID rather than reconciled into one
+	// shared cursor: the Tree's bean-ID cursor and a flat index cursor are
+	// different shapes with no natural unification, and the Tree's own
+	// cursorID/expanded state must survive a round-trip through flat mode
+	// untouched (toggling G back resumes the Tree exactly where it was).
+	// Default false -- existing tree goldens stay byte-identical.
+	flatView bool
+	flatList listState
+
 	confirmQuit bool
 
 	// E3 (bean bt-dlgk): node-action overlays -- mutually exclusive by

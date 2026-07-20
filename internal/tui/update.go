@@ -248,6 +248,7 @@ func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
 	m = m.clearFacets()
 	m.showArchived = false // E5 Task 7 (bean bt-ggt2, T6-Note bug class, bt-zhwl "Notes for T7"): the archive-default toggle must not leak across a repo switch, same reset breadth as every other search/filter field here.
 	m.backlogList = listState{}
+	m.flatList = listState{} // S5: same stale-cursor hygiene as backlogList just above -- flatView itself (a display-mode preference, not per-repo state) deliberately survives the switch
 
 	_ = config.SetLastRepo(msg.repoDir) // best-effort persistence (Port devd DD2-273 RMW pattern, state.go) -- a failed write must not block the switch itself
 	return m, nil
@@ -1105,6 +1106,20 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// S5 (jira-style-ui experiment, bean/slice: Nested/Flat Browse toggle):
+	// `G` flips m.flatView -- checked at the SAME "fokus-/Ansichts-Modus-
+	// Familie" checkpoint as FocusIn/FocusOut/Fullscreen just above/below
+	// (global reach, view-agnostic dispatch). Only viewBrowseRepo's render
+	// path (viewBrowseRepo, view_browse_repo.go) actually branches on
+	// flatView -- toggling it while e.g. the Backlog view is active is a
+	// harmless no-visible-effect state change (Backlog is already its own
+	// flat, full-screen list), symmetric with how Fullscreen's `v` is also
+	// globally reachable without every view rendering differently for it.
+	if keybind.Matches(msg, keys.FlatView) {
+		m.flatView = !m.flatView
+		return m, nil
+	}
+
 	// F01 (design-spec.md §15, E9 Task 7, bean bt-13l7): keyFullscreen's own
 	// dispatch checkpoint -- NACH FocusIn/FocusOut (same fokus-/Ansichts-
 	// Modus-Familie), VOR keyNodeAction (below). Handles `v` (entry/no-op),
@@ -1174,6 +1189,14 @@ func (m model) focusedBean() *data.Bean {
 	case viewBacklog: // E2 Task 5: the Backlog list's own selection, NOT the (possibly stale/irrelevant) tree cursor
 		return m.backlogSelected()
 	default: // viewBrowseRepo (T8)
+		// S5 (jira-style-ui experiment, Nested/Flat Browse toggle): in flat
+		// mode the flat list's OWN cursor (flatList) is the selection, not
+		// the (frozen, untouched-while-flat) Tree cursorID -- mirrors the
+		// viewBacklog case just above (a view/mode-local cursor overrides
+		// the Tree's own).
+		if m.flatView {
+			return m.flatSelected()
+		}
 		nodes := m.visibleNodes()
 		pos := m.cursorPos(nodes)
 		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan || nodes[pos].placeholder {
@@ -1562,6 +1585,16 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// (design-spec.md §12 E5, plan Task 3 Port-Referenzen: the cascade
 		// ends here, a documented Scope-Cut rather than a TBD).
 		return m, nil
+	}
+
+	// S5 (jira-style-ui experiment, Nested/Flat Browse toggle `G`,
+	// keymap.go/view_browse_flat.go): once the shared search/filter/Backlog/
+	// FilterClear/Back handling above has run (identical in both modes --
+	// flat mode narrows/widens the SAME m.beanMatches-filtered set the Tree
+	// does), flat mode's own up/down-only cursor takes over instead of the
+	// Tree's node walk below.
+	if m.flatView {
+		return m.keyFlat(msg)
 	}
 
 	nodes := m.visibleNodes()

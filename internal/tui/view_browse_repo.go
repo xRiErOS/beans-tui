@@ -1035,6 +1035,22 @@ func (m model) viewBrowseRepo() string {
 			detailBean = m.focusedBean() // resolves via focusedBean's own fullscreenDetail case (update.go)
 		}
 		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel)
+	} else if m.flatView {
+		// S5 (jira-style-ui experiment, Nested/Flat Browse toggle `G`,
+		// view_browse_flat.go): the LEFT pane renders the flat, sorted bean
+		// list instead of the Tree -- everything else (search head row
+		// budget trade, Detail pane via the SAME shared renderBeanAccordionPane,
+		// master-detail Split) mirrors the Tree branch below verbatim, just
+		// sourced from flatVisible()/flatRows()/renderFlatDetailPane instead
+		// of nodes/treeRows()/renderDetailPane. Checked BEFORE the Tree
+		// branch so m.flatView's default false leaves that branch, and every
+		// pre-existing golden depending on it, byte-for-byte untouched.
+		vis := m.flatVisible()
+		searchLine := m.treeSearchLine(lw-2, "") // D02 precedent: flat mode has no Sort-Toggle (unlike Backlog), no suffix
+		flatRowsWithHead := append([]string{searchLine}, m.flatRows(vis, !m.detailFocus, bodyH-1)...)
+		flatBox := renderPane(pane{rows: flatRowsWithHead}, lw, bodyH, !m.detailFocus)
+		detailBox := m.renderFlatDetailPane(vis, rw, bodyH, m.detailFocus)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, flatBox, detailBox)
 	} else {
 		// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
 		// pane's rows, costing 1 line of its bodyH content budget -- the actual

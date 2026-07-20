@@ -57,6 +57,7 @@ type keyMap struct {
 	FilterClear keybind.Binding // X — reset filters
 	Toggle      keybind.Binding // space/x — toggle facet checkbox (E2 Task 4, bean bt-9ldr)
 	Sort        keybind.Binding // S — cycle Backlog sort mode (E2 Task 5, bean bt-gzu6)
+	FlatView    keybind.Binding // G — Nested/Flat Browse toggle (jira-style-ui experiment S5, D07 uppercase = view/global)
 
 	// Node-focused (act on the focused tree/list node).
 	Status    keybind.Binding // s — status menu (all node types)
@@ -154,6 +155,7 @@ func newKeyMap() keyMap {
 		FilterClear: keybind.NewBinding(keybind.WithKeys("X"), keybind.WithHelp("X", "Clear filters")),
 		Toggle:      keybind.NewBinding(keybind.WithKeys(" ", "x"), keybind.WithHelp("space/x", "Toggle facet")),
 		Sort:        keybind.NewBinding(keybind.WithKeys("S"), keybind.WithHelp("S", "Sort")),
+		FlatView:    keybind.NewBinding(keybind.WithKeys("G"), keybind.WithHelp("G", "Nested/Flat")),
 
 		Status:    keybind.NewBinding(keybind.WithKeys("s"), keybind.WithHelp("s", "Status")),
 		Type:      keybind.NewBinding(keybind.WithKeys("o"), keybind.WithHelp("o", "Type")),
@@ -194,7 +196,7 @@ type helpGroup struct {
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen, k.HistoryBack, k.HistoryForward}},
-		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
+		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit, k.FlatView}},
 		{"Actions", []keybind.Binding{k.Status, k.Type, k.Priority, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.TagToggle, k.Sort, k.NewTag, k.RenameTag}},
 	}
 }
