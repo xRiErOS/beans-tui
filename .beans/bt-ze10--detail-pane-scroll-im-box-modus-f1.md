@@ -1,11 +1,11 @@
 ---
 # bt-ze10
 title: Detail-Pane Scroll im Box-Modus (F1)
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-20T07:25:11Z
-updated_at: 2026-07-20T07:25:11Z
+updated_at: 2026-07-20T07:27:46Z
 parent: bt-vy1q
 ---
 

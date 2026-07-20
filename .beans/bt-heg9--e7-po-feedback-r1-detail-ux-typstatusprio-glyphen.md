@@ -1,13 +1,13 @@
 ---
 # bt-heg9
 title: 'E7 — PO-Feedback R1: Detail-UX + Typ/Status/Prio-Glyphen'
-status: todo
+status: completed
 type: epic
 priority: high
 tags:
     - to-review
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-15T18:48:32Z
+updated_at: 2026-07-18T15:04:02Z
 parent: bt-apmy
 ---
 

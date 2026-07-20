@@ -1,13 +1,13 @@
 ---
 # bt-zk9p
 title: E6 Validierung & Release — alle US nachgewiesen
-status: in-progress
+status: completed
 type: epic
 priority: high
 tags:
     - to-review
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T19:51:35Z
+updated_at: 2026-07-18T15:04:21Z
 parent: bt-apmy
 blocked_by:
     - bt-5h4d

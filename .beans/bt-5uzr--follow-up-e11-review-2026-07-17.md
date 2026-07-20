@@ -1,13 +1,13 @@
 ---
 # bt-5uzr
 title: Follow-up E11-Review (2026-07-17)
-status: todo
+status: completed
 type: epic
 priority: normal
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-17T06:21:17Z
-updated_at: 2026-07-17T12:01:08Z
+updated_at: 2026-07-18T15:05:00Z
 ---
 
 Sammel-Epic für Nebenbefunde aus dem PO-Review der E11-Nacharbeit (2026-07-17).

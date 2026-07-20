@@ -1,13 +1,13 @@
 ---
 # bt-tfqi
 title: E4 Command-Center & Review-Cockpit
-status: in-progress
+status: completed
 type: epic
 priority: high
 tags:
     - to-review
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T08:50:26Z
+updated_at: 2026-07-18T15:04:23Z
 parent: bt-apmy
 blocked_by:
     - bt-gzcu

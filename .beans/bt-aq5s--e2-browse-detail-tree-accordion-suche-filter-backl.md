@@ -1,13 +1,13 @@
 ---
 # bt-aq5s
 title: E2 Browse & Detail — Tree, Accordion, Suche, Filter, Backlog
-status: in-progress
+status: completed
 type: epic
 priority: high
 tags:
     - to-review
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-16T06:02:33Z
+updated_at: 2026-07-18T15:04:27Z
 parent: bt-apmy
 blocked_by:
     - bt-blsy
