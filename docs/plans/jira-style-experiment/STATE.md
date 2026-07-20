@@ -66,8 +66,11 @@ Richtung ok, ABER Layout anpassen: **1-up-Stapeln = Platzverschwendung.** Gewün
 
 | S5 | Nested/Flat-Toggle `G` (Views&Global): linke Browse-Pane rendert flache Liste (`view_browse_flat.go`, reuse `backlogRowText`) statt Tree; Master-Detail bleibt, Tree-State bleibt bei Rückschaltung. `flatView`+`flatList` in types.go, `focusedBean()`-Flat-Zweig. Default aus → Bestandsgolden unverändert, neue `browse_flat.golden`. | 🟢 DONE | Commit `bad6c18` |
 
+| S6 | Maus: B6-Offset (+3 Filter-Bar unter `BT_BOXFORM`) in `treeClickRow`/`flatClickRow`/`detailBoxFormClickRow`; Klick auf Detail-Feld-Box öffnet Editor (`detailBoxFormClickRow`+`gridColAt`, `gridColWidths` aus `gridRow` geteilt); Flat-Zeilen-Klick (`flatClickRow`). Render-gegroundete `tea.MouseMsg`-Tests. Golden unverändert. | 🟢 DONE | Commit `cf00b72`, `mouse_boxform_test.go` |
+
 ## Restrisiken (offen, nicht blockierend)
-- **B8 (für S6/später):** Fullscreen `v` rendert immer Tree, ignoriert `flatView`. Klein.
+- **B9 (Validierung vor Merge):** Klick-Spalten-Hit-Test (`gridColAt`) nur bei 100 Spalten getestet, nicht am 80-Spalten-Rand. tmux/VHS-80-Smoke vor Merge (I02/S8).
+- **B8 (für später):** Fullscreen `v` rendert immer Tree, ignoriert `flatView`. Klein.
 - **B7 (kosmetisch, für S6/später):** Value-Menü-Schließen-Alias + Footer hardcoden `s` unabhängig von der Gruppe (o/u-geöffnetes Menü schließt auch mit `s`; Footer zeigt `s`). esc schließt immer → nichts kaputt, nur Label-Mismatch.
 - **B6 (Maus, für S6):** `treeClickRow`/`clickPaneGeometry` (mouse.go) NICHT um die +3 Filter-Bar-Höhe korrigiert, wenn `BT_BOXFORM` an → Tree-Klicks 3 Zeilen versetzt. Nur im Box-Modus + Maus relevant. In S6 (Maus) mitfixen.
 - **F1-Rest:** sehr langer Body / viele Relations überläuft die Pane weiterhin (kein Scroll im Box-Modus). Normalfall passt. Scroll-Strategie D10 (Viewport vs. Fullscreen-only) noch offen — bei Bedarf mit Nutzer klären.
@@ -84,4 +87,12 @@ Offene Weichen für den Nutzer:
 - **S7 (huh→Inline-Box-Editing):** großer/riskanter Umbau (D09). Timing bewusst offen gelassen — Nutzer wollte steuern.
 - **S6 (Maus):** B6 (Klick-Offset +3 durch Filter-Bar) + B7 (Value-Menü-Label) mitfixen.
 
-S1–S5 🟢. **S6 LÄUFT** (autonom, Maus): (1) B6-Fix — bei `BT_BOXFORM` Klick-Geometrie um +3 Filter-Bar-Höhe korrigieren (`treeClickRow`/`clickPaneGeometry`). (2) Box-Detail: Klick auf ein Feld-Box öffnet dessen Editor (Klick-Y→Feld→s/o/u/a/t/e, `detailClickKey`-Muster). (3) Flat-Modus: Klick auf Zeile selektiert Bean. (4) B7 kosmetisch falls billig. Update-Tests via `tea.MouseMsg`. Danach S7 (huh-Ersatz, groß — Timing war Nutzer-gesteuert; vor S7 nochmal checkpointen). Reviewer-Checkpoint nach S6. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
+S1–S6 🟢 — **das ganze jira-Modell steht außer S7.** Detail-Box-Form, Filter-Leiste, editierbare Dropdowns (Tastatur+Maus), Nested/Flat-Toggle, Klick-öffnet-Editor. Alles hinter `BT_BOXFORM` (außer additive Keys G/o/u), reversibel, getestet, Bestandsgolden intakt. 22 Commits.
+
+## CHECKPOINT vor S7 (2026-07-20) — Nutzer-Steuerung
+- **S7 (huh→Inline-Box-Editing, D09):** der letzte + größte/riskanteste Umbau. Nutzer wollte Timing steuern. Erst jetzt entscheiden: jetzt bauen / nach Live-Test / erstmal so lassen.
+- **S8 Validierung:** VHS-Smoke bei 80 + 100 Spalten (`BT_BOXFORM=1`), deckt B9/I02 ab. Braucht vhs/tmux (Nutzer-Tool).
+- Merge-Frage: ist der Spike „besser" → auf main mergen (Flag default aus, opt-in) oder verwerfen/anpassen.
+
+## Nächste Aktion (für Resume)
+WARTET auf Nutzer-Entscheidung zu S7-Timing + Merge. Bei „S7 jetzt": großer Umbau, eigene Slice-Kette planen (Create-Form inline, Picker→eigene maus-native Popups, huh + langsame huh-Drive-Tests entfernen). Bei „erst validieren": VHS-80/100-Smoke + Live-Test, dann entscheiden. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
