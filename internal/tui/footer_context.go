@@ -89,6 +89,29 @@ var (
 // whose "facet" wording never described a blocking relation anyway.
 var blockingPickerToggleHint = keybind.NewBinding(keybind.WithKeys(" "), keybind.WithHelp("space", "Toggle blocking"))
 
+// pickerApplyHint/pickerSetHint/pickerDiscardHint are the picker-local
+// relabelings of keys.Enter and keys.Back (bean bt-6nuz, PO finding #9).
+//
+// Same reasoning as blockingPickerToggleHint above, one rung further: the
+// KEYS are unchanged (the handlers still match keys.Enter/keys.Back, so a
+// rebind stays correct), only the words are. keys.Enter's global "open/
+// confirm" and keys.Back's "back" are accurate for a tree row and vague
+// here -- in a picker, enter commits a pending multi-select diff and esc
+// throws it away, which is precisely the distinction the PO needs before
+// pressing either. The pre-bt-6nuz hand-written hint strings already said
+// "enter:save"/"enter:set"/"esc:discard"; those verbs were right, they were
+// just written next to the render instead of derived, so the OUTER footer
+// never got them. Now both surfaces read these.
+//
+// They are also materially shorter, which is what keeps the hint line on
+// ONE row at 80 columns inside the modal (verified by the tmux smoke this
+// bean requires).
+var (
+	pickerApplyHint   = keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "save"))
+	pickerSetHint     = keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "set"))
+	pickerDiscardHint = keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithHelp("esc", "discard"))
+)
+
 // valueMenuGroupKey returns the binding that OPENS -- and therefore also
 // closes -- the value menu for the given group (design decision a3's
 // "esc/<key> schliesst", now group-aware; see the a3-Nachtrag in
@@ -178,8 +201,11 @@ func tagPickerLocalBindings() []keybind.Binding {
 // space/x case at all.
 //
 // bean bt-z4w7: arrow-only nav labels, see tagPickerLocalBindings.
+// bean bt-6nuz: enter/esc carry the picker-local verbs (pickerSetHint/
+// pickerDiscardHint) -- the Parent-Picker SETS a parent, it does not
+// "open/confirm" one.
 func parentPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{pickerNavUpHint, pickerNavDownHint, keys.Enter, keys.Back}
+	return []keybind.Binding{pickerNavUpHint, pickerNavDownHint, pickerSetHint, pickerDiscardHint}
 }
 
 // blockingPickerLocalBindings mirrors tagPickerLocalBindings' own Toggle
@@ -192,8 +218,10 @@ func parentPickerLocalBindings() []keybind.Binding {
 // stays typeable -- the footer kept saying "space/x Toggle facet" for a key
 // combination that no longer existed. Nav is arrow-only for the same
 // reason (see tagPickerLocalBindings).
+// bean bt-6nuz: enter/esc carry the picker-local verbs (pickerApplyHint/
+// pickerDiscardHint) -- enter commits the pending diff, esc discards it.
 func blockingPickerLocalBindings() []keybind.Binding {
-	return []keybind.Binding{pickerNavUpHint, pickerNavDownHint, blockingPickerToggleHint, keys.Enter, keys.Back}
+	return []keybind.Binding{pickerNavUpHint, pickerNavDownHint, blockingPickerToggleHint, pickerApplyHint, pickerDiscardHint}
 }
 
 // confirmGateLocalBindings is the shared footer set for the two Confirm-Gate

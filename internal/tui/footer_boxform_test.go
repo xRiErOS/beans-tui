@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // bindingKeys returns each binding's Help().Key -- the literal token
@@ -28,9 +29,16 @@ func bindingKeys(bs []keybind.Binding) []string {
 
 // boxFormInlineFooterKeys are the keys bt-fy5d removes from the footer while
 // the box form is on: every one of them is rendered as an inline (x) badge by
-// detailBoxForm/panelBox, plus `r` (Blocking), whose target IS the Relations
-// panel the same detail render shows (bean bt-fy5d Akzeptanz, PO wording).
-var boxFormInlineFooterKeys = []string{"s", "e", "t", "a", "r"}
+// detailBoxForm/panelBox.
+//
+// bean bt-6nuz (PO finding #6): `r` USED to be in this list. It was the one
+// entry admitted on a looser test -- "its target IS the Relations panel the
+// same detail render shows" -- rather than on the actual criterion, an
+// inline badge. The Relations panel carries no (r) badge, so dropping `r`
+// from the footer removed the only place the key was advertised at all. The
+// rule is now literal, and TestBoxFormInlineKeysAllHaveAnInlineBadge below
+// enforces it structurally instead of by hand.
+var boxFormInlineFooterKeys = []string{"s", "e", "t", "a"}
 
 func TestBrowseRepoLocalBindingsDropInlineKeysWhileBoxForm(t *testing.T) {
 	t.Setenv("BT_BOXFORM", "1")
@@ -44,8 +52,9 @@ func TestBrowseRepoLocalBindingsDropInlineKeysWhileBoxForm(t *testing.T) {
 		}
 	}
 	// Everything that is NOT inline-visible must survive -- the point is to
-	// de-duplicate, not to strip the footer.
-	for _, k := range []string{"tab", "shift+tab", "/", "f", "c", "d", "b", "y"} {
+	// de-duplicate, not to strip the footer. `r` (bean bt-6nuz) is in this
+	// list precisely because the Relations panel gives it no badge.
+	for _, k := range []string{"tab", "shift+tab", "/", "f", "c", "d", "b", "y", "r"} {
 		found := false
 		for _, have := range got {
 			if have == k {
@@ -79,6 +88,33 @@ func TestBacklogFooterFollowsBrowseRepo(t *testing.T) {
 	t.Setenv("BT_BOXFORM", "1")
 	if a, b := bindingKeys(backlogLocalBindings()), bindingKeys(browseRepoLocalBindings()); strings.Join(a, "|") != strings.Join(b, "|") {
 		t.Fatalf("Backlog footer diverged from Browse: %v vs %v", a, b)
+	}
+}
+
+// TestBoxFormInlineKeysAllHaveAnInlineBadge is bean bt-6nuz's structural
+// answer to the selection error itself, not to its two symptoms. bt-fy5d
+// thinned the footer on the premise "the box form already shows this key
+// inline" -- but nothing checked that premise, so `r` was dropped on a
+// judgement call and simply vanished from the UI. This renders the real
+// box-form Detail pane and requires every key boxFormInlineKeys hides to
+// actually appear as a literal (x) badge in that render. A future key
+// removed from the footer without a badge to justify it fails here.
+func TestBoxFormInlineKeysAllHaveAnInlineBadge(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+
+	m := fixtureModel(t, fixtureBeans())
+	m.width, m.height = 120, 40
+	m = focusBeanFull(m, "tk-2")
+	b := m.focusedBean()
+	if b == nil {
+		t.Fatal("setup: no focused bean")
+	}
+	rendered := ansi.Strip(detailBoxForm(m.idx, b, 80, -1))
+
+	for k := range boxFormInlineKeys {
+		if !strings.Contains(rendered, "("+k+")") {
+			t.Errorf("boxFormInlineKeys hides %q from the footer, but the box-form detail pane renders no (%s) badge -- the key would be advertised nowhere:\n%s", k, k, rendered)
+		}
 	}
 }
 

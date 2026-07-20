@@ -253,13 +253,16 @@ func blockingDot(pending bool) string {
 // (TestPickerBoxesFitIn80Columns).
 func (m model) blockingPickerBox() string {
 	var b strings.Builder
-	b.WriteString(pickerFilterHint("space:toggle  enter:save") + "\n")
 
+	// bean bt-6nuz: the width is computed BEFORE the hint now, because the
+	// hint wraps to it (pickerFilterHint) instead of running off the modal.
 	w := wideModalWidth(m.width)
 	contW := w - 2 // modalBox's Padding(0,1) overhead only -- see parentPickerBox's doc comment
 	if contW < 8 {
 		contW = 8
 	}
+
+	b.WriteString(pickerFilterHint(blockingPickerLocalBindings(), contW) + "\n")
 	b.WriteString(m.blockFilter.chrome(contW))
 
 	rows := make([]string, len(m.blockFiltered))
@@ -288,5 +291,11 @@ func (m model) blockingPickerBox() string {
 			b.WriteString(theme.Muted.Render("(no match)") + "\n")
 		}
 	}
-	return modalPanel("Blocking", b.String(), "", w, theme.Mauve)
+	// bean bt-6nuz (#7): the heading reads "Relations", matching the
+	// Detail-View's own RELATIONS panel -- the PO arrives here FROM that
+	// panel, and two names for one thing read as two features. This is the
+	// DISPLAY label only: blockItems/blockPending/blockFiltered,
+	// data.SetBlocking and the bean field itself all keep "blocking", which
+	// is the domain word the data model and the beans CLI actually use.
+	return modalPanel("Relations", b.String(), "", w, theme.Mauve)
 }

@@ -1045,10 +1045,19 @@ func browseRepoLocalBindings() []keybind.Binding {
 // shows itself (bt-fy5d). e/s/a/t are literal (x) badges rendered by
 // detailBoxForm's Title/Status/Parent/Tags boxes and panelBox("Body") --
 // o (Type) and u (Priority) are badges too but were never in the footer set
-// to begin with. r (Blocking) has no badge of its own, but its subject IS
-// the Relations panel that same render puts on screen, and the PO listed it
-// with the others in the bean's own acceptance criteria.
-var boxFormInlineKeys = map[string]bool{"e": true, "s": true, "a": true, "t": true, "r": true}
+// to begin with.
+//
+// The membership rule is exactly "this key is rendered as an inline (x)
+// badge", nothing looser. bean bt-6nuz (PO finding #6) removed `r`
+// (Blocking), which bt-fy5d had admitted on the weaker ground that its
+// SUBJECT -- the Relations panel -- is on screen. But a panel is not a
+// badge: the Relations panel carries no (r), so hiding `r` from the footer
+// left the key advertised nowhere at all while it stayed fully live. Since
+// a footer entry is the only discovery surface a badge-less key has,
+// dropping one is a net loss of information rather than a de-duplication.
+// TestBoxFormInlineKeysAllHaveAnInlineBadge (footer_boxform_test.go) now
+// holds this rule structurally against the real detailBoxForm render.
+var boxFormInlineKeys = map[string]bool{"e": true, "s": true, "a": true, "t": true}
 
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors
 // Chrome()'s own algebra exactly (view.go) so the frame always fills

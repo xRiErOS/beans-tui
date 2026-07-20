@@ -22,6 +22,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/xRiErOS/beans-tui/internal/data"
 )
 
@@ -432,6 +433,122 @@ func TestPickerFilterResetsOnReopen(t *testing.T) {
 }
 
 // --- Rendering ---
+
+// --- bean bt-6nuz: overlay title, framed search field, footer styling ---
+
+// TestBlockingPickerBoxTitleIsRelations guards PO finding #7: the overlay
+// heading must read "Relations", matching the Detail-View's own RELATIONS
+// panel. Only the DISPLAY label moved -- blockItems/blockPending and every
+// other internal identifier deliberately keep the "blocking" domain word.
+func TestBlockingPickerBoxTitleIsRelations(t *testing.T) {
+	m := fixtureModel(t, filterBeansFixture())
+	m.width, m.height = 120, 40
+	m = focusBeanFull(m, "tk-1")
+	m = step(t, m, runeMsg('r'))
+
+	out := ansi.Strip(m.blockingPickerBox())
+	if !strings.Contains(out, "Relations") {
+		t.Errorf("blocking picker title is not %q:\n%s", "Relations", out)
+	}
+	if strings.Contains(out, "Blocking blocked") || strings.Contains(out, "─ Blocking ─") {
+		t.Errorf("blocking picker still shows the old %q heading:\n%s", "Blocking", out)
+	}
+}
+
+// TestPickerBoxesFrameTheSearchField guards PO finding #8: the search field
+// used to be the one bare, unframed row in an overlay otherwise built from
+// boxed fields -- it fell out optically against the chip strip right above
+// it. It now wears the same boxTopBorder/boxBottomBorder frame, labelled
+// "Search".
+func TestPickerBoxesFrameTheSearchField(t *testing.T) {
+	m := fixtureModel(t, filterBeansFixture())
+	m.width, m.height = 120, 40
+	m = focusBeanFull(m, "tk-1")
+
+	for _, tc := range []struct {
+		name string
+		key  rune
+		box  func(model) string
+	}{
+		{"blocking", 'r', model.blockingPickerBox},
+		{"parent", 'a', model.parentPickerBox},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mm := step(t, m, runeMsg(tc.key))
+			out := ansi.Strip(tc.box(mm))
+			var framed bool
+			lines := strings.Split(out, "\n")
+			for i, line := range lines {
+				if !strings.Contains(line, pickerFilterPlaceholder) {
+					continue
+				}
+				if i == 0 || i+1 >= len(lines) {
+					t.Fatalf("%s: placeholder line has no room for a frame:\n%s", tc.name, out)
+				}
+				if strings.Contains(lines[i-1], "╭") && strings.Contains(lines[i+1], "╰") &&
+					strings.HasPrefix(strings.TrimSpace(line), "│") {
+					framed = true
+				}
+			}
+			if !framed {
+				t.Errorf("%s picker search field is not framed like the other fields:\n%s", tc.name, out)
+			}
+		})
+	}
+}
+
+// TestPickerHintUsesBindingStyling guards PO finding #9: the overlay's own
+// hint line was one flat Muted string ("space:toggle  enter:save"), while
+// every other footer in the app renders Key in Teal and action in Subtext
+// (renderBindings, view.go). It now comes from the SAME
+// blockingPickerLocalBindings/parentPickerLocalBindings accessor the OUTER
+// Footer Zone 3 uses (bean bt-z4w7's derive-from-the-active-binding rule),
+// so the two surfaces cannot drift.
+func TestPickerHintUsesBindingStyling(t *testing.T) {
+	m := fixtureModel(t, filterBeansFixture())
+	m.width, m.height = 120, 40
+	m = focusBeanFull(m, "tk-1")
+
+	for _, tc := range []struct {
+		name string
+		key  rune
+		box  func(model) string
+		want string
+	}{
+		{"blocking", 'r', model.blockingPickerBox, renderBindings(blockingPickerLocalBindings())},
+		{"parent", 'a', model.parentPickerBox, renderBindings(parentPickerLocalBindings())},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mm := step(t, m, runeMsg(tc.key))
+			if !strings.Contains(tc.box(mm), tc.want) {
+				t.Errorf("%s picker hint is not the renderBindings-styled local set:\n%s", tc.name, tc.box(mm))
+			}
+		})
+	}
+}
+
+// TestPickerHintOmitsKeysAlreadyBadgedInline guards the second half of #9
+// (and bt-fy5d's own rule): the four facet chords ^t/^n/^p/^g are already
+// rendered as badges in the chip strip's own frames, so repeating them in
+// the hint line above is exactly the duplication bt-fy5d removed from the
+// main footer.
+func TestPickerHintOmitsKeysAlreadyBadgedInline(t *testing.T) {
+	m := fixtureModel(t, filterBeansFixture())
+	m.width, m.height = 120, 40
+	m = focusBeanFull(m, "tk-1")
+	m = step(t, m, runeMsg('r'))
+
+	out := ansi.Strip(m.blockingPickerBox())
+	for _, stale := range []string{"^t/^n/^p/^g:facets", "type:filter", "esc:discard", "space:toggle"} {
+		if strings.Contains(out, stale) {
+			t.Errorf("hint still carries the flat pre-bt-6nuz fragment %q:\n%s", stale, out)
+		}
+	}
+	// The chips themselves keep their badges -- only the hint's copy went.
+	if !strings.Contains(out, "^t") {
+		t.Errorf("the Type chip lost its own inline ^t badge:\n%s", out)
+	}
+}
 
 // TestPickerBoxesRenderFilterChrome asserts both overlays actually SHOW the
 // new chrome: the four chip labels plus the search field's placeholder.
