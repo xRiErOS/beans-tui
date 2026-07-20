@@ -263,6 +263,28 @@ type model struct {
 	flatView bool
 	flatList listState
 
+	// Box-form Detail-Pane scroll (jira-style-ui experiment, bean bt-ze10,
+	// epic bt-vy1q F1): detailBoxForm (box_detail_form.go) renders Title +
+	// scalar-grid + Body/Relations/History as ONE tall string with NO
+	// windowing of its own -- unlike the accordion's RELATIONS section
+	// (windowRelationsSection, view_browse_repo.go), a long Body used to
+	// simply get cut off, Relations/History unreachable. boxFormScroll is
+	// the offset renderAccordionPane's boxFormEnabled() branch windows that
+	// string to (scrollView, view.go), advanced/clamped by keyDetailFocus's
+	// up/down (update.go, boxFormEnabled()-gated) and wheelMove (mouse.go,
+	// wheel over the Detail pane) via mouse.go's adjustBoxFormScroll/
+	// boxFormScrollBounds. boxFormScrollBean is the bean ID the offset was
+	// last computed for -- a SELECTION change is detected lazily by
+	// comparing this against the currently focused bean's ID
+	// (boxFormEffectiveScroll, mouse.go) wherever the offset is READ, rather
+	// than hunted down at every one of the many cursor-move/click/jump call
+	// sites that can change the selected bean (Golden-Rule-Drift-Schutz: one
+	// derived check beats N independent, driftable reset sites). Both zero-
+	// valued by default -- accordion mode (boxFormEnabled() off) never reads
+	// either field.
+	boxFormScroll     int
+	boxFormScrollBean string
+
 	confirmQuit bool
 
 	// E3 (bean bt-dlgk): node-action overlays -- mutually exclusive by

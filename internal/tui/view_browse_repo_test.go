@@ -329,7 +329,7 @@ func TestRenderAccordionPaneRelationsKeepsSelectedChildVisibleAcrossAllPositions
 	w, h := 60, 15 // avail = 15-5-4 = 6, winH = 5 -- forces windowing (12 > 5)
 
 	for i := 0; i < n; i++ {
-		out := renderAccordionPane(m.idx, b, w, h, relationsSectionIdx+1, relationsSectionIdx, i, 1, true)
+		out := renderAccordionPane(m.idx, b, w, h, relationsSectionIdx+1, relationsSectionIdx, i, 1, true, 0)
 		plain := ansi.Strip(out)
 		wantID := fmt.Sprintf("ch-%02d", i)
 		if !strings.Contains(plain, wantID) {
@@ -346,7 +346,7 @@ func TestRenderAccordionPaneRelationsShowsMoreEntriesIndicatorWhenOverflowing(t 
 	m := fixtureModel(t, all)
 	b := m.idx.ByID["ep-many"]
 
-	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true)
+	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true, 0)
 	plain := ansi.Strip(out)
 	// scrollView's indicator format is "L n–m/total" (view.go) -- total here
 	// counts BODY LINES (the "Children" subheader plus its 12 rows == 13),
@@ -369,7 +369,7 @@ func TestRenderAccordionPaneRelationsFewEntriesUnchangedByWindowing(t *testing.T
 	m := fixtureModel(t, all)
 	b := m.idx.ByID["ep-many"]
 
-	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true)
+	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true, 0)
 	plain := ansi.Strip(out)
 	if !strings.Contains(plain, "ch-00") || !strings.Contains(plain, "ch-01") {
 		t.Fatalf("few relations (2, under the pane's budget) must show ALL of them simultaneously (no windowing), got:\n%s", plain)

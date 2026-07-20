@@ -622,7 +622,7 @@ func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string
 // `for i := 0; ... && len(lines) < h`) prevents any overflow past the pane's
 // border, the same mechanism the Tree pane relies on.
 func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) string {
-	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused)
+	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused, boxFormEffectiveScroll(m, b))
 }
 
 // renderAccordionPane (I02, E4-T3-Review PFLICHT carried into E4 Task 4,
@@ -637,7 +637,13 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // state backs the accordion stays entirely at each call site, mirroring
 // I01's copy-on-write doctrine applied to "shared render body, independent
 // state" instead of maps.
-func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool) string {
+// boxScroll (bean bt-ze10, epic bt-vy1q F1) is ONLY consulted inside the
+// boxFormEnabled() branch below -- the accordion branch (flag off) ignores
+// it entirely, so a caller with no box-form scroll of its own (e.g.
+// renderFullscreenBody, view_fullscreen.go, which passes 0 -- fullscreen
+// box-form scrolling is out of this task's scope, see that call site's own
+// doc comment) is always safe.
+func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll int) string {
 	var rows []string
 	if b != nil {
 		bodyW := w - 4
@@ -663,8 +669,21 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 			// convention. Accordion nav (open/secCursor/fieldCursor) has no
 			// effect in this mode -- field-level nav for box-form is a later
 			// slice (see design-spec.md), acceptable for this experiment slice.
+			// F1 (bean bt-ze10, epic bt-vy1q): detailBoxForm has no windowing
+			// of its own, so a tall form (long Body, or Relations/History
+			// with many entries) used to just get cut off by renderPane's
+			// own Golden-Rule-#1 line cap below -- windowed to `h` (the SAME
+			// content-height budget renderPane itself gets handed a few
+			// lines down, so the two never disagree) via scrollView (view.go,
+			// the SAME primitive windowRelationsSection already uses for the
+			// accordion's own Relations section), offset boxScroll. At
+			// boxScroll==0 with a form that already fits (total<=h, D12's
+			// "Normalfall passt" claim), scrollView's own padding-to-h
+			// converges with renderPane's pre-existing pad-to-h loop below --
+			// byte-identical to the pre-F1 output, no golden drift.
 			form := detailBoxForm(idx, b, accW)
-			rows = append(rows, strings.Split(form, "\n")...)
+			win, _ := scrollView(form, h, boxScroll)
+			rows = append(rows, strings.Split(win, "\n")...)
 		} else {
 			rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
 			secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)

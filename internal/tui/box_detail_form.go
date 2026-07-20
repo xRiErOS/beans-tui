@@ -129,3 +129,27 @@ func detailBoxForm(idx *data.Index, b *data.Bean, width int) string {
 
 	return strings.Join(lines, "\n")
 }
+
+// clampBoxFormScroll bounds a box-form scroll offset to [0, max(0, total-
+// height)] (bean bt-ze10, epic bt-vy1q F1) -- the SAME clamp algebra
+// scrollView (view.go) applies internally when it windows content for
+// render, duplicated here rather than shared because mouse.go's
+// adjustBoxFormScroll needs the CLAMPED OFFSET ITSELF to store back onto
+// model.boxFormScroll, not scrollView's windowed string + indicator return
+// shape. Render-time windowing (renderAccordionPane, view_browse_repo.go)
+// still goes through scrollView directly, which self-clamps regardless --
+// this function only keeps the STORED offset (and the tests asserting it)
+// sane between keystrokes/wheel ticks.
+func clampBoxFormScroll(offset, total, height int) int {
+	maxOff := total - height
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	if offset > maxOff {
+		offset = maxOff
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return offset
+}

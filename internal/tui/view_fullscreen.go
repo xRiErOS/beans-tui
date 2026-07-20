@@ -172,5 +172,16 @@ func renderFullscreenBody(fs fullscreenMode, innerW, bodyH int, listRows []strin
 	if fs == fullscreenList {
 		return renderPane(pane{rows: listRows}, innerW, bodyH, focused)
 	}
-	return renderAccordionPane(idx, detailBean, innerW, bodyH, accOpen, secCursor, fieldCursor, detailLevel, focused)
+	// F1 (bean bt-ze10) scoped this task's box-form scroll wiring to the
+	// SPLIT Detail pane only (keyDetailFocus explicitly guards its scroll
+	// branch off while m.fullscreen == fullscreenDetail, update.go) -- the
+	// Vollbild-Detail geometry (single full-width pane, no lw/rw split) is a
+	// DIFFERENT bodyH/accW budget than boxFormScrollBounds (mouse.go)
+	// computes from the split's own clickPaneGeometry call, so reusing
+	// m.boxFormScroll here would clamp against the wrong height. Passing 0
+	// literal keeps fullscreen box-form exactly at its pre-F1 behavior
+	// (unwindowed, renderPane's own line cap still applies) -- a real gap,
+	// but an EXISTING one this task's own "Betroffen" file list (bean body)
+	// does not name view_fullscreen.go, so it stays out of scope here.
+	return renderAccordionPane(idx, detailBean, innerW, bodyH, accOpen, secCursor, fieldCursor, detailLevel, focused, 0)
 }

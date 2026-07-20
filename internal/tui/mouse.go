@@ -12,7 +12,12 @@ package tui
 //     view_browse_backlog.go) instead of devd's `m.scroll -= 3`/`+= 3`
 //     non-Tree branch -- beans-tui has no scroll-offset field to move;
 //     windowAround/windowStart already follow the cursor automatically on
-//     render.
+//     render. EXCEPTION (bean bt-ze10, epic bt-vy1q F1): while
+//     boxFormEnabled(), a wheel tick landing inside the Detail pane's own
+//     bounds (boxFormWheelHit, below) now scrolls model.boxFormScroll
+//     instead -- the one real scroll-offset field this codebase has, and
+//     deliberately scoped to that ONE mode/pane so this doc comment's claim
+//     stays true everywhere else (wheelMove's own doc comment has the gate).
 //  2. Left-click dispatch is a SINGLE `switch m.view` over two sibling
 //     views (viewBrowseRepo/viewBacklog), not devd's Tree-vs-everything-else
 //     split (devd's non-Tree views are all Chrome()-scrolled detail screens;
@@ -28,6 +33,8 @@ package tui
 // (mouse_test.go) is the regression guard for this exact ordering.
 
 import (
+	"strings"
+
 	"github.com/xRiErOS/beans-tui/internal/data"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -171,9 +178,9 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.Button {
 	case tea.MouseButtonWheelUp:
-		return m.wheelMove(-1), nil
+		return m.wheelMove(msg, -1), nil
 	case tea.MouseButtonWheelDown:
-		return m.wheelMove(1), nil
+		return m.wheelMove(msg, 1), nil
 	case tea.MouseButtonLeft:
 		if msg.Action != tea.MouseActionPress {
 			return m, nil
@@ -188,13 +195,23 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// wheelMove dispatches a single wheel tick (delta = ±1) to the active
-// view's own cursor-move helper -- design decision f: Wheel bewegt den
-// View-eigene CURSOR (nicht einen Scroll-Offset), same ±1 step as a single
-// i/k keypress (devd's own Tree-wheel precedent, update.go:476-487 -- devd's
-// NON-Tree ×3 m.scroll branch has no beans-tui equivalent, this file's own
-// doc comment).
-func (m model) wheelMove(delta int) model {
+// wheelMove dispatches a single wheel tick (delta = ±1) -- design decision f:
+// Wheel bewegt den View-eigene CURSOR (nicht einen Scroll-Offset), same ±1
+// step as a single i/k keypress (devd's own Tree-wheel precedent,
+// update.go:476-487 -- devd's NON-Tree ×3 m.scroll branch has no beans-tui
+// equivalent, this file's own doc comment). bt-ze10 (epic bt-vy1q F1) adds
+// the ONE exception: while boxFormEnabled() AND the wheel event's own
+// coordinates land inside the Detail pane (boxFormWheelHit, below), the tick
+// scrolls model.boxFormScroll instead of moving a cursor -- checked first so
+// it takes priority over the view switch, mirrors the Toast-Klick-Vorrang/
+// fullscreen/overlay guards above it in handleMouse (earliest-wins
+// precedent). boxFormEnabled() off (or a wheel outside the Detail pane, e.g.
+// over the Tree/Backlog) always falls through to the original switch below,
+// UNCHANGED.
+func (m model) wheelMove(msg tea.MouseMsg, delta int) model {
+	if boxFormEnabled() && boxFormWheelHit(m, msg) {
+		return m.adjustBoxFormScroll(m.focusedBean(), delta)
+	}
 	switch m.view {
 	case viewBrowseRepo:
 		return m.treeCursorMove(m.visibleNodes(), delta)
@@ -569,6 +586,127 @@ func gridColAt(widths []int, col int) int {
 		x += w + detailBoxFormGap
 	}
 	return -1
+}
+
+// boxFormEffectiveScroll returns m.boxFormScroll if it still targets b, or 0
+// if the selection has moved to a DIFFERENT bean since boxFormScroll was
+// last written (bean bt-ze10 Akzeptanz "Offset resets when the selected bean
+// changes") -- types.go's own boxFormScrollBean doc comment has the full
+// "derived reset, not N explicit reset call sites" rationale. Pure/read-
+// only: renderBeanAccordionPane (view_browse_repo.go) calls this to get the
+// value it hands to renderAccordionPane's own boxScroll param; it never
+// mutates model.boxFormScroll itself (adjustBoxFormScroll, below, is the
+// only writer).
+func boxFormEffectiveScroll(m model, b *data.Bean) int {
+	if b == nil || b.ID != m.boxFormScrollBean {
+		return 0
+	}
+	return m.boxFormScroll
+}
+
+// boxFormScrollBounds returns detailBoxForm's total rendered line count and
+// the Detail pane's own visible line budget for b -- what adjustBoxFormScroll
+// (below) clamps a new offset against. Reconstructs the SAME
+// clickPaneGeometry geometry detailBoxFormClickRow (below) and
+// boxFormWheelHit (below) do (Golden-Rule-Drift-Schutz), with ONE correction
+// neither of those needs for their own purpose (a click/wheel Y bounds
+// check, not a content-height BUDGET): the persistent filter-chip row's
+// height is reclaimed from bodyH here, exactly as viewBrowseRepo's own
+// View() does before the split ever renders (view_browse_repo.go's "S3"
+// comment, boxFormEnabled()) -- that SAME post-reclaim bodyH is what
+// ultimately reaches renderAccordionPane as its `h` param at render time, so
+// this must match it or the stored offset and the actual render disagree.
+func boxFormScrollBounds(m model, b *data.Bean) (total, height int) {
+	if b == nil {
+		return 0, 0
+	}
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+
+	bodyH, _, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	if m.view != viewBacklog {
+		bodyH -= filterBarHeight // B6 precedent: only viewBrowseRepo shows the filter bar
+		if bodyH < 1 {
+			bodyH = 1
+		}
+	}
+
+	accW := rw - 2
+	if accW < 1 {
+		accW = 1
+	}
+	form := detailBoxForm(m.idx, b, accW)
+	return len(strings.Split(form, "\n")), bodyH
+}
+
+// adjustBoxFormScroll applies delta to b's box-form scroll offset (relative
+// to boxFormEffectiveScroll's own stale-selection baseline, so a bean change
+// since the last adjustment starts back at 0 rather than compounding a
+// stale offset), clamps it via boxFormScrollBounds/clampBoxFormScroll
+// (box_detail_form.go), and records b's ID as the offset's new owner. Shared
+// by keyDetailFocus's up/down (update.go, keyboard) and wheelMove (above,
+// mouse wheel) -- ONE mutation point, so the two input paths can never
+// independently drift on the reset-on-bean-change or clamp rules. No-op
+// (returns m unchanged) when b is nil (defensive -- callers already guard
+// this in practice: keyDetailFocus's own b==nil early-return, wheelMove's
+// boxFormWheelHit implying a resolved Detail pane).
+func (m model) adjustBoxFormScroll(b *data.Bean, delta int) model {
+	if b == nil {
+		return m
+	}
+	base := boxFormEffectiveScroll(m, b)
+	total, height := boxFormScrollBounds(m, b)
+	m.boxFormScroll = clampBoxFormScroll(base+delta, total, height)
+	m.boxFormScrollBean = b.ID
+	return m
+}
+
+// boxFormWheelHit reports whether msg lands inside the Detail pane's own
+// column/row bounds -- wheelMove (above) uses this to decide whether a wheel
+// tick scrolls the box-form Detail pane (bean bt-ze10) instead of moving the
+// Tree/Backlog cursor. Mirrors detailBoxFormClickRow's own X/Y bounds check
+// (below) minus the row->target mapping a click needs -- a wheel tick has no
+// "which box did I land on" question, only "am I over the pane at all".
+func boxFormWheelHit(m model, msg tea.MouseMsg) bool {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+
+	bodyH, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	if m.view != viewBacklog {
+		originY += filterBarHeight // B6 precedent, detailBoxFormClickRow below
+	}
+
+	if msg.X < originX+lw || msg.X >= originX+lw+rw {
+		return false
+	}
+	row := msg.Y - originY
+	return row >= 0 && row < bodyH
 }
 
 // detailBoxFormClickRow maps a Detail-Pane click to a box-form field target

@@ -1280,6 +1280,30 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// F1 (bean bt-ze10, epic bt-vy1q): while boxFormEnabled(), the Accordion
+	// nav below has "no effect" (renderAccordionPane's own boxFormEnabled()
+	// branch doc comment, view_browse_repo.go -- box-form has no Section/
+	// Field cursor of its own yet) -- up/down are repurposed here to scroll
+	// the box-form Detail pane's viewport instead, via the SAME
+	// adjustBoxFormScroll wheelMove (mouse.go) uses, so keyboard and wheel
+	// can never independently drift on the reset-on-bean-change/clamp rules.
+	// Guarded off inside fullscreenDetail (m.fullscreen ==
+	// fullscreenDetail): boxFormScrollBounds derives its height from the
+	// SPLIT pane's own clickPaneGeometry call (mouse.go), a DIFFERENT budget
+	// than the Vollbild-Detail's single full-width pane -- scrolling here
+	// would clamp against the wrong height (renderFullscreenBody's own doc
+	// comment, view_fullscreen.go, has the matching "out of scope" note for
+	// the render side). boxFormEnabled() off, or fullscreenDetail active,
+	// falls straight through to the ORIGINAL switch below, unchanged.
+	if boxFormEnabled() && m.fullscreen != fullscreenDetail {
+		switch navKey(msg.String()) {
+		case "up":
+			return m.adjustBoxFormScroll(b, -1), nil
+		case "down":
+			return m.adjustBoxFormScroll(b, 1), nil
+		}
+	}
+
 	switch navKey(msg.String()) {
 	case "up":
 		if m.detailLevel == 0 && m.secCursor > 0 {
