@@ -383,3 +383,17 @@ neue Sektion). Jeder Eintrag hat exakt drei Felder:
 - **Was lief nicht rund:** `beans list`-ETag hasht die default-gefüllte In-Memory-Repräsentation, `--if-match` die rohen Datei-Bytes — nie mutierte beans ohne `priority:`-Zeile konflikten deterministisch und unheilbar per Watcher-Refresh (PO-Befund im lean-stack-Repo, 9 beans betroffen).
 - **Wie gefixt:** Datenheilung per einmaliger kanonischer Mutation (raw-Hash als if-match); Upstream-Issue-Entwurf erstellt (docs/_free-notes/); beans-tui bewusst OHNE Workaround (D04).
 - **Forward-Guard:** Bei „Conflict trotz Refresh"-Symptomen zuerst list-ETag vs. fnv1a64(raw bytes) diffen (Loop aus bt-0xrb-Diagnose) statt bt-seitig zu debuggen; bei bulk-importierten beans-Repos Heilungs-Sweep einplanen, bis Upstream gefixt.
+
+## 2026-07-20 — jira-Style-UI: PO-Befund-Runde (Quellen: bt-wtqs-ERRATA, Reviews)
+
+### 1. clickPaneGeometry-originY zeigt auf die MITTLERE Strip-Zeile, nicht die erste
+
+- **Was lief nicht rund:** Filter-Strip-Klick (bt-wtqs) traf zunächst daneben — der Klick auf die oberste Strip-Zeile öffnete nichts. `clickPaneGeometry`s rohes `originY` liegt auf der MITTLEREN der drei Strip-Zeilen (`filterBarHeight == 3`), nicht auf der Oberkante. Genau die Off-by-one-Klasse, die dieses Repo schon zweimal biss (bt-hd42/bt-vpvu).
+- **Wie gefixt:** `stripTop := rawOriginY - 1` in `mouse.go` (`filterBarFieldAt`/`filterBarHit`), per echtem `View()`-Dump verifiziert; der `-1` ist load-bearing (Reviewer-Mutations-Probe: Kippen → alle 6 Geometrie-Fälle RED bei 80 UND 120 Spalten).
+- **Forward-Guard:** Jeder neue Maus-Hit-Test auf eine mehrzeilige Region MUSS render-geerdet testen (Klick-Koordinate aus `ansi.Strip(m.View())` ableiten, NIE handrechnen) — dann fällt die originY-Zeilensemantik im Test sofort auf. Merke: `clickPaneGeometry`-originY ist NICHT die Region-Oberkante; die Zeilen-Ableitung immer per Render-Dump gegenprüfen.
+
+### 2. Render-geerdeter Geometrie-Test doppelt als Reorder-Drift-Guard
+
+- **Was lief nicht rund:** Kein echter Fehler — Implementer sorgte sich, dass das hartcodierte Chip→Facet-Mapping (`filterBarFieldAt` `facets`-Slice, synchron zu `box_filter_bar.go` `cells`) still driftet.
+- **Wie gefixt:** Nichts zu fixen — der Reviewer zeigte, dass der label-lokalisierende Test (Klick-Spalte aus der gerenderten Chip-Beschriftung) einen Chip-REORDER automatisch rot färbt: die Spalte verschiebt sich, die hartcodierte Facette passt nicht mehr.
+- **Forward-Guard:** Muster festhalten — Geometrie-Tests, die ihre Klick-Koordinate aus dem gerenderten Label ableiten (statt aus einem angenommenen Index), sind zugleich Reorder-Drift-Guards. Keinen separaten Guard doppeln. Restrisiko nur bei Chip-ANZAHL-Änderung (Slice-Länge vs. `gridColWidths`), das gehört in ein eigenes bean.
