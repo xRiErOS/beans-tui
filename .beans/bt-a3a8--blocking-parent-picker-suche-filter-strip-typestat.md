@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-20T07:29:58Z
-updated_at: 2026-07-20T07:29:58Z
+updated_at: 2026-07-20T07:48:39Z
 parent: bt-vy1q
 ---
 
@@ -43,3 +43,49 @@ Das Picker-Overlay bekommt:
 - [ ] Overlay laeuft bei 80 Spalten nicht ueber (tmux-Smoke)
 - [ ] Tests: Filterung, Auswahl nach Filterung trifft den richtigen Bean, globaler Filter unveraendert
 - [ ] Voller `command go test ./...` gruen
+
+
+## Grounding 2026-07-20 (Investigator, read-only)
+
+**Kernbefund: das Suchmuster existiert bereits im Repo.** Der Tag-Picker hat Suche +
+Live-Filter; Blocking-/Parent-Picker haben sie nicht. Diese Aufgabe ist ein **Port eines
+erprobten Musters**, kein Neubau.
+
+### Vorlage (hier abschauen)
+| Baustein | Ort |
+|---|---|
+| Sucheingabe | `box_picker_tag.go:183` — standalone `textinput.Model` (`tagInput`) |
+| Live-Filter | `box_picker_tag.go:229` — `filterTagItems(items, query)`, case-insensitive substring |
+| Tests dazu | `box_picker_tag_test.go` (24 Testfunktionen, u.a. textinput-Integration) |
+
+### Zu aendernde Picker
+| Picker | Datei | Konstruktor | Render | Key-Handler | State |
+|---|---|---|---|---|---|
+| Blocking (`r`) | `box_picker_blocking.go` | `openBlockingPicker()` :60 | `blockingPickerBox()` :198 | `keyBlockingPicker()` :90 | `types.go:379` — `blockItems`/`blockOriginal`/`blockPending` |
+| Parent (`a`) | `box_picker_parent.go` | `openParentPicker()` :80 | `parentPickerBox()` :180 | `keyParentPicker()` :104 | `types.go:368` — `parentItems` |
+
+Kandidaten-Quellen: Blocking `buildBlockingItems()` :33 (alle beans ausser self, via `m.idx.ByID`),
+Parent `buildParentItems()` :64 (via `data.EligibleParents(idx, b)` — Zyklus-Ausschluss steckt
+schon im data-Layer, nicht neu bauen).
+
+Key-Routing: `update.go:794` (`keys.Blocking`) / `:791` (`keys.Assign`);
+Overlay-Cases `update.go:857` / `:855`. Bindings `keymap.go:67` / `:66`.
+
+### Filter-Strip: direkt wiederverwendbar
+`scalarCell` (`box_detail_form.go:29`), `gridRow(cells, width)` (:65), `gridColWidths(n,width)` (:40),
+`dropdownBox(label,value,hotkey,w,focused)` — alle width-aware und bereits durch
+`box_detail_form` + `box_filter_bar` getestet. Der Strip (Type/Status/Priority/Tags/Titel) baut
+darauf auf, **nichts Neues erfinden**.
+
+Nicht wiederverwendbar: das Facetten-Overlay hinter `f` (`box_filter_facets.go:57`) ist auf seine
+4 festen Facetten verdrahtet; die Command-Palette (`overlay_palette.go:222`) filtert selbst nicht.
+
+### Betroffene Tests
+`box_picker_blocking_test.go` (16 Funktionen) · `box_picker_parent_test.go` (14) ·
+`box_picker_tag_test.go` (Vorlage) · indirekt `overlay_palette_test.go`, `tree_golden_test.go`,
+`view_browse_repo_test.go`. Eigene Picker-Golden existieren nicht — Picker rendern in
+`tree.golden`/`backlog.golden`.
+
+### Kollisions-Hinweis fuer den Dispatch
+Beruehrt `types.go` + `update.go` — dieselben Dateien wie bt-ze10 (Detail-Scroll).
+**Nicht gleichzeitig im selben Working Tree bearbeiten.**
