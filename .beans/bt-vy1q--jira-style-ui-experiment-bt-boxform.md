@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-20T07:24:38Z
-updated_at: 2026-07-20T07:24:38Z
+updated_at: 2026-07-20T14:43:54Z
 ---
 
 Spike: ist eine flachere, salientere jira-artige Darstellung eine Verbesserung fuer beans-tui?
@@ -43,3 +43,33 @@ Vorbild: jiratui.sh (Python/Textual — nur Design-Vorbild, kein Code-Transfer).
 
 ## Offen
 Siehe Kinder-beans. Merge auf main erst nach PO-Freigabe.
+
+
+## Sitzungs-Abschluss 2026-07-20 — Runde 2 + 3 erledigt
+
+`experiment/jira-style-ui` @ `a276121`, **80 Commits vor `main`**, Tree sauber, voller
+Testlauf gruen, 80-Spalten-Smoke gegen sproutling bestanden. Alle Agent-Worktrees entfernt.
+
+**17 Kinder completed.** In dieser Sitzung dazugekommen: bt-ze10 (Detail-Scroll, F1) ·
+bt-1o4g (Feld-Cursor) · bt-s90e (Fullscreen: flatView + Scroll) · bt-a3a8 (Picker-Suche) ·
+bt-z4w7 (Footer-Labels abgeleitet) · bt-pt1r + bt-pl5p (Slug-Kuerzung) · bt-fy5d + bt-oqsv
+(Footer-Platz) · bt-8d35 (Fokus-Modell) · bt-hd42 (Klick-Offset) · bt-f68z + bt-vpvu (Tree
++ Maus) · bt-mx4k (Palette `K`) · bt-6nuz (Relations-Overlay) · bt-oox1 (Detail-Politur) ·
+bt-ce7i (Fehl-Commit, Option B).
+
+**Der PO hat den Spike abgenommen** — der Branch wird vollstaendig auf `main` gemerged
+(bt-2o9a, Timing offen). Damit ist die Richtungsfrage des Experiments beantwortet.
+
+### Neue Entscheidungen (design-spec.md)
+D03 REVIDIERT (Klick: einfach waehlt, doppelt klappt) · D13 (`v` nur im Box-Modus im
+Footer) · D14 (History bleibt im tab-Zyklus). Dazu das Fokus-Modell: **tab bewegt INNERHALB
+der Region, esc verlaesst sie**; `enter` oeffnet ueberall; `X` leert Filter;
+`pgup`/`pgdn` blaettern; Palette nur noch `K`.
+
+### Verbindliche Sprache
+Neu: `docs/GLOSSARY.md` (auch auf `main`, Commit `ef12bf5`) — boxed field, Box-Titel,
+Box-Badge, Panel, Region, Views mit Datei-Zuordnung, Terminal-Fallen. Pointer in CLAUDE.md.
+
+### Offen
+bt-adkn (Body blaettern) · bt-p78f (Anker-Leiste + Pencil) · bt-ty48 (GIF, bewusst zuletzt)
+· bt-dovm (draft, PO-Freigabe) · bt-2o9a (Merge auf main).

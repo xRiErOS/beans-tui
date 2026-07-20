@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-20T09:22:58Z
-updated_at: 2026-07-20T10:14:16Z
+updated_at: 2026-07-20T14:43:33Z
 parent: bt-vy1q
 ---
 
@@ -115,3 +115,16 @@ Wortbruch, Footer zweizeilig mit `r Blocking`. Parent-Picker gegengeprueft.
 auseinanderlaufen zu lassen waere schlechter als die konsistente Behandlung, und
 box_picker_filter.go existiert laut eigenem Kopfkommentar genau dafuer, dass die
 zwei Picker nicht driften.
+
+
+## Nachtrag 2026-07-20 (Commit `56dace0`)
+
+Beim Merge-Smoke fiel auf, dass #7 nur halb umgesetzt war: Overlay-Titel und Detail-Panel
+hiessen bereits "Relations", das **Footer-Label** zeigte weiterhin `r Blocking`.
+Nachgezogen in `keymap.go` (`WithHelp("r", "Relations")`), zwei Q06-Listen-Tests und vier
+Golden angepasst.
+
+Bewusst NICHT umbenannt: der Bezeichner `Blocking`, `data.SetBlocking` und
+`appendGroup("Blocking", …)` in `view_detail_bean.go` — die meinen die konkrete
+Beziehungsart innerhalb des Relations-Panels, nicht das Panel selbst. Nur das
+ANZEIGE-Label folgt der Ueberschrift.
