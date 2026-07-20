@@ -998,13 +998,44 @@ func (m model) browseRepoChrome(innerW int) (head, localKeys string) {
 // PF-11's own doc comment flagged (f/X/b/t/a/B/y were handled by
 // keyNodeAction/keyTree but never shown in the footer). X (FilterClear)
 // stays deliberately OUT (Q06's list omits it too, same as before).
+//
+// bt-fy5d (Nebenbefund N2, epic bt-vy1q): while boxFormEnabled(), the Detail
+// pane renders each scalar field as a titled box carrying its own hotkey
+// badge in the bottom border ((e) (s) (o) (u) (a) (t), box_detail_form.go) --
+// the footer repeated all of them, which at 80 columns cost a whole third
+// footer line for information already on screen, more saliently. Those keys
+// are therefore dropped from the footer DISPLAY while the flag is on. This
+// is display-only: the bindings stay registered in keymap.go (single source)
+// and keep their Help-overlay entry, so TestHelpGroupsCoverEveryBindingExactlyOnce's
+// drift guard is untouched. With the flag OFF nothing is shown inline, so
+// the list stays byte-identical to the pre-bt-fy5d one.
 func browseRepoLocalBindings() []keybind.Binding {
-	return []keybind.Binding{
+	bs := []keybind.Binding{
 		keys.FocusIn, keys.FocusOut,
 		keys.Search, keys.Filter, keys.Status, keys.Create, keys.Delete, keys.Editor,
 		keys.Backlog, keys.TagAssign, keys.Yank, keys.Assign, keys.Blocking,
 	}
+	if !boxFormEnabled() {
+		return bs
+	}
+	out := bs[:0:0]
+	for _, b := range bs {
+		if boxFormInlineKeys[b.Help().Key] {
+			continue
+		}
+		out = append(out, b)
+	}
+	return out
 }
+
+// boxFormInlineKeys are the footer keys the box-form Detail pane already
+// shows itself (bt-fy5d). e/s/a/t are literal (x) badges rendered by
+// detailBoxForm's Title/Status/Parent/Tags boxes and panelBox("Body") --
+// o (Type) and u (Priority) are badges too but were never in the footer set
+// to begin with. r (Blocking) has no badge of its own, but its subject IS
+// the Relations panel that same render puts on screen, and the PO listed it
+// with the others in the bean's own acceptance criteria.
+var boxFormInlineKeys = map[string]bool{"e": true, "s": true, "a": true, "t": true, "r": true}
 
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors
 // Chrome()'s own algebra exactly (view.go) so the frame always fills
