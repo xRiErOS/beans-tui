@@ -77,9 +77,10 @@ func (m model) flatSelected() *data.Bean {
 // this slice's own scope instruction.
 func (m model) flatRows(vis []*data.Bean, focused bool, bodyH int) []string {
 	pos := m.flatList.cursor
+	slug := m.beanIDPrefix()
 	rows := make([]string, len(vis))
 	for i, b := range vis {
-		text := backlogRowText(b)
+		text := backlogRowText(b, slug)
 		if i == pos {
 			plain := ansi.Strip(text)
 			if focused {

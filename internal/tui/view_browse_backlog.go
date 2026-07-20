@@ -165,8 +165,12 @@ func (m model) backlogSelected() *data.Bean {
 // ported here, see plan Port-Referenzen -- a beans title is short enough for
 // the existing single-line windowAround, `truncate` handles the rare overlong
 // case exactly like every other row in the app).
-func backlogRowText(b *data.Bean) string {
-	return theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(b.ID) + " " + b.Title
+// slug is the caller's m.beanIDPrefix() (view_browse_repo.go) -- the ID is
+// shortened by shortBeanID exactly like treeRowText does it (bean bt-pl5p):
+// Tree and Backlog/Flat are TWO separate render paths, and only changing one
+// would let them drift apart visually.
+func backlogRowText(b *data.Bean, slug string) string {
+	return theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(shortBeanID(b.ID, slug)) + " " + b.Title
 }
 
 // backlogRows renders every visible Backlog row, applying the same D08
@@ -176,9 +180,10 @@ func backlogRowText(b *data.Bean) string {
 // (E1 Task 8) -- no new fenestration mechanism (plan Port-Referenzen).
 func (m model) backlogRows(vis []*data.Bean, focused bool, bodyH int) []string {
 	pos := m.backlogList.cursor
+	slug := m.beanIDPrefix()
 	rows := make([]string, len(vis))
 	for i, b := range vis {
-		text := backlogRowText(b)
+		text := backlogRowText(b, slug)
 		if i == pos {
 			plain := ansi.Strip(text)
 			if focused {

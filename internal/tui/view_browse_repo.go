@@ -489,9 +489,46 @@ func treeNodeMarker(n treeNode) string {
 	return "▸ "
 }
 
+// shortBeanID strips the CURRENT repo's own bean-ID prefix from id (bean
+// bt-pl5p, Nebenbefund N5, epic bt-vy1q): the left pane showed full IDs
+// ("sproutling-btv7") although the header breadcrumb already names the open
+// repo -- the slug is pure redundancy there, and the columns it eats are
+// exactly the columns the title needs (PO belegte den harten Titel-Clamp in
+// beans-tui-boxform-narrow.gif).
+//
+// Deliberately NOT "cut at the last '-'": bean IDs carry multi-segment
+// prefixes (lean-stack-58j0) and the pane also shows FOREIGN/dangling
+// references from other repos, which must stay unambiguous. Only the exact
+// "<slug>-" prefix of the repo that is open right now is removed; anything
+// else (foreign prefix, empty slug, empty remainder) returns id unchanged.
+func shortBeanID(id, slug string) string {
+	if slug == "" {
+		return id
+	}
+	rest, ok := strings.CutPrefix(id, slug+"-")
+	if !ok || rest == "" {
+		return id
+	}
+	return rest
+}
+
+// beanIDPrefix is the slug shortBeanID strips from the rows of the currently
+// open repo -- data.RepoSlug reads .beans.yml's beans.prefix, the SAME field
+// the bean IDs themselves are minted from (repo_slug.go's own doc comment),
+// so this can never drift from the real ID shape. Resolved once per render
+// by the row builders, not once per row (RepoSlug does file IO).
+func (m model) beanIDPrefix() string {
+	if m.repoDir == "" {
+		return ""
+	}
+	return data.RepoSlug(m.repoDir)
+}
+
 // treeRowText renders one row's plain content: indent + expand marker +
-// status glyph + type icon + ID (Sapphire) + title (design-spec.md §8).
-func treeRowText(n treeNode) string {
+// status glyph + type icon + ID (Sapphire, repo-prefix stripped via
+// shortBeanID -- bean bt-pl5p) + title (design-spec.md §8). slug is the
+// caller's m.beanIDPrefix(); "" disables shortening entirely.
+func treeRowText(n treeNode, slug string) string {
 	indent := strings.Repeat("  ", n.depth)
 	marker := treeNodeMarker(n)
 	if n.placeholder {
@@ -506,7 +543,7 @@ func treeRowText(n treeNode) string {
 		return indent + marker + theme.Dim.Render("(orphaned)")
 	}
 	b := n.bean
-	return indent + marker + theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(b.ID) + " " + b.Title
+	return indent + marker + theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(shortBeanID(b.ID, slug)) + " " + b.Title
 }
 
 // treeRows renders every visible row, applying the D08 cursor treatment to
@@ -525,9 +562,10 @@ func treeRowText(n treeNode) string {
 // fold.
 func (m model) treeRows(nodes []treeNode, focused bool, bodyH int) []string {
 	pos := m.cursorPos(nodes)
+	slug := m.beanIDPrefix()
 	rows := make([]string, len(nodes))
 	for i, n := range nodes {
-		text := treeRowText(n)
+		text := treeRowText(n, slug)
 		if i == pos {
 			plain := ansi.Strip(text)
 			if focused {
