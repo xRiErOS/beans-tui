@@ -165,3 +165,41 @@ func TestDetailBoxFormBodyHotkeyIsInTopBorder(t *testing.T) {
 		t.Errorf("Body panel top border carries no (e) badge -- unreachable on a long body: %q", bodyTop)
 	}
 }
+
+// TestDetailBoxFormRelationsHotkeyIsInBottomBorder guards bean bt-bszz: the
+// Relations panel is a fixed-purpose panel (not content-height-driven like
+// Body, bt-oox1 #4), so it keeps the DEFAULT bottom-border badge placement
+// every other panelBox call uses -- it must show the "r" activation keybind
+// (keymap.go's WithKeys("r"), "Relations") as a Box-Badge in ITS bottom
+// border, same as Status/Type/Priority/Parent/Tags do for their own keys.
+// History deliberately stays exempt (no activation keybind exists there;
+// [/] are stack-nav, not a panel hotkey) -- this test does not touch it.
+func TestDetailBoxFormRelationsHotkeyIsInBottomBorder(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m = focusBeanFull(m, "tk-2")
+	b := m.focusedBean()
+	if b == nil {
+		t.Fatal("setup: no focused bean")
+	}
+	out := ansi.Strip(detailBoxForm(m.idx, b, 60, -1))
+	lines := strings.Split(out, "\n")
+
+	var relationsBot string
+	for i, ln := range lines {
+		if strings.HasPrefix(ln, "╭─ Relations ") {
+			for _, l2 := range lines[i+1:] {
+				if strings.HasPrefix(l2, "╰") {
+					relationsBot = l2
+					break
+				}
+			}
+			break
+		}
+	}
+	if relationsBot == "" {
+		t.Fatalf("no Relations panel bottom border found:\n%s", out)
+	}
+	if !strings.Contains(relationsBot, "(r)") {
+		t.Errorf("Relations panel bottom border carries no (r) badge: %q", relationsBot)
+	}
+}

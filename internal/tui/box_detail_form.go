@@ -176,7 +176,7 @@ func boxFormBlocks(idx *data.Index, b *data.Bean, width, cursor int) []string {
 		// follows its content, so its bottom border can scroll out of the
 		// pane -- its (e) badge rides in the TOP border instead.
 		panelBoxTopHotkey("Body", bodySectionBody(b, width-4), "e", width, on(boxFormRowBody)),
-		panelBox("Relations", relationsBody, "", width, on(boxFormRowRelations)),
+		panelBox("Relations", relationsBody, "r", width, on(boxFormRowRelations)),
 		panelBox("History", historieSectionBody(b, width-4), "", width, on(boxFormRowHistory)),
 	}
 }
