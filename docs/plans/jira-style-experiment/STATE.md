@@ -62,7 +62,10 @@ Richtung ok, ABER Layout anpassen: **1-up-Stapeln = Platzverschwendung.** Gewün
 
 | S3 | Persistente Filter-Leiste oben im Browse (Type/Status/Priority/Tags-Chips via `gridRow`, aktiv=Peach, leer=(any)=Hint), additiv+gated in `viewBrowseRepo`. 3 Zeilen aus `bodyH` zurückgewonnen (Frame bleibt 30). `f` öffnet weiter das bestehende Overlay (keine Facetten-Keys). | 🟢 DONE | Commit `db52457`, `box_filter_bar.go`(+_test) |
 
+| S4 | Editierbare Dropdowns: Keys `o`=Type, `u`=Priority (D07 lowercase) auf bestehendes Value-Menü verdrahtet (mutiert via beans-CLI). helpGroups ergänzt (drift-guard grün). Nicht gated. Type/Priority-Edit existierte schon → reine Verdrahtung. | 🟢 DONE | Commit `5dc3d01`, `keymap.go`/`update.go` |
+
 ## Restrisiken (offen, nicht blockierend)
+- **B7 (kosmetisch, für S6/später):** Value-Menü-Schließen-Alias + Footer hardcoden `s` unabhängig von der Gruppe (o/u-geöffnetes Menü schließt auch mit `s`; Footer zeigt `s`). esc schließt immer → nichts kaputt, nur Label-Mismatch.
 - **B6 (Maus, für S6):** `treeClickRow`/`clickPaneGeometry` (mouse.go) NICHT um die +3 Filter-Bar-Höhe korrigiert, wenn `BT_BOXFORM` an → Tree-Klicks 3 Zeilen versetzt. Nur im Box-Modus + Maus relevant. In S6 (Maus) mitfixen.
 - **F1-Rest:** sehr langer Body / viele Relations überläuft die Pane weiterhin (kein Scroll im Box-Modus). Normalfall passt. Scroll-Strategie D10 (Viewport vs. Fullscreen-only) noch offen — bei Bedarf mit Nutzer klären.
 - **Narrow-width:** unter ~30 Zellen Detail-Breite bricht die exakte-Breite-Garantie der 3-Spalten-Zeile (dropdownBox-Floor 8/Spalte). Im Split erst bei Terminal <~68 Spalten relevant. VHS-80-Check in S2b-Nachlauf offen.
@@ -71,4 +74,11 @@ Richtung ok, ABER Layout anpassen: **1-up-Stapeln = Platzverschwendung.** Gewün
 Headline-Features (die zwei vom Nutzer gelobten) stehen: salientes Box-Detail (3|2-Grid, Hotkeys im Rahmen) + persistente Filter-Leiste. Default aus = alles wie bisher. Demobar: `BT_BOXFORM=1 bt`.
 
 ## Nächste Aktion (für Resume)
-Nutzer wählte „autonom weiter: S4". **S4 LÄUFT:** Keys `o`=Type, `u`=Priority in keymap.go + auf bestehendes Value-Menü verdrahtet (Status-Pfad spiegeln). `G` (View-Toggle) VERSCHOBEN nach S5 (braucht Flat-View). Danach **S5** (Nested/Flat-Switcher `G` + Flat-Tabelle), **S6** (Maus inkl. B6-Fix), **S7** (huh→Inline-Box-Editing, großer Umbau — Timing mit Nutzer klären). Reviewer-Checkpoint nach S4. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
+S1–S4 🟢 (zwei Headline-Features + editierbare Dropdowns live). **CHECKPOINT: wartet auf Nutzer-Steuerung für S5+.**
+
+Offene Weichen für den Nutzer:
+- **S5 (Nested/Flat):** überschneidet sich mit bestehendem Backlog-View (`b` = bereits flache Liste). Weiche: „Flat" = Backlog-Zeilen im Browse-Master-Detail wiederverwenden ODER eigenständiger Flat-Renderer? `G` (D07 uppercase) + `flatView`-State, default aus, neue Golden.
+- **S7 (huh→Inline-Box-Editing):** großer/riskanter Umbau (D09). Timing bewusst offen gelassen — Nutzer wollte steuern.
+- **S6 (Maus):** B6 (Klick-Offset +3 durch Filter-Bar) + B7 (Value-Menü-Label) mitfixen.
+
+Bei „einfach weiter/entscheide selbst": S5 als eigenständiger Flat-Renderer (Backlog-Row-Rendering wiederverwenden, Master-Detail behalten), dann S6, S7 zuletzt. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
