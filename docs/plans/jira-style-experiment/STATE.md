@@ -322,3 +322,56 @@ Regeneration auf dem gemergten Code aufloesen, nicht von Hand.
 `bt-ty48` (GIF — bewusst zuletzt, sonst veraltet) · `bt-adkn` (Body-Blaettern, wartet auf
 das Fokus-Modell) · `bt-p78f` (Body-Ueberschriften, wartet auf bt-hd42) ·
 `bt-dovm` (S7 huh-Ersatz, draft, PO-Freigabe noetig) · `bt-2o9a` (Merge auf main).
+
+## Stand 2026-07-20 (Abend 2) — Runde 3 komplett gemerged
+
+`experiment/jira-style-ui` @ `56dace0`. Tree sauber, alle Worktrees entfernt,
+voller Testlauf gruen, 80-Spalten-Smoke gegen sproutling bestanden.
+
+### Erledigt in Runde 3 (8 beans)
+| bean | Ergebnis |
+|---|---|
+| bt-8d35 | Fokus-Modell: tab/shift+tab in der Region, esc verlaesst; Pfeile scrollen |
+| bt-hd42 | Klick trifft nach dem Scrollen das richtige Feld (Offset-Bug) |
+| bt-f68z | Tree: Spaltenkopf, Titel-Umbruch mit haengendem Einzug, gerahmtes Suchfeld |
+| bt-vpvu | Maus im Tree: Klick waehlt, Doppelklick klappt auf/zu |
+| bt-mx4k | Palette nur noch `K` |
+| bt-6nuz | Relations-Overlay: Titel, gerahmtes Suchfeld, Footer-Styling, `r` zurueck |
+| bt-oox1 | bean-ID am Titel, Body-Badge oben, `v` im Footer |
+| (Nachtrag) | Footer-Label `r Relations` statt `r Blocking` (`56dace0`) |
+
+### PO-Entscheidungen (in design-spec.md als D-Codes)
+- **D03 REVIDIERT:** einfacher Klick waehlt, Doppelklick klappt auf/zu. Der devd-Port
+  hatte "einfacher Klick klappt auf" — dabei restrukturierte schon ein Blick auf ein Epic
+  den Baum unter dem Zeiger.
+- **D13:** `v` nur im Box-Modus im Footer. Ohne Flag misst der Footer bei 80 Spalten exakt
+  zwei Zeilen; jede Ergaenzung kostet eine Zeile Listeninhalt.
+- **D14:** History bleibt im tab-Zyklus — eine Feldtabelle fuer Render, Maus und Tastatur.
+
+### Zwei Bugs, die nur der Smoke bzw. die Mutation gefunden haben
+- **Maus im Tree war halb korrigiert:** `treeClickRow` bekam `originY += filterBarHeight`,
+  aber NICHT `bodyH -= filterBarHeight`. Render und Hit-Test fensterten gegen
+  verschiedene Hoehen -> ab dem ersten Scrollen falsches bean. Oben in der Liste clampen
+  beide auf 0, deshalb wirkte es sporadisch und kein Test fand es (alle Fixtures: 4 beans,
+  Klick oben). Per Mutation belegt.
+- **Relations-Hint brach mid-word** bei 80 Spalten (`esc b` / `ack`) — unwrapped in den
+  Modal-Body geschrieben. Laeuft jetzt durch dasselbe ANSI-bewusste `wrapText` wie der
+  Haupt-Footer.
+
+### Gelernt
+- **`isolation: worktree` erzeugt IMMER von `main`**, nicht vom Arbeitsbranch. Alle fuenf
+  Worktree-Agenten liefen hinein; alle haben es dank expliziter Pruefanweisung vor dem
+  ersten Commit korrigiert. **Anweisung beibehalten.**
+- **Golden-Konflikte bei parallelen Straengen** loest man durch EINE Regeneration auf dem
+  gemergten Code, nicht von Hand. Hat zweimal sauber funktioniert.
+- **Nach jedem Merge bauen UND testen.** Ein sauberer Textmerge kann semantisch falsch
+  sein (Signaturaenderung in einem Test des anderen Strangs).
+- **Der Vault-Symlink laesst Obsidian `uid`-Frontmatter in Repo-Dokus stempeln** — und beim
+  Aufraeumen im Vault verschwanden `docs/screenshots/*` vom Dateisystem (aus git
+  wiederhergestellt, PO-Entscheidung).
+
+### Offen
+`bt-adkn` (Body seitenweise blaettern, `pgup`/`pgdn` + Seiten-Indikator) ·
+`bt-p78f` (Body-Ueberschriften: Anker-Leiste + Pencil-Abschnitts-Edit) ·
+`bt-ty48` (GIF — bewusst zuletzt, sonst veraltet) ·
+`bt-dovm` (S7 huh-Ersatz, draft, PO-Freigabe noetig) · `bt-2o9a` (Merge auf main).
