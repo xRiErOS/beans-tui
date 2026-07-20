@@ -104,8 +104,11 @@ func TestBlockingPickerToggleFlipsPendingOnly(t *testing.T) {
 	m = focusBeanFull(m, "bean-a") // Blocking: [bean-b]
 	m = step(t, m, runeMsg('r'))
 
+	// bean bt-a3a8: the cursor addresses blockFiltered (what is on screen),
+	// not the unfiltered blockItems -- with no query typed the two lists are
+	// identical, so this helper simply follows the picker's real contract.
 	cursorTo := func(m model, id string) model {
-		for i, it := range m.blockItems {
+		for i, it := range m.blockFiltered {
 			if it.id == id {
 				m.menu.cursor = i
 			}
@@ -122,10 +125,17 @@ func TestBlockingPickerToggleFlipsPendingOnly(t *testing.T) {
 		t.Fatal("blockOriginal must stay unchanged by a pending toggle")
 	}
 
+	// ERRATUM (bean bt-a3a8): this used to press 'x', keys.Toggle's second
+	// alias. The picker now hosts an always-focused search field, so 'x'
+	// belongs to the INPUT -- intercepting it as a toggle would make it a
+	// permanently untypeable character, the exact Review-R1 B01 bug the
+	// Tag-Picker already paid for (bean bt-9ipw). Toggle is space-only here
+	// now; TestBlockingPickerLettersStayTypeable
+	// (box_picker_filter_test.go) guards the other half of that trade.
 	m = cursorTo(m, "ep-1")
-	m = step(t, m, runeMsg('x'))
+	m = step(t, m, runeMsg(' '))
 	if !m.blockPending["ep-1"] {
-		t.Fatal("x did not toggle ep-1 ON in blockPending")
+		t.Fatal("space did not toggle ep-1 ON in blockPending")
 	}
 	if m.blockOriginal["ep-1"] {
 		t.Fatal("blockOriginal must stay unchanged (ep-1 was never original)")

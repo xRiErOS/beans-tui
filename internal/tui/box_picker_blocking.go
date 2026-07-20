@@ -18,6 +18,7 @@ import (
 	"github.com/xRiErOS/beans-tui/internal/data"
 	"github.com/xRiErOS/beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -57,13 +58,22 @@ func buildBlockingItems(idx *data.Index, selfID string) []pickerItem {
 // wholesale-replace convention as openTagPicker) from the focused bean's
 // CURRENT Blocking field. mutTarget captures the bean ID only, never the
 // etag (design decision d).
-func (m model) openBlockingPicker() model {
+// bean bt-a3a8: opening also installs a FRESH pickerFilter (newPickerFilter
+// -- focused, empty query, every chip unset) and seeds blockFiltered from
+// it, so the first frame shows the complete candidate list and the search
+// field is typeable immediately, with no second gate. Returns
+// textinput.Blink so the now-always-focused field's cursor actually blinks
+// (openTagPicker's own convention) -- which is why this constructor grew a
+// tea.Cmd return where it used to return a bare model.
+func (m model) openBlockingPicker() (model, tea.Cmd) {
 	b := m.focusedBean()
 	if b == nil {
-		return m
+		return m, nil
 	}
 	m.mutTarget = b.ID
 	m.blockItems = buildBlockingItems(m.idx, b.ID)
+	m.blockFilter = newPickerFilter()
+	m.blockFiltered = filterPickerItems(m.idx, m.blockItems, m.blockFilter, false)
 
 	orig := make(map[string]bool, len(b.Blocking))
 	for _, id := range b.Blocking {
@@ -77,45 +87,76 @@ func (m model) openBlockingPicker() model {
 	m.blockPending = pending
 
 	m.menu = listState{}
-	m.menu.setLen(len(m.blockItems))
+	m.menu.setLen(len(m.blockFiltered))
 
 	m.overlay = overlayBlockingPicker
-	return m
+	return m, textinput.Blink
 }
 
-// keyBlockingPicker drives the open Blocking-Picker: up/down move the cursor
-// (navKey), space/x (keys.Toggle) toggles the cursored row's pending state,
-// enter diffs pending against original (applyBlockingPickerDiff), esc
-// discards everything and closes.
+// keyBlockingPicker drives the open Blocking-Picker. Since bean bt-a3a8 the
+// overlay hosts an always-focused search field (box_picker_filter.go), so
+// the key contract mirrors keyTagPicker's exactly: a SMALL reserved set is
+// intercepted ahead of the input, EVERYTHING else belongs to it.
+//
+// Reserved: raw tea.KeyUp/tea.KeyDown for cursor movement -- deliberately
+// NOT navKey, whose "i"/"k" letter aliases would become permanently
+// untypeable here (keyTagPicker's own rationale, applied verbatim); esc
+// (discard) and enter (apply the pending diff) via keybind so a rebind stays
+// correct; and space via keys.TagToggle.
+//
+// ERRATUM vs. this picker's pre-bt-a3a8 behavior: toggle was keys.Toggle,
+// which binds BOTH " " and "x". Intercepting "x" ahead of a focused
+// textinput makes it a never-typeable character -- the exact bug Review-R1
+// B01 found in the Tag-Picker (bean bt-9ipw, keymap.go's TagToggle
+// doc-stamp: "Filter menu / Blocking picker keep the full space/x Toggle"
+// was written when this picker had NO search field). Now that it does, the
+// same narrowing applies for the same reason: bean titles/IDs routinely
+// contain "x", and space is safe to reserve because it can never be a
+// meaningful leading search character. The filter menu, which still has no
+// input field, keeps the full space/x Toggle unchanged.
+//
+// The cursor and the toggle both address m.blockFiltered, not m.blockItems
+// -- "toggles what's ON SCREEN", so a row narrowed down by typing is the row
+// that actually flips (TestBlockingPickerSelectionAfterFilterHitsRightBean).
 func (m model) keyBlockingPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch navKey(msg.String()) {
-	case "up":
+	switch msg.Type {
+	case tea.KeyUp:
 		m.menu.move(-1)
 		return m, nil
-	case "down":
+	case tea.KeyDown:
 		m.menu.move(1)
 		return m, nil
 	}
 	switch {
 	case keybind.Matches(msg, keys.Back):
 		m.overlay = overlayNone
+		m.blockFilter.input.Blur()
 		return m, nil
-	case keybind.Matches(msg, keys.Toggle):
+	case keybind.Matches(msg, keys.TagToggle):
 		return m.toggleBlockPending(), nil
 	case keybind.Matches(msg, keys.Enter):
 		return m.applyBlockingPickerDiff()
 	}
-	return m, nil
+
+	f, cmd, changed := m.keyPickerFilter(m.blockFilter, msg)
+	m.blockFilter = f
+	if changed {
+		m.blockFiltered = filterPickerItems(m.idx, m.blockItems, m.blockFilter, false)
+		m.menu = listState{}
+		m.menu.setLen(len(m.blockFiltered))
+	}
+	return m, cmd
 }
 
 // toggleBlockPending flips the cursored row's membership in m.blockPending.
 // I01 (types.go doc-stamp): clones via cloneBoolMap before writing -- same
-// convention as toggleTagPending.
+// convention as toggleTagPending. bt-a3a8: the cursor addresses
+// m.blockFiltered (what is on screen), never the unfiltered m.blockItems.
 func (m model) toggleBlockPending() model {
-	if m.menu.cursor < 0 || m.menu.cursor >= len(m.blockItems) {
+	if m.menu.cursor < 0 || m.menu.cursor >= len(m.blockFiltered) {
 		return m
 	}
-	id := m.blockItems[m.menu.cursor].id
+	id := m.blockFiltered[m.menu.cursor].id
 	out := cloneBoolMap(m.blockPending)
 	if out[id] {
 		delete(out, id)
@@ -195,18 +236,25 @@ func blockingDot(pending bool) string {
 // for its width too and continuation lines align correctly regardless of
 // pending/cursor state. See parentPickerBox's doc comment for why only
 // prefix (not title) carries the Accent cursor-recolor.
+//
+// bt-a3a8: the hint line + the search/chip chrome (pickerFilter.chrome) now
+// sit above the rows, and the row window shrinks to pickerFilteredRowBudget
+// to pay for them -- the bean's "Kandidatenliste entsprechend kürzen"
+// requirement, so the overlay still fits an 80x24 terminal
+// (TestPickerBoxesFitIn80Columns).
 func (m model) blockingPickerBox() string {
 	var b strings.Builder
-	b.WriteString(theme.Muted.Render("space/x:toggle  enter:save  esc:discard") + "\n")
+	b.WriteString(pickerFilterHint("space:toggle  enter:save") + "\n")
 
 	w := wideModalWidth(m.width)
 	contW := w - 2 // modalBox's Padding(0,1) overhead only -- see parentPickerBox's doc comment
 	if contW < 8 {
 		contW = 8
 	}
+	b.WriteString(m.blockFilter.chrome(contW))
 
-	rows := make([]string, len(m.blockItems))
-	for i, it := range m.blockItems {
+	rows := make([]string, len(m.blockFiltered))
+	for i, it := range m.blockFiltered {
 		dot := blockingDot(m.blockPending[it.id])
 		title := it.title
 		var prefix string
@@ -219,13 +267,17 @@ func (m model) blockingPickerBox() string {
 		}
 		rows[i] = hangingIndentWrap(prefix, title, contW)
 	}
-	rows = windowAround(rows, parentPickerRowBudget, m.menu.cursor)
+	rows = pickerRowWindow(rows, m.menu.cursor, m.height)
 	b.WriteString(strings.Join(rows, "\n"))
 	if len(rows) > 0 {
 		b.WriteString("\n")
 	}
-	if len(m.blockItems) == 0 {
-		b.WriteString(theme.Muted.Render("(no other beans in repo)") + "\n")
+	if len(m.blockFiltered) == 0 {
+		if len(m.blockItems) == 0 {
+			b.WriteString(theme.Muted.Render("(no other beans in repo)") + "\n")
+		} else {
+			b.WriteString(theme.Muted.Render("(no match)") + "\n")
+		}
 	}
 	return modalPanel("Blocking", b.String(), "", w, theme.Mauve)
 }
