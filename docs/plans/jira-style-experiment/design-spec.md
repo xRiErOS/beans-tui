@@ -212,3 +212,21 @@ Der Epic-Constraint „ohne Flag byte-identisch" zeigt in dieselbe Richtung.
 `tab` laeuft im Detail ueber alle neun Felder aus `boxFormFieldOrder`, History
 eingeschlossen. History zu ueberspringen haette eine zweite Feldliste oder ein
 Skip-Kennzeichen erfordert; **eine Tabelle fuer Render, Maus und Tastatur** wiegt schwerer.
+
+### D09 REVIDIERT — huh bleibt fuer Create, nur endliche Felder werden Inline-Dropdown
+Das urspruengliche D09 („huh KOMPLETT ersetzen, Create = leere Box-Form, langsame
+huh-Drive-Tests fallen weg") ist **verengt** (PO 2026-07-20, Timing: jetzt):
+
+- **Create-Form bleibt huh.** Mehrfeldige Erfassung ist mit huh gut geloest — kein
+  Ausbau. Folge: die langsamen huh-Drive-Tests (`box_confirm_create_test.go`,
+  `skipSlowHuhDriveInShortMode`) **bleiben** bestehen; der in D09 versprochene Wegfall
+  entfaellt.
+- **Nur die endlichen Einzelfeld-Menues** (Status/Type/Priority — feste Enums) wandern
+  vom **zentralen Modal** (`box_menu_value.go`, `modalPanel`) zum **feld-verankerten
+  Inline-Dropdown** direkt am boxed field. Begruendung PO: in der schnellen
+  boxed-field-Naehe effizienter als ein zentrales Overlay.
+- Der huh-MouseMsg-Blocker (D06) bleibt damit fuer die Create-Form bestehen — er trifft
+  aber die endlichen Felder nicht mehr, sobald deren Popup maus-nativ ist.
+
+Der alte Beschluss wird nicht geloescht, sondern hier als revidiert vermerkt. Umsetzung
+als fokussierter Task (nicht der breite S7-Umbau).
