@@ -71,4 +71,4 @@ Richtung ok, ABER Layout anpassen: **1-up-Stapeln = Platzverschwendung.** Gewün
 Headline-Features (die zwei vom Nutzer gelobten) stehen: salientes Box-Detail (3|2-Grid, Hotkeys im Rahmen) + persistente Filter-Leiste. Default aus = alles wie bisher. Demobar: `BT_BOXFORM=1 bt`.
 
 ## Nächste Aktion (für Resume)
-Offen, nach Nutzer-Steuerung: **S4** (Keys `o`/`u`/`G` in keymap.go + Type-Picker + Priority-Picker → Dropdowns wirklich editierbar), **S5** (Nested/Flat-Switcher `G`), **S6** (Maus inkl. B6-Fix), **S7** (huh→Inline-Box-Editing, großer Umbau — Timing mit Nutzer klären). Reviewer-Checkpoint nach S4. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
+Nutzer wählte „autonom weiter: S4". **S4 LÄUFT:** Keys `o`=Type, `u`=Priority in keymap.go + auf bestehendes Value-Menü verdrahtet (Status-Pfad spiegeln). `G` (View-Toggle) VERSCHOBEN nach S5 (braucht Flat-View). Danach **S5** (Nested/Flat-Switcher `G` + Flat-Tabelle), **S6** (Maus inkl. B6-Fix), **S7** (huh→Inline-Box-Editing, großer Umbau — Timing mit Nutzer klären). Reviewer-Checkpoint nach S4. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
