@@ -60,9 +60,15 @@ Richtung ok, ABER Layout anpassen: **1-up-Stapeln = Platzverschwendung.** Gewün
 - **B4 (low):** `box_panel` dupliziert Border-Logik von `box_dropdown` → gemeinsame `boxTopBorder(label,w,frame)`/`boxBottomBorder(hotkey,w,frame)` extrahieren, beide nutzen sie.
 - **B5 (low):** Tests prüfen nur `>width` → exakte `==width`-Assertion je Zeile ergänzen (fängt B1).
 
+| S3 | Persistente Filter-Leiste oben im Browse (Type/Status/Priority/Tags-Chips via `gridRow`, aktiv=Peach, leer=(any)=Hint), additiv+gated in `viewBrowseRepo`. 3 Zeilen aus `bodyH` zurückgewonnen (Frame bleibt 30). `f` öffnet weiter das bestehende Overlay (keine Facetten-Keys). | 🟢 DONE | Commit `db52457`, `box_filter_bar.go`(+_test) |
+
 ## Restrisiken (offen, nicht blockierend)
+- **B6 (Maus, für S6):** `treeClickRow`/`clickPaneGeometry` (mouse.go) NICHT um die +3 Filter-Bar-Höhe korrigiert, wenn `BT_BOXFORM` an → Tree-Klicks 3 Zeilen versetzt. Nur im Box-Modus + Maus relevant. In S6 (Maus) mitfixen.
 - **F1-Rest:** sehr langer Body / viele Relations überläuft die Pane weiterhin (kein Scroll im Box-Modus). Normalfall passt. Scroll-Strategie D10 (Viewport vs. Fullscreen-only) noch offen — bei Bedarf mit Nutzer klären.
 - **Narrow-width:** unter ~30 Zellen Detail-Breite bricht die exakte-Breite-Garantie der 3-Spalten-Zeile (dropdownBox-Floor 8/Spalte). Im Split erst bei Terminal <~68 Spalten relevant. VHS-80-Check in S2b-Nachlauf offen.
 
+## MEILENSTEIN (2026-07-20): Detail-Box-Form + Filter-Leiste live via `BT_BOXFORM=1`
+Headline-Features (die zwei vom Nutzer gelobten) stehen: salientes Box-Detail (3|2-Grid, Hotkeys im Rahmen) + persistente Filter-Leiste. Default aus = alles wie bisher. Demobar: `BT_BOXFORM=1 bt`.
+
 ## Nächste Aktion (für Resume)
-S3 (autonom, additiv, hinter `BT_BOXFORM`): persistente Filter-Leiste oben im Browse (Type/Status/Priority/Tags als `dropdownBox`-Chips, `f` fokussiert, aktiver Chip=Peach). Golden für an-Zustand, Default aus unverändert. Danach S4 (Keys o/u/G + Type-/Priority-Picker), S5 (Nested/Flat), S7 (huh-Ersatz). Reviewer-Checkpoint nach S3/S4.
+Offen, nach Nutzer-Steuerung: **S4** (Keys `o`/`u`/`G` in keymap.go + Type-Picker + Priority-Picker → Dropdowns wirklich editierbar), **S5** (Nested/Flat-Switcher `G`), **S6** (Maus inkl. B6-Fix), **S7** (huh→Inline-Box-Editing, großer Umbau — Timing mit Nutzer klären). Reviewer-Checkpoint nach S4. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
