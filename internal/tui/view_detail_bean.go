@@ -299,17 +299,35 @@ func relationRowMarker(active bool, fieldIdx, rowIdx int) string {
 // sentinel (removed by this task -- no caller left after this refactor).
 // relationRow (below) is now a thin wrapper around this plus its own
 // `marker` parameter, byte-identical to its pre-extraction behavior.
-func relationRowPrefix(rel *data.Bean) string {
-	return theme.StatusIcon(rel.Status) + " " + theme.TypeIcon(rel.Type) + " " + theme.Key.Render(rel.ID) + " "
+//
+// slug (bean bt-pt1r) is the same repo prefix treeRowText/backlogRowText
+// already strip via shortBeanID (view_browse_repo.go, bean bt-pl5p) --
+// threaded in as a PARAMETER rather than resolved here, because the two
+// callers want opposite things and the difference is a deliberate design
+// decision, not an accident:
+//
+//   - the Blocking-/Parent-Picker pass the live m.beanIDPrefix(): their rows
+//     wrap at wideModalWidth, so the redundant "<slug>-" costs exactly the
+//     columns the title needs -- and leaving it long there made the app
+//     contradict ITSELF (short in the left pane, long in the picker).
+//   - relationRow (the DETAIL pane) passes "" and keeps the full ID:
+//     bt-pl5p's decision that the complete, copyable ID must remain readable
+//     somewhere. Do not "unify" this to the live slug.
+//
+// A foreign/dangling ID (no such prefix) is untouched either way -- that is
+// shortBeanID's own contract.
+func relationRowPrefix(rel *data.Bean, slug string) string {
+	return theme.StatusIcon(rel.Status) + " " + theme.TypeIcon(rel.Type) + " " + theme.Key.Render(shortBeanID(rel.ID, slug)) + " "
 }
 
 // relationRow renders one resolved relation as a marker-prefixed status-
 // icon+type-icon+ID+title row (mirrors treeRowText's glyph order, view_
 // browse_repo.go), wrapped via hangingIndentWrap (B04.3) so a long title's
 // continuation lines align under the title's own start on THIS row instead
-// of falling back to column 0.
+// of falling back to column 0. Passes slug "" on purpose -- see
+// relationRowPrefix's own note: the Detail pane keeps the FULL ID (bt-pl5p).
 func relationRow(rel *data.Bean, marker string, w int) string {
-	return hangingIndentWrap(marker+relationRowPrefix(rel), rel.Title, w)
+	return hangingIndentWrap(marker+relationRowPrefix(rel, ""), rel.Title, w)
 }
 
 // resolveSorted resolves a slice of bean IDs against idx.ByID, canonically

@@ -31,7 +31,9 @@ import (
 // determinism fix box_filter_facets.go's tagFilterOptions documents (ties on
 // Status/Priority/Type/Title alike would otherwise be map-walk-order-
 // dependent).
-func buildBlockingItems(idx *data.Index, selfID string) []pickerItem {
+// slug (bean bt-pt1r) is the caller's m.beanIDPrefix(), stripped from the
+// RENDERED prefix only -- pickerItem.id stays the full mutation target.
+func buildBlockingItems(idx *data.Index, selfID, slug string) []pickerItem {
 	if idx == nil {
 		return nil
 	}
@@ -47,7 +49,7 @@ func buildBlockingItems(idx *data.Index, selfID string) []pickerItem {
 
 	items := make([]pickerItem, len(all))
 	for i, cand := range all {
-		items[i] = pickerItem{id: cand.ID, prefix: relationRowPrefix(cand), title: cand.Title}
+		items[i] = pickerItem{id: cand.ID, prefix: relationRowPrefix(cand, slug), title: cand.Title}
 	}
 	return items
 }
@@ -71,7 +73,7 @@ func (m model) openBlockingPicker() (model, tea.Cmd) {
 		return m, nil
 	}
 	m.mutTarget = b.ID
-	m.blockItems = buildBlockingItems(m.idx, b.ID)
+	m.blockItems = buildBlockingItems(m.idx, b.ID, m.beanIDPrefix())
 	m.blockFilter = newPickerFilter()
 	m.blockFiltered = filterPickerItems(m.idx, m.blockItems, m.blockFilter, false)
 
