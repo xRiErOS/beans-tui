@@ -25,8 +25,29 @@ package tui
 //     two competing ones -- see boxFormNav's own doc comment for the rule.
 
 import (
+	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/xRiErOS/beans-tui/internal/data"
+)
+
+// boxFormFieldNext/boxFormFieldPrev are the Detail REGION's own tab/shift+tab
+// (bean bt-8d35, PO's Fokus-Modell: "tab/shift+tab bewegen INNERHALB der
+// fokussierten Region, esc VERLAESST die Region"). They carry the same
+// physical keys as the global keys.FocusIn/keys.FocusOut pane swap, but a
+// different, region-local meaning -- exactly the filterMenuCategoryHint
+// precedent (footer_context.go), and safe by construction for the same
+// reason: handleKey routes tab/shift+tab here FIRST while the Detail region
+// has focus and boxFormEnabled(), so the global meaning never also runs.
+//
+// Deliberately standalone keybind.Bindings, NOT keyMap fields: keymap_test.go's
+// TestHelpGroupsCoverEveryBindingExactlyOnce reflects over keyMap fields only
+// and would flag these as unrouted Help entries. The label lives on the SAME
+// value the handler matches (footer_context.go's boxFormRegionLabels swaps
+// them into Footer Zone 3), so bt-z4w7's "the label IS the binding" rule
+// holds literally here.
+var (
+	boxFormFieldNext = keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "next field"))
+	boxFormFieldPrev = keybind.NewBinding(keybind.WithKeys("shift+tab"), keybind.WithHelp("shift+tab", "prev field"))
 )
 
 // boxFormRow* index detailBoxForm's block slice (boxFormBlocks,
@@ -218,22 +239,34 @@ func boxFormScrollIntoView(off, start, h, height int) int {
 //
 // THE RULE (bean bt-1o4g's explicit "a focused field that scrolls out of the
 // visible area would be a bug"): field focus LEADS, the viewport FOLLOWS.
+// Whatever moves the cursor, the tail of this function pulls the viewport to
+// the new field (scroll-into-view) before returning.
 //
-//   - left/right move the cursor within its grid row, then pull the viewport
-//     to the new field (scroll-into-view).
+// Directions:
+//
+//   - "next"/"prev" (bean bt-8d35, the ONLY ones a key drives today:
+//     tab/shift+tab) step LINEARLY through boxFormFieldOrder and WRAP at both
+//     ends -- the PO's explicit "am Ende umbrechen, NICHT in den Tree
+//     zurueckfallen, sonst verliert man den Fokus versehentlich beim
+//     Durchsteppen".
+//   - left/right move the cursor within its grid row.
 //   - up/down first REVEAL, then MOVE: while the cursored field still extends
 //     past the visible window in the pressed direction, the keypress scrolls
 //     the viewport by one line and leaves the cursor where it is; once the
 //     field's edge in that direction is on screen, the next press moves the
-//     cursor to the neighbouring field and scrolls it into view.
+//     cursor to the neighbouring field.
 //
-// The reveal half is what keeps bt-ze10's headline criterion alive after this
-// bean repurposed up/down: a Body longer than the pane is still walkable to
-// its last line with the keyboard alone -- it is now walked while the Body box
-// is the focused field, which is strictly more legible than the old
-// context-free viewport scroll. The wheel path (wheelMove, mouse.go) is
-// deliberately NOT routed through here: a wheel is a viewport gesture with no
-// focus semantics, and it keeps its free-scroll behavior unchanged.
+// bean bt-8d35 (PO-Entscheidung 3) took the ARROW KEYS off the four
+// directional cases and gave them back to plain viewport scrolling
+// (adjustBoxFormScroll, bt-ze10's state) -- bt-ze10's "walk a long Body to its
+// last line with the keyboard alone" criterion is served by that scroll again,
+// so the reveal-then-move half is no longer on a key. The four directional
+// cases are kept rather than torn out ("kein Voll-Rueckbau", bt-8d35): they
+// are the grid geometry that boxFormFieldOrder's (row, col) table encodes,
+// still covered by box_nav_field_test.go one rung below the keymap.
+//
+// The wheel path (wheelMove, mouse.go) is deliberately NOT routed through
+// here: a wheel is a viewport gesture with no focus semantics.
 //
 // Writes both cursor and scroll ownership (boxFormCursorBean/
 // boxFormScrollBean) so the derived per-bean resets stay consistent.
@@ -252,6 +285,13 @@ func (m model) boxFormNav(b *data.Bean, dir string) model {
 	off := boxFormEffectiveScroll(m, b)
 
 	switch dir {
+	case "next", "prev":
+		d := 1
+		if dir == "prev" {
+			d = -1
+		}
+		n := len(boxFormFieldOrder)
+		cur = ((cur+d)%n + n) % n // wrap at BOTH ends (bt-8d35)
 	case "left", "right":
 		cur = boxFormMoveField(cur, dir)
 	case "up", "down":

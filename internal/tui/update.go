@@ -1083,13 +1083,36 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.requestQuit()
 	}
 
+	// Both replace the former raw `case "tab":` AT THE SAME dispatch point
+	// (still ahead of keyNodeAction/keyDetailFocus/keyBacklog/keyTree below) --
+	// no new collision risk (Kollisionsanalyse, epic-E7-plan.md Task 6).
+	//
+	// bt-8d35 (PO-Fokus-Modell, epic bt-vy1q): "tab/shift+tab bewegen INNERHALB
+	// der fokussierten Region, esc VERLAESST die Region". While the Detail
+	// region already HAS focus (split geometry) and boxFormEnabled(), tab is
+	// therefore no longer a pane swap at all -- it is the region-local field
+	// cursor, routed straight to keyDetailFocus (boxFormFieldNext/Prev,
+	// box_nav_field.go). Consequences, both deliberate:
+	//
+	//   - shift+tab stops being the deterministic exit (PF-13, bt-t1uy): it is
+	//     the BACKWARD field step now, and esc is the single documented way out
+	//     of a region (keyDetailFocus's Back-case).
+	//   - the Vollbild-Detail is excluded (m.fullscreen check): it renders no
+	//     field cursor at all (fieldCursor -1, view_fullscreen.go), so tab keeps
+	//     its global meaning there.
+	//
+	// Flag OFF -> the entire block below is the untouched PF-13 behaviour, and
+	// so are the Tree region's own tab/shift+tab (no intra-region targets are
+	// defined for the Tree, so tab-out-of-Tree stays the region ENTRY).
+	inFocusedDetailRegion := boxFormEnabled() && m.detailFocus && m.fullscreen != fullscreenDetail
+
 	// PF-13 (design-spec.md §15, E7 T6, bean bt-t1uy): FocusIn (tab) keeps its
 	// existing bidirectional toggle (Q01) -- FocusOut (shift+tab) is NEW, a
-	// deterministic one-way exit back to the Tree. Both replace the former raw
-	// `case "tab":` AT THE SAME dispatch point (still ahead of keyNodeAction/
-	// keyDetailFocus/keyBacklog/keyTree below) -- no new collision risk
-	// (Kollisionsanalyse, epic-E7-plan.md Task 6).
+	// deterministic one-way exit back to the Tree.
 	if keybind.Matches(msg, keys.FocusIn) {
+		if inFocusedDetailRegion {
+			return m.keyDetailFocus(msg)
+		}
 		m.detailFocus = !m.detailFocus
 		if m.detailFocus {
 			// enterDetailFocus-equivalent (devd view_detail_issue.go:236-243,
@@ -1098,10 +1121,19 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// PREVIOUS detail-focus visit (possibly on a different bean, whose
 			// section/field shape may differ) must never leak into this one.
 			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+			// bt-8d35 Flow #2 entry step ("tab aus dem Tree -> Fokus auf das
+			// erste Feld (Title)"): the box-form cursor gets the SAME
+			// no-stale-state treatment. Clearing the owning bean rather than
+			// just the index reuses boxFormEffectiveCursor's own derived reset
+			// (box_nav_field.go) instead of adding a second reset rule.
+			m.boxFormCursor, m.boxFormCursorBean = 0, ""
 		}
 		return m, nil
 	}
 	if keybind.Matches(msg, keys.FocusOut) {
+		if inFocusedDetailRegion {
+			return m.keyDetailFocus(msg)
+		}
 		// Deterministic exit only -- no cursor-state reset (that only ever
 		// happens on tab-IN, above): a no-op when the Tree already has focus.
 		m.detailFocus = false
@@ -1282,42 +1314,52 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// F1 (bean bt-ze10) + N8 (bean bt-1o4g) + bt-s90e, epic bt-vy1q: while
-	// boxFormEnabled(), the Accordion nav below has "no effect" (box-form has
-	// no Section/Field two-level machine of its own), so the arrows are
-	// repurposed here. The two geometries want DIFFERENT things:
+	// F1 (bean bt-ze10) + N8 (bean bt-1o4g) + bt-s90e + bt-8d35, epic bt-vy1q:
+	// while boxFormEnabled(), the Accordion nav below has "no effect" (box-form
+	// has no Section/Field two-level machine of its own), so the keys are
+	// repurposed here.
 	//
-	//   Split Detail pane -> FIELD CURSOR. All four arrows plus enter drive the
-	//     box-form's own cursor: boxFormNav (box_nav_field.go) moves between
-	//     detailBoxForm's boxes AND drags bt-ze10's scroll offset along, so the
-	//     focused field can never sit outside the viewport (boxFormNav's doc
-	//     comment has the reveal-then-move rule that keeps a long Body fully
-	//     keyboard-reachable). enter opens the cursored field's editor through
-	//     activateBoxFormTarget (mouse.go) -- the same dispatch a click takes.
+	// bt-8d35 (PO-Fokus-Modell, PO-Entscheidung 3) replaced the former
+	// split-vs-Vollbild Fallunterscheidung with ONE rule for both geometries:
 	//
-	//   Vollbild-Detail -> PLAIN VIEWPORT SCROLL. renderFullscreenBody passes
-	//     fieldCursor -1 on purpose (view_fullscreen.go): a cursor rendered
-	//     there would be a Mauve frame nothing can move. With no cursor to walk,
-	//     up/down keep their bt-ze10 meaning and scroll -- through the very same
-	//     adjustBoxFormScroll mutation point the wheel uses, so keyboard and
-	//     wheel still cannot drift on the reset/clamp rules. bt-s90e made
+	//   up/down -> PLAIN VIEWPORT SCROLL, everywhere. bt-1o4g had put the field
+	//     cursor on the arrows in the split pane; the PO took that back
+	//     ("Pfeiltasten im Detail scrollen die GESAMTE Ansicht") so the region
+	//     model reads the same in the Vollbild and in the split. Both go through
+	//     the very same adjustBoxFormScroll mutation point the wheel uses, so
+	//     keyboard and wheel cannot drift on the reset/clamp rules. bt-s90e made
 	//     boxFormScrollBounds fullscreen-aware (mouse.go's accW branch), so it
-	//     clamps against the Vollbild's own budget, not the split's.
+	//     clamps against whichever budget is actually on screen.
+	//
+	//   tab/shift+tab -> FIELD CURSOR, split pane only. boxFormNav
+	//     (box_nav_field.go) steps linearly through boxFormFieldOrder with WRAP
+	//     and drags bt-ze10's scroll offset along, so a field tab jumps to can
+	//     never sit outside the viewport. enter opens the cursored field's
+	//     editor through activateBoxFormTarget (mouse.go) -- the same dispatch a
+	//     click takes.
+	//
+	//     NOT in the Vollbild: renderFullscreenBody passes fieldCursor -1 on
+	//     purpose (view_fullscreen.go), so there is no cursor rendered there to
+	//     walk -- moving an invisible one would be a Fokus-Modell without a
+	//     visible focus. tab/shift+tab keep their global meaning there
+	//     (handleKey, which only routes them here for the split geometry).
 	//
 	// boxFormEnabled() off falls straight through to the ORIGINAL switch below,
-	// unchanged.
+	// unchanged -- the whole Fokus-Modell is experiment-gated (epic bt-vy1q:
+	// "alles additiv + gated").
 	if boxFormEnabled() {
-		if m.fullscreen == fullscreenDetail {
-			switch navKey(msg.String()) {
-			case "up":
-				return m.adjustBoxFormScroll(b, -1), nil
-			case "down":
-				return m.adjustBoxFormScroll(b, 1), nil
-			}
-		} else {
-			switch dir := navKey(msg.String()); dir {
-			case "up", "down", "left", "right":
-				return m.boxFormNav(b, dir), nil
+		switch navKey(msg.String()) {
+		case "up":
+			return m.adjustBoxFormScroll(b, -1), nil
+		case "down":
+			return m.adjustBoxFormScroll(b, 1), nil
+		}
+		if m.fullscreen != fullscreenDetail {
+			switch {
+			case keybind.Matches(msg, boxFormFieldNext):
+				return m.boxFormNav(b, "next"), nil
+			case keybind.Matches(msg, boxFormFieldPrev):
+				return m.boxFormNav(b, "prev"), nil
 			}
 			if keybind.Matches(msg, keys.Enter) {
 				return m.boxFormActivateCursor(b)

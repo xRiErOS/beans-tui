@@ -44,6 +44,15 @@ import keybind "github.com/charmbracelet/bubbles/key"
 // mirroring treeFilterBox's own wording exactly.
 var filterMenuCategoryHint = keybind.NewBinding(keybind.WithKeys("tab", "shift+tab"), keybind.WithHelp("tab/shift+tab", "category"))
 
+// filterStripApplyHint is enter's Filter-Strip-local binding under bean
+// bt-8d35's Fokus-Modell (boxFormEnabled only): enter APPLIES the cursored
+// value and keeps the focus in the region instead of closing it, so the
+// global keys.Enter label ("open") would be a lie there. Same standalone-
+// binding construction as filterMenuCategoryHint above -- and here the
+// handler (keyFilterMenu, box_filter_facets.go) matches THIS value, so
+// bt-z4w7's "the label IS the binding" holds literally.
+var filterStripApplyHint = keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "apply"))
+
 // --- bean bt-z4w7 (B7): footer labels DERIVED from the active binding ---
 //
 // The bug this section closes is a CLASS, not two strings: a Footer Zone 3
@@ -123,8 +132,16 @@ func (m model) valueMenuGroup() string {
 // (epic-E7-plan.md Task 7 Step 6, literal): keys.Toggle is exactly the
 // "space: select/toggle" hint Q04 asked for, at the concrete overlay (the
 // Filter-Menu) whose absence the PO actually noticed.
+//
+// bean bt-8d35: while boxFormEnabled(), enter is the Strip-local "apply and
+// hold the focus" key (filterStripApplyHint), not the global close -- the
+// label follows the handler's own branch rather than restating keys.Enter.
 func filterMenuLocalBindings() []keybind.Binding {
-	return []keybind.Binding{keys.Up, keys.Down, filterMenuCategoryHint, keys.Toggle, keys.FilterClear, keys.Enter, keys.Back}
+	enter := keys.Enter
+	if boxFormEnabled() {
+		enter = filterStripApplyHint
+	}
+	return []keybind.Binding{keys.Up, keys.Down, filterMenuCategoryHint, keys.Toggle, keys.FilterClear, enter, keys.Back}
 }
 
 // valueMenuLocalBindings is the Value-Menu overlay's own footer set
@@ -273,6 +290,38 @@ func (m model) overlayLocalBindings() []keybind.Binding {
 	return nil
 }
 
+// boxFormRegionLabels rewrites the view-local set's tab/shift+tab entries to
+// the meaning they ACTUALLY have while the Detail region holds focus under
+// bean bt-8d35's Fokus-Modell (boxFormEnabled + m.detailFocus + split
+// geometry): "next field"/"prev field" instead of the pane-swap's "focus
+// in"/"focus out". Same bt-z4w7 rule as everywhere else in this file -- the
+// footer names the binding handleKey really dispatches (boxFormFieldNext/
+// boxFormFieldPrev, box_nav_field.go), never a stale sibling.
+//
+// Applied to the incoming viewLocal set rather than inside
+// browseRepoLocalBindings/backlogLocalBindings so BOTH Chrome-calling views
+// (and any future one) inherit it from the single Zone-3 funnel, and so
+// keymap_test.go's TestNoDuplicateBindingBetweenGlobalAndAnyLocalHintList --
+// which is scoped to those two functions -- keeps seeing the unrewritten
+// lists it was written against.
+func (m model) boxFormRegionLabels(viewLocal []keybind.Binding) []keybind.Binding {
+	if !boxFormEnabled() || !m.detailFocus || m.fullscreen == fullscreenDetail {
+		return viewLocal
+	}
+	out := make([]keybind.Binding, len(viewLocal))
+	for i, b := range viewLocal {
+		switch b.Help().Key {
+		case keys.FocusIn.Help().Key:
+			out[i] = boxFormFieldNext
+		case keys.FocusOut.Help().Key:
+			out[i] = boxFormFieldPrev
+		default:
+			out[i] = b
+		}
+	}
+	return out
+}
+
 // contextualLocalHint is Footer Zone 3's single source for BOTH
 // Chrome-calling views (browseRepoChrome/view_browse_repo.go,
 // backlogChrome/view_browse_backlog.go): view-local (viewLocal) in the
@@ -287,6 +336,7 @@ func (m model) overlayLocalBindings() []keybind.Binding {
 // state is ever active at a time), but the two orderings must not be
 // conflated (T7-Review I03, bean bt-dsog).
 func (m model) contextualLocalHint(viewLocal []keybind.Binding) string {
+	viewLocal = m.boxFormRegionLabels(viewLocal)
 	switch {
 	case m.filterOpen:
 		return renderBindings(filterMenuLocalBindings())

@@ -170,61 +170,200 @@ func TestBoxFormTabRendersFieldCursorInRealView(t *testing.T) {
 
 // --- Keyboard navigation ---
 
-// TestBoxFormArrowsWalkFieldsInOrder guards Ziel 2: down/right/left/up step
-// through detailBoxForm's fixed layout -- down/up between rows (keeping the
-// column where the target row has one), left/right within a grid row.
-func TestBoxFormArrowsWalkFieldsInOrder(t *testing.T) {
+// TestBoxFormGridMoveWalksTheLayout guards the GRID geometry of the field
+// table (boxFormMoveField): up/down between rows keeping the column where the
+// target row has one, left/right within a grid row, edges are no-ops.
+//
+// bean bt-8d35 (PO-Entscheidung 3): this is no longer driven by the ARROW
+// KEYS -- those went back to plain viewport scrolling and tab/shift+tab took
+// over the field cursor (linear order + wrap, see TestBoxFormTabWalksFields
+// WithWrap below). The grid mover itself is deliberately NOT torn out
+// ("kein Voll-Rueckbau", bt-8d35's own wording) and stays covered here at the
+// boxFormNav level, one rung below the keymap.
+func TestBoxFormGridMoveWalksTheLayout(t *testing.T) {
 	m := boxFormFieldModel(t)
+	b := m.focusedBean()
 
 	steps := []struct {
-		key  tea.KeyType
+		dir  string
 		want string
 	}{
-		{tea.KeyDown, "status"}, // Title -> row A, col 0
-		{tea.KeyRight, "type"},  // within row A
-		{tea.KeyRight, "priority"},
-		{tea.KeyRight, "priority"}, // right edge: no-op
-		{tea.KeyDown, "tags"},      // row B has only 2 cols -> col clamps to 1
-		{tea.KeyLeft, "parent"},
-		{tea.KeyLeft, "parent"}, // left edge: no-op
-		{tea.KeyUp, "status"},   // back into row A at col 0
-		{tea.KeyUp, "title"},
-		{tea.KeyUp, "title"}, // top edge: no-op
+		{"down", "status"}, // Title -> row A, col 0
+		{"right", "type"},  // within row A
+		{"right", "priority"},
+		{"right", "priority"}, // right edge: no-op
+		{"down", "tags"},      // row B has only 2 cols -> col clamps to 1
+		{"left", "parent"},
+		{"left", "parent"}, // left edge: no-op
+		{"up", "status"},   // back into row A at col 0
+		{"up", "title"},
+		{"up", "title"}, // top edge: no-op
 	}
 	for i, s := range steps {
-		m = step(t, m, keyMsg(s.key))
+		m = m.boxFormNav(b, s.dir)
 		if got := boxFormFieldOrder[m.boxFormCursor].name; got != s.want {
-			t.Fatalf("step %d (%v): cursor on %q, want %q", i, s.key, got, s.want)
+			t.Fatalf("step %d (%s): cursor on %q, want %q", i, s.dir, got, s.want)
 		}
 	}
 }
 
-// TestBoxFormDownReachesPanelFields walks all the way down and asserts the
-// panel fields (Body/Relations/History) are reachable and that the walk stops
-// at History rather than wrapping.
-func TestBoxFormDownReachesPanelFields(t *testing.T) {
+// --- bean bt-8d35: tab/shift+tab own the field cursor, arrows scroll ---
+
+// TestBoxFormTabWalksFieldsWithWrap is the PO's Flow #2 verbatim: tab steps
+// through detailBoxForm's fields in RENDER order and WRAPS at the end instead
+// of falling back into the Tree ("sonst verliert man den Fokus versehentlich
+// beim Durchsteppen").
+func TestBoxFormTabWalksFieldsWithWrap(t *testing.T) {
 	m := boxFormFieldModel(t)
-	seen := map[string]bool{}
-	for i := 0; i < 300; i++ {
-		m = step(t, m, keyMsg(tea.KeyDown))
-		seen[boxFormFieldOrder[m.boxFormCursor].name] = true
+
+	want := make([]string, 0, len(boxFormFieldOrder))
+	for _, f := range boxFormFieldOrder[1:] {
+		want = append(want, f.name)
 	}
-	for _, name := range []string{"status", "parent", "body", "relations", "history"} {
-		if !seen[name] {
-			t.Fatalf("field %q was never reached by repeated `down` presses", name)
+	want = append(want, boxFormFieldOrder[0].name) // wrap back to Title
+
+	for i, w := range want {
+		m = step(t, m, keyMsg(tea.KeyTab))
+		if got := boxFormFieldOrder[m.boxFormCursor].name; got != w {
+			t.Fatalf("tab #%d: cursor on %q, want %q", i+1, got, w)
+		}
+		if !m.detailFocus {
+			t.Fatalf("tab #%d left the Detail region -- tab must move WITHIN it (bt-8d35)", i+1)
 		}
 	}
-	if got := boxFormFieldOrder[m.boxFormCursor].name; got != "history" {
-		t.Fatalf("after 300 downs the cursor sits on %q, want the LAST field %q (no wrap-around)", got, "history")
+}
+
+// TestBoxFormShiftTabWalksFieldsBackwardsWithWrap is Flow #2's other half:
+// shift+tab is the reverse step, and from the FIRST field it wraps to the
+// last rather than exiting the region (that is esc's job now).
+func TestBoxFormShiftTabWalksFieldsBackwardsWithWrap(t *testing.T) {
+	m := boxFormFieldModel(t)
+
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	if got, want := boxFormFieldOrder[m.boxFormCursor].name, boxFormFieldOrder[len(boxFormFieldOrder)-1].name; got != want {
+		t.Fatalf("shift+tab on the first field: cursor on %q, want the LAST field %q (wrap)", got, want)
+	}
+	if !m.detailFocus {
+		t.Fatal("shift+tab left the Detail region -- only esc may do that (bt-8d35)")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	if got, want := boxFormFieldOrder[m.boxFormCursor].name, boxFormFieldOrder[len(boxFormFieldOrder)-2].name; got != want {
+		t.Fatalf("second shift+tab: cursor on %q, want %q", got, want)
+	}
+}
+
+// TestBoxFormArrowsScrollInsteadOfMovingTheCursor is PO-Entscheidung 3:
+// the arrows scroll the WHOLE view again (bt-ze10's behaviour) and leave the
+// field cursor exactly where tab put it.
+func TestBoxFormArrowsScrollInsteadOfMovingTheCursor(t *testing.T) {
+	m := boxFormFieldModel(t)
+	b := m.focusedBean()
+	requireOverflow(t, m, b)
+
+	before := m.boxFormCursor
+	m = step(t, m, keyMsg(tea.KeyDown))
+	if m.boxFormCursor != before {
+		t.Fatalf("down moved the field cursor to %q -- the arrows must only scroll (bt-8d35)", boxFormFieldOrder[m.boxFormCursor].name)
+	}
+	if m.boxFormScroll != 1 {
+		t.Fatalf("boxFormScroll after one down = %d, want 1 (plain ±1 viewport scroll)", m.boxFormScroll)
+	}
+	m = step(t, m, keyMsg(tea.KeyUp))
+	if m.boxFormScroll != 0 {
+		t.Fatalf("boxFormScroll after up = %d, want 0", m.boxFormScroll)
+	}
+}
+
+// TestBoxFormEscLeavesTheDetailRegion pins the other half of bt-8d35's rule
+// -- "esc VERLAESST die Region" -- now that shift+tab no longer does.
+func TestBoxFormEscLeavesTheDetailRegion(t *testing.T) {
+	m := boxFormFieldModel(t)
+	m = step(t, m, keyMsg(tea.KeyEsc))
+	if m.detailFocus {
+		t.Fatal("esc did not leave the Detail region")
+	}
+}
+
+// TestBoxFormTabFromTreeEntersAtTheFirstField guards Flow #2's entry step:
+// tab out of the Tree focuses the Detail region AT TITLE, even when a stale
+// cursor from a previous visit to the same bean is still on the model.
+func TestBoxFormTabFromTreeEntersAtTheFirstField(t *testing.T) {
+	m := boxFormScrollModel(t) // Tree-focused
+	b := m.focusedBean()
+	m.boxFormCursor, m.boxFormCursorBean = fieldIdx(t, "tags"), b.ID
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("tab did not focus the Detail region")
+	}
+	if got := boxFormEffectiveCursor(m, b); got != 0 {
+		t.Fatalf("tab-in landed on field %q, want the first field %q", boxFormFieldOrder[got].name, boxFormFieldOrder[0].name)
+	}
+}
+
+// TestBoxFormTabWalksFieldsInTheBacklogToo is bt-8d35's "Reichweite" check:
+// tab is a GLOBAL binding, so the Fokus-Modell must land identically in every
+// view that renders the box form -- the Backlog shares the very same Detail
+// pane and routes through the same keyDetailFocus (handleKey's detailFocus
+// dispatch), so this pins that it really does, rather than only Browse.
+func TestBoxFormTabWalksFieldsInTheBacklogToo(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+	m := fixtureModel(t, backlogBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.view = viewBacklog
+
+	m = step(t, m, keyMsg(tea.KeyTab)) // into the Detail region
+	if !m.detailFocus {
+		t.Fatal("setup: tab did not focus the Backlog's Detail pane")
+	}
+	if got := boxFormEffectiveCursor(m, m.focusedBean()); got != 0 {
+		t.Fatalf("tab-in landed on field %q, want Title", boxFormFieldOrder[got].name)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if got := boxFormFieldOrder[m.boxFormCursor].name; got != boxFormFieldOrder[1].name {
+		t.Fatalf("second tab in the Backlog: cursor on %q, want %q", got, boxFormFieldOrder[1].name)
+	}
+	if !m.detailFocus {
+		t.Fatal("tab swapped the Backlog's panes instead of moving within the Detail region")
+	}
+}
+
+// TestTabStillSwapsPanesWithoutBoxForm is the flag-OFF regression pin: the
+// whole Fokus-Modell is experiment-gated (epic bt-vy1q), so without
+// BT_BOXFORM tab remains PF-13's bidirectional pane toggle and shift+tab
+// remains the deterministic exit.
+func TestTabStillSwapsPanesWithoutBoxForm(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "")
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("flag OFF: tab must still focus the Detail pane")
+	}
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if m.detailFocus {
+		t.Fatal("flag OFF: a second tab must toggle focus back to the Tree (PF-13)")
+	}
+	m = step(t, m, keyMsg(tea.KeyTab))
+	m = step(t, m, keyMsg(tea.KeyShiftTab))
+	if m.detailFocus {
+		t.Fatal("flag OFF: shift+tab must still be the deterministic exit (PF-13)")
 	}
 }
 
 // --- Scroll interplay (the bean's explicit "must not scroll out of view") ---
 
 // TestBoxFormCursorStaysVisibleWhileNavigating is the headline interplay
-// criterion: after EVERY down press the cursored field's own line span must
+// criterion: after EVERY tab press the cursored field's own line span must
 // intersect the visible window [boxFormScroll, boxFormScroll+height) -- a
 // focused field that scrolled out of the pane would be a bug.
+//
+// bean bt-8d35: unchanged in substance, driven by tab instead of down (the
+// Scroll-Mitnahme moved with the field cursor onto tab, "Springt tab auf ein
+// Feld ausserhalb des sichtbaren Bereichs, muss der Viewport nachziehen").
 func TestBoxFormCursorStaysVisibleWhileNavigating(t *testing.T) {
 	m := boxFormFieldModel(t)
 	b := m.focusedBean()
@@ -234,21 +373,24 @@ func TestBoxFormCursorStaysVisibleWhileNavigating(t *testing.T) {
 	blocks := boxFormBlocks(m.idx, b, accW, -1)
 
 	for i := 0; i < 300; i++ {
-		m = step(t, m, keyMsg(tea.KeyDown))
+		m = step(t, m, keyMsg(tea.KeyTab))
 		off := boxFormEffectiveScroll(m, b)
 		start, h := boxFormFieldSpan(blocks, m.boxFormCursor)
 		if start >= off+height || start+h <= off {
-			t.Fatalf("down #%d: field %q spans [%d,%d) but the visible window is [%d,%d) -- the cursor scrolled out of view",
+			t.Fatalf("tab #%d: field %q spans [%d,%d) but the visible window is [%d,%d) -- the cursor scrolled out of view",
 				i, boxFormFieldOrder[m.boxFormCursor].name, start, start+h, off, off+height)
 		}
 	}
 }
 
-// TestBoxFormDownScrollsThroughATallField guards the "reveal before move"
-// rule: while the cursored field is TALLER than the pane, down scrolls the
-// viewport through it instead of jumping the cursor onward -- otherwise a
-// long Body's tail would be keyboard-unreachable (bt-ze10's own headline
-// criterion, preserved through this bean's key-handling change).
+// TestBoxFormDownScrollsThroughATallField guards bt-ze10's own headline
+// criterion: while the cursored field is TALLER than the pane, down scrolls
+// the viewport through it instead of jumping the cursor onward -- otherwise a
+// long Body's tail would be keyboard-unreachable.
+//
+// bean bt-8d35: the cursor is walked onto the Body with tab (the arrows no
+// longer move it); the assertions themselves are unchanged, they hold now
+// because the arrows scroll again (PO-Entscheidung 3).
 func TestBoxFormDownScrollsThroughATallField(t *testing.T) {
 	m := boxFormFieldModel(t)
 	b := m.focusedBean()
@@ -256,7 +398,7 @@ func TestBoxFormDownScrollsThroughATallField(t *testing.T) {
 
 	body := fieldIdx(t, "body")
 	for i := 0; i < 10 && m.boxFormCursor < body; i++ {
-		m = step(t, m, keyMsg(tea.KeyDown))
+		m = step(t, m, keyMsg(tea.KeyTab))
 	}
 	if m.boxFormCursor != body {
 		t.Fatalf("setup: cursor on %q, want body", boxFormFieldOrder[m.boxFormCursor].name)

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	keybind "github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // bindingKeys returns each binding's Help().Key -- the literal token
@@ -100,5 +101,47 @@ func TestBoxFormFooterKeysStayFunctional(t *testing.T) {
 		if !registered[k] {
 			t.Fatalf("key %q disappeared from the keymap/help groups -- bt-fy5d may only thin the FOOTER, never the registration", k)
 		}
+	}
+}
+
+// --- bean bt-8d35: the footer names the REGION-local meaning of tab ---
+
+// TestFooterNamesTabAsFieldNavInsideTheDetailRegion guards bt-z4w7's derived-
+// label rule for the Fokus-Modell: while the Detail region has focus, tab
+// really moves the field cursor, so Footer Zone 3 must say so instead of
+// repeating the pane-swap's "focus in". The literals below carry the nbsp
+// renderBindings joins key and label with (view.go's wrap-atomic rule).
+func TestFooterNamesTabAsFieldNavInsideTheDetailRegion(t *testing.T) {
+	m := boxFormScrollModel(t) // BT_BOXFORM=1, Tree-focused
+
+	if got := m.contextualLocalHint(browseRepoLocalBindings()); !strings.Contains(got, "focus\u00a0in") {
+		t.Fatalf("Tree-focused footer lost the pane-swap label: %q", got)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	got := m.contextualLocalHint(browseRepoLocalBindings())
+	for _, want := range []string{"next\u00a0field", "prev\u00a0field"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Detail-focused footer does not advertise %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "focus\u00a0in") {
+		t.Fatalf("Detail-focused footer still advertises the stale pane-swap label: %q", got)
+	}
+}
+
+// TestFooterKeepsFocusLabelsWithoutBoxForm is the flag-OFF pin: without the
+// experiment the Fokus-Modell does not exist and tab is still the pane swap,
+// in the footer as much as in handleKey.
+func TestFooterKeepsFocusLabelsWithoutBoxForm(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "")
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("setup: tab did not focus the Detail pane")
+	}
+	if got := m.contextualLocalHint(browseRepoLocalBindings()); !strings.Contains(got, "focus\u00a0in") {
+		t.Fatalf("flag-OFF footer must keep the pane-swap label: %q", got)
 	}
 }

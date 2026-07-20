@@ -228,3 +228,24 @@ func TestBoxFormScrollFullscreenInertWithoutFlag(t *testing.T) {
 		t.Fatalf("secCursor unchanged (%d) -- without the flag `down` must still drive the Accordion section cursor in the Vollbild", before)
 	}
 }
+
+// --- bean bt-8d35: the Vollbild has no field cursor to walk ---
+
+// TestBoxFormFullscreenTabDoesNotMoveTheFieldCursor pins the deliberate
+// exclusion in bt-8d35's Fokus-Modell: renderFullscreenBody passes fieldCursor
+// -1 (view_fullscreen.go), so there is no cursor rendered in the Vollbild --
+// moving an invisible one would be a focus model without a visible focus.
+// tab therefore keeps its GLOBAL meaning there (handleKey routes it to the
+// region-local field nav only for the split geometry).
+func TestBoxFormFullscreenTabDoesNotMoveTheFieldCursor(t *testing.T) {
+	m := fullscreenBoxFormModel(t, boxFormLongBodyBeans())
+	before := m.boxFormCursor
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if m.fullscreen != fullscreenDetail {
+		t.Fatalf("tab left the Vollbild: fullscreen = %v", m.fullscreen)
+	}
+	if m.boxFormCursor != before {
+		t.Fatalf("tab moved the Vollbild's field cursor to %q -- the Vollbild renders none (bt-8d35)", boxFormFieldOrder[m.boxFormCursor].name)
+	}
+}
