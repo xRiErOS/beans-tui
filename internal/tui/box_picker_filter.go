@@ -267,7 +267,7 @@ func (f pickerFilter) strip(width int) string {
 		{"Priority", filterChipValue(f.facetPriority), "^p"},
 		{"Tags", filterChipValue(f.facetTag), "^g"},
 	}
-	return gridRow(cells, width)
+	return gridRow(cells, width, -1) // -1: the picker filter strip has no field cursor (bt-1o4g)
 }
 
 // chrome is the strip + search field block every picker box prefixes onto

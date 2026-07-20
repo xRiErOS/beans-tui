@@ -183,5 +183,9 @@ func renderFullscreenBody(fs fullscreenMode, innerW, bodyH int, listRows []strin
 	// (unwindowed, renderPane's own line cap still applies) -- a real gap,
 	// but an EXISTING one this task's own "Betroffen" file list (bean body)
 	// does not name view_fullscreen.go, so it stays out of scope here.
-	return renderAccordionPane(idx, detailBean, innerW, bodyH, accOpen, secCursor, fieldCursor, detailLevel, focused, 0)
+	// N8 (bean bt-1o4g) passes -1 (no field cursor) for the SAME reason and
+	// the same scope boundary: keyDetailFocus guards its whole box-form nav
+	// branch off inside fullscreenDetail, so a cursor rendered here would be
+	// a Mauve frame nothing can move -- worse than none.
+	return renderAccordionPane(idx, detailBean, innerW, bodyH, accOpen, secCursor, fieldCursor, detailLevel, focused, 0, -1)
 }

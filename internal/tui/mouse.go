@@ -627,6 +627,22 @@ func boxFormScrollBounds(m model, b *data.Bean) (total, height int) {
 	if b == nil {
 		return 0, 0
 	}
+	accW, height := boxFormPaneMetrics(m, b)
+	form := detailBoxForm(m.idx, b, accW, -1) // cursor never changes line counts
+	return len(strings.Split(form, "\n")), height
+}
+
+// boxFormPaneMetrics is boxFormScrollBounds' geometry half, split out for
+// bean bt-1o4g's field cursor (boxFormNav, box_nav_field.go), which needs the
+// SAME accW/height pair but renders the form as BLOCKS (boxFormBlocks) rather
+// than one joined string. Sharing this keeps the cursor's scroll-into-view
+// arithmetic and the wheel/keyboard clamp arithmetic on one geometry -- a
+// cursor computed against a different height than the one the offset is
+// clamped to would let a focused field land just outside the viewport.
+func boxFormPaneMetrics(m model, b *data.Bean) (accW, height int) {
+	if b == nil {
+		return 1, 0
+	}
 	w, h := m.width, m.height
 	if w <= 0 {
 		w = 80
@@ -651,12 +667,11 @@ func boxFormScrollBounds(m model, b *data.Bean) (total, height int) {
 		}
 	}
 
-	accW := rw - 2
+	accW = rw - 2
 	if accW < 1 {
 		accW = 1
 	}
-	form := detailBoxForm(m.idx, b, accW)
-	return len(strings.Split(form, "\n")), bodyH
+	return accW, bodyH
 }
 
 // adjustBoxFormScroll applies delta to b's box-form scroll offset (relative
@@ -773,30 +788,16 @@ func detailBoxFormClickRow(m model, msg tea.MouseMsg) (target string, ok bool) {
 	}
 	clickCol := msg.X - (originX + lw)
 
-	switch {
-	case clickRow < 3:
-		return boxFormTargetEditor, true // Title box (dropdownBox's own "e" hotkey)
-	case clickRow < 6:
-		switch gridColAt(gridColWidths(3, accW), clickCol) {
-		case 0:
-			return boxFormTargetStatus, true
-		case 1:
-			return boxFormTargetType, true
-		case 2:
-			return boxFormTargetPriority, true
-		}
-		return "", false // inside the row but not over a box (inter-box gap)
-	case clickRow < 9:
-		switch gridColAt(gridColWidths(2, accW), clickCol) {
-		case 0:
-			return boxFormTargetParent, true
-		case 1:
-			return boxFormTargetTags, true
-		}
-		return "", false
-	default:
-		return boxFormTargetEditor, true // Body/Relations/History panels
+	// bt-1o4g: the row/column -> field mapping this function used to spell out
+	// inline now lives in boxFormFieldAt (box_nav_field.go), so the mouse hit-
+	// test and the KEYBOARD field cursor read the same table -- there is only
+	// ever ONE answer to "which box sits at (row, col)". The mapping itself is
+	// unchanged (the doc paragraph above still describes it verbatim).
+	field := boxFormFieldAt(clickRow, clickCol, accW)
+	if field < 0 {
+		return "", false // inside a row but not over a box (inter-box gap)
 	}
+	return boxFormFieldOrder[field].target, true
 }
 
 // mouseBoxFormDetailClick dispatches a Detail-Pane left-click while
@@ -815,6 +816,17 @@ func (m model) mouseBoxFormDetailClick(b *data.Bean, msg tea.MouseMsg) (tea.Mode
 	if !ok {
 		return m, nil
 	}
+	return m.activateBoxFormTarget(b, target)
+}
+
+// activateBoxFormTarget dispatches a boxFormTarget* onto its overlay/picker/
+// $EDITOR -- the SHARED helper between mouseBoxFormDetailClick (Maus, above)
+// and boxFormActivateCursor (enter on the field cursor, box_nav_field.go,
+// bean bt-1o4g). Extracted verbatim from the click dispatch's former inline
+// switch, mirroring activateDetailField's own "exactly ONE place that
+// dispatches a field onto its overlay" precedent (update.go) -- keyboard and
+// mouse open the same thing for the same box, by construction.
+func (m model) activateBoxFormTarget(b *data.Bean, target string) (tea.Model, tea.Cmd) {
 	switch target {
 	case boxFormTargetStatus:
 		return m.openValueMenu("status"), nil

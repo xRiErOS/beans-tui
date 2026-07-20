@@ -52,5 +52,5 @@ func (m model) filterBar(width int) string {
 		{"Priority", chip(m.filterPriority), ""},
 		{"Tags", chip(m.filterTag), ""},
 	}
-	return gridRow(cells, width)
+	return gridRow(cells, width, -1) // -1: the filter bar has no field cursor (bt-1o4g)
 }

@@ -62,7 +62,12 @@ func gridColWidths(n, width int) []int {
 // space gaps between them, and the integer-division remainder spread across
 // the first columns so the widths sum to width. Each cell is a dropdownBox
 // at its column width.
-func gridRow(cells []scalarCell, width int) string {
+// focusedCol (bean bt-1o4g) is the column whose box renders with
+// dropdownBox's focused=true Mauve frame, or -1 for "no field cursor in this
+// row" -- the ONLY behavioral difference; widths/geometry are untouched, so
+// the field cursor can never shift the layout out from under the mouse
+// hit-test (boxFormFieldAt, box_nav_field.go).
+func gridRow(cells []scalarCell, width, focusedCol int) string {
 	n := len(cells)
 	if n == 0 {
 		return ""
@@ -71,7 +76,7 @@ func gridRow(cells []scalarCell, width int) string {
 
 	boxes := make([]string, n)
 	for i, c := range cells {
-		boxes[i] = dropdownBox(c.label, c.value, c.hotkey, widths[i], false)
+		boxes[i] = dropdownBox(c.label, c.value, c.hotkey, widths[i], i == focusedCol)
 	}
 
 	gapCol := " \n \n "
@@ -90,8 +95,38 @@ func gridRow(cells []scalarCell, width int) string {
 // (box_panel.go) reusing view_detail_bean.go's own content renderers. idx is
 // needed to resolve Relations (parent/children/blocking). width = inner pane
 // width in cells.
-func detailBoxForm(idx *data.Index, b *data.Bean, width int) string {
-	title := dropdownBox("Title", b.Title, "e", width, false)
+func detailBoxForm(idx *data.Index, b *data.Bean, width, cursor int) string {
+	return strings.Join(boxFormBlocks(idx, b, width, cursor), "\n")
+}
+
+// boxFormBlocks renders detailBoxForm's six layout rows SEPARATELY (Title /
+// scalars A / scalars B / Body / Relations / History, the boxFormRow*
+// constants in box_nav_field.go) instead of returning the joined string
+// directly. detailBoxForm (above) just joins them with "\n" -- byte-identical
+// output -- but the field cursor needs each row's own LINE SPAN to scroll a
+// focused field into view (boxFormFieldSpan below, bean bt-1o4g), and deriving
+// that from the same slice the render is built from is the only way the two
+// can never disagree about where a field sits.
+//
+// cursor is an index into boxFormFieldOrder (box_nav_field.go), or -1 for no
+// cursor at all -- which is the state EVERY pre-bt-1o4g call site is in
+// (unfocused Detail pane, fullscreen, the flag-on goldens), so the -1 render
+// is exactly the previous output, every box focused=false.
+func boxFormBlocks(idx *data.Index, b *data.Bean, width, cursor int) []string {
+	focusRow, focusCol := -1, -1
+	if cursor >= 0 && cursor < len(boxFormFieldOrder) {
+		focusRow = boxFormFieldOrder[cursor].row
+		focusCol = boxFormFieldOrder[cursor].col
+	}
+	colIn := func(row int) int {
+		if row == focusRow {
+			return focusCol
+		}
+		return -1
+	}
+	on := func(row int) bool { return row == focusRow }
+
+	title := dropdownBox("Title", b.Title, "e", width, on(boxFormRowTitle))
 
 	priority := b.Priority
 	if priority == "" {
@@ -110,24 +145,47 @@ func detailBoxForm(idx *data.Index, b *data.Bean, width int) string {
 		{"Status", theme.StatusStyle(b.Status).Render(b.Status), "s"},
 		{"Type", theme.TypeStyle(b.Type).Render(b.Type), "o"},
 		{"Priority", theme.Priority(priority), "u"},
-	}, width)
+	}, width, colIn(boxFormRowScalarsA))
 	rowB := gridRow([]scalarCell{
 		{"Parent", parent, "a"},
 		{"Tags", tags, "t"},
-	}, width)
+	}, width, colIn(boxFormRowScalarsB))
 
 	relationsBody, _, _ := relationsSectionBody(idx, b, width-4, false, 0)
 
-	lines := []string{
+	return []string{
 		title,
 		rowA,
 		rowB,
-		panelBox("Body", bodySectionBody(b, width-4), "e", width, false),
-		panelBox("Relations", relationsBody, "", width, false),
-		panelBox("History", historieSectionBody(b, width-4), "", width, false),
+		panelBox("Body", bodySectionBody(b, width-4), "e", width, on(boxFormRowBody)),
+		panelBox("Relations", relationsBody, "", width, on(boxFormRowRelations)),
+		panelBox("History", historieSectionBody(b, width-4), "", width, on(boxFormRowHistory)),
 	}
+}
 
-	return strings.Join(lines, "\n")
+// lineCount reports how many rendered lines s occupies -- boxFormBlocks'
+// blocks are joined with "\n", so a block's line count IS its height in the
+// joined form (no lipgloss.Height indirection needed, and no ANSI-width
+// pitfalls: this counts newlines, not cells).
+func lineCount(s string) int { return strings.Count(s, "\n") + 1 }
+
+// boxFormFieldSpan returns the [start, start+height) line range the field at
+// index `field` (boxFormFieldOrder, box_nav_field.go) occupies inside the
+// joined detailBoxForm string -- what boxFormNav scrolls into view. Fields
+// sharing a row (the scalar grid) share that row's span: they are rendered
+// side by side, so their vertical extent is identical by construction.
+func boxFormFieldSpan(blocks []string, field int) (start, height int) {
+	if field < 0 || field >= len(boxFormFieldOrder) {
+		return 0, 0
+	}
+	row := boxFormFieldOrder[field].row
+	for i := 0; i < row && i < len(blocks); i++ {
+		start += lineCount(blocks[i])
+	}
+	if row >= len(blocks) {
+		return start, 0
+	}
+	return start, lineCount(blocks[row])
 }
 
 // clampBoxFormScroll bounds a box-form scroll offset to [0, max(0, total-

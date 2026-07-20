@@ -74,32 +74,47 @@ func requireOverflow(t *testing.T, m model, b *data.Bean) (total, height int) {
 
 // --- Keyboard: up/down only scrolls when the Detail pane is focused ---
 
-// TestBoxFormScrollDownUpWhenDetailFocused guards the core drive path: down/
-// up move model.boxFormScroll by ±1 while m.detailFocus is true and
-// boxFormEnabled() -- Akzeptanz "Offset clamped" + the bean's own Test list
-// item 1.
+// TestBoxFormScrollDownUpWhenDetailFocused guards the core drive path: while
+// m.detailFocus is true and boxFormEnabled(), down/up eventually move
+// model.boxFormScroll and record its owning bean -- Akzeptanz "Offset
+// clamped" + the bean's own Test list item 1.
+//
+// REVISED by bean bt-1o4g (PO-Nebenbefund N8, keyboard-first): down/up are no
+// longer a CONTEXT-FREE ±1 viewport scroll. They now drive the box-form FIELD
+// CURSOR (boxFormNav, box_nav_field.go), which drags this offset along so the
+// focused field stays visible -- the first few presses therefore walk the
+// short scalar boxes (which already fit, offset stays 0) before any scrolling
+// happens at all. What bt-ze10 actually guarantees, and what this test now
+// asserts, is unchanged in substance: repeated `down` scrolls the viewport
+// (and `up` scrolls it back) rather than leaving tall content unreachable.
+// The exact-±1-per-press assertion moved to box_nav_field_test.go's
+// TestBoxFormDownScrollsThroughATallField, where it belongs to the tall-field
+// reveal rule.
 func TestBoxFormScrollDownUpWhenDetailFocused(t *testing.T) {
 	m := boxFormScrollModel(t)
 	b := m.focusedBean()
 	requireOverflow(t, m, b)
 
 	m.detailFocus = true
-	m = step(t, m, keyMsg(tea.KeyDown))
-	if m.boxFormScroll != 1 {
-		t.Fatalf("boxFormScroll after one detail-focused down = %d, want 1", m.boxFormScroll)
+	for i := 0; i < 10 && m.boxFormScroll == 0; i++ {
+		m = step(t, m, keyMsg(tea.KeyDown))
+	}
+	if m.boxFormScroll <= 0 {
+		t.Fatalf("boxFormScroll after 10 detail-focused downs = %d, want > 0", m.boxFormScroll)
 	}
 	if m.boxFormScrollBean != b.ID {
 		t.Fatalf("boxFormScrollBean = %q, want %q (offset must record its owning bean)", m.boxFormScrollBean, b.ID)
 	}
 
-	m = step(t, m, keyMsg(tea.KeyDown))
-	if m.boxFormScroll != 2 {
-		t.Fatalf("boxFormScroll after two detail-focused downs = %d, want 2", m.boxFormScroll)
+	deeper := m
+	deeper = step(t, deeper, keyMsg(tea.KeyDown))
+	if deeper.boxFormScroll <= m.boxFormScroll {
+		t.Fatalf("boxFormScroll after another down = %d, want > %d", deeper.boxFormScroll, m.boxFormScroll)
 	}
 
-	m = step(t, m, keyMsg(tea.KeyUp))
-	if m.boxFormScroll != 1 {
-		t.Fatalf("boxFormScroll after down/down/up = %d, want 1", m.boxFormScroll)
+	back := step(t, deeper, keyMsg(tea.KeyUp))
+	if back.boxFormScroll >= deeper.boxFormScroll {
+		t.Fatalf("boxFormScroll after up = %d, want < %d", back.boxFormScroll, deeper.boxFormScroll)
 	}
 }
 

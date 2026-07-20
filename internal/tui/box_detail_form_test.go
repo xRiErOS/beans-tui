@@ -58,7 +58,7 @@ func TestDetailBoxFormStructure(t *testing.T) {
 	b := detailBoxFormFixture()
 	idx := detailBoxFormIndex()
 	const w = 100
-	out := detailBoxForm(idx, b, w)
+	out := detailBoxForm(idx, b, w, -1)
 	plain := ansi.Strip(out)
 
 	for _, want := range []string{
@@ -93,7 +93,7 @@ func TestDetailBoxFormFixedGridNoCollapse(t *testing.T) {
 	b := detailBoxFormFixture()
 	idx := detailBoxFormIndex()
 	const w = 50
-	out := detailBoxForm(idx, b, w)
+	out := detailBoxForm(idx, b, w, -1)
 	lines := strings.Split(out, "\n")
 
 	for i, ln := range lines {
@@ -140,7 +140,7 @@ func TestDetailBoxFormGolden(t *testing.T) {
 
 	b := detailBoxFormFixture()
 	idx := detailBoxFormIndex()
-	out := detailBoxForm(idx, b, 100)
+	out := detailBoxForm(idx, b, 100, -1)
 
 	path := filepath.Join("testdata", "detail_boxform.golden")
 	if *update {

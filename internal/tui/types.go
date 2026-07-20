@@ -285,6 +285,21 @@ type model struct {
 	boxFormScroll     int
 	boxFormScrollBean string
 
+	// Box-form Detail-Pane FIELD CURSOR (bean bt-1o4g, epic bt-vy1q, PO-
+	// Nebenbefund N8 "keyboard-first"): the index into boxFormFieldOrder
+	// (box_nav_field.go) the arrow keys move and enter activates while the
+	// Detail pane is focused. boxFormCursorBean mirrors boxFormScrollBean's
+	// derived-reset doctrine exactly (see above): the cursor is reset to the
+	// first field lazily, where it is READ (boxFormEffectiveCursor), by
+	// comparing this ID against the currently focused bean -- not at every
+	// call site that can change the selection. Zero-valued by default, which
+	// is ALSO the "cursor on Title" default, so no explicit init is needed;
+	// accordion mode (boxFormEnabled() off) never reads or writes either
+	// field, and an UNFOCUSED Detail pane renders with cursor -1 (no Mauve
+	// frame at all, so the flag-on goldens stay byte-identical).
+	boxFormCursor     int
+	boxFormCursorBean string
+
 	confirmQuit bool
 
 	// E3 (bean bt-dlgk): node-action overlays -- mutually exclusive by

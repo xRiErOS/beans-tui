@@ -660,7 +660,15 @@ func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string
 // `for i := 0; ... && len(lines) < h`) prevents any overflow past the pane's
 // border, the same mechanism the Tree pane relies on.
 func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) string {
-	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused, boxFormEffectiveScroll(m, b))
+	// N8 (bean bt-1o4g): the box-form field cursor is only VISIBLE while the
+	// Detail pane actually holds focus -- an unfocused pane passes -1 (no
+	// Mauve frame anywhere), which is byte-identical to the pre-cursor render
+	// and is what keeps browse_boxform.golden untouched.
+	boxCursor := -1
+	if boxFormEnabled() && focused {
+		boxCursor = boxFormEffectiveCursor(m, b)
+	}
+	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused, boxFormEffectiveScroll(m, b), boxCursor)
 }
 
 // renderAccordionPane (I02, E4-T3-Review PFLICHT carried into E4 Task 4,
@@ -681,7 +689,10 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // renderFullscreenBody, view_fullscreen.go, which passes 0 -- fullscreen
 // box-form scrolling is out of this task's scope, see that call site's own
 // doc comment) is always safe.
-func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll int) string {
+// boxCursor (bean bt-1o4g) is the box-form field cursor index the
+// boxFormEnabled() branch renders with a Mauve frame, or -1 for none -- the
+// accordion branch ignores it exactly the way it ignores boxScroll.
+func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll, boxCursor int) string {
 	var rows []string
 	if b != nil {
 		bodyW := w - 4
@@ -719,7 +730,7 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 			// "Normalfall passt" claim), scrollView's own padding-to-h
 			// converges with renderPane's pre-existing pad-to-h loop below --
 			// byte-identical to the pre-F1 output, no golden drift.
-			form := detailBoxForm(idx, b, accW)
+			form := detailBoxForm(idx, b, accW, boxCursor)
 			win, _ := scrollView(form, h, boxScroll)
 			rows = append(rows, strings.Split(win, "\n")...)
 		} else {

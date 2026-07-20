@@ -1282,13 +1282,16 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// F1 (bean bt-ze10, epic bt-vy1q): while boxFormEnabled(), the Accordion
-	// nav below has "no effect" (renderAccordionPane's own boxFormEnabled()
-	// branch doc comment, view_browse_repo.go -- box-form has no Section/
-	// Field cursor of its own yet) -- up/down are repurposed here to scroll
-	// the box-form Detail pane's viewport instead, via the SAME
-	// adjustBoxFormScroll wheelMove (mouse.go) uses, so keyboard and wheel
-	// can never independently drift on the reset-on-bean-change/clamp rules.
+	// F1 (bean bt-ze10) + N8 (bean bt-1o4g, PO "keyboard-first"), epic
+	// bt-vy1q: while boxFormEnabled(), the Accordion nav below has "no effect"
+	// (box-form has no Section/Field two-level machine of its own), so all
+	// four arrows plus enter are routed to the box-form's OWN field cursor
+	// here -- boxFormNav (box_nav_field.go) moves the cursor between
+	// detailBoxForm's boxes AND drags bt-ze10's scroll offset along so the
+	// focused field can never sit outside the viewport (see boxFormNav's doc
+	// comment for the reveal-then-move rule that keeps a long Body fully
+	// keyboard-reachable). enter opens the cursored field's editor through
+	// activateBoxFormTarget (mouse.go) -- the same dispatch a click takes.
 	// Guarded off inside fullscreenDetail (m.fullscreen ==
 	// fullscreenDetail): boxFormScrollBounds derives its height from the
 	// SPLIT pane's own clickPaneGeometry call (mouse.go), a DIFFERENT budget
@@ -1298,11 +1301,12 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// the render side). boxFormEnabled() off, or fullscreenDetail active,
 	// falls straight through to the ORIGINAL switch below, unchanged.
 	if boxFormEnabled() && m.fullscreen != fullscreenDetail {
-		switch navKey(msg.String()) {
-		case "up":
-			return m.adjustBoxFormScroll(b, -1), nil
-		case "down":
-			return m.adjustBoxFormScroll(b, 1), nil
+		switch dir := navKey(msg.String()); dir {
+		case "up", "down", "left", "right":
+			return m.boxFormNav(b, dir), nil
+		}
+		if keybind.Matches(msg, keys.Enter) {
+			return m.boxFormActivateCursor(b)
 		}
 	}
 
