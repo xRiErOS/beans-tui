@@ -254,3 +254,71 @@ auf dem gemergten Code** aufgeloest — nicht durch Handarbeit an den Golden-Dat
 nach dem Merge der drei Straenge veraltet (Footer, Picker-Zeilen und Fullscreen aendern
 sich alle noch). Wird am Ende aufgenommen, gegen sproutling, mit `export PATH=/opt/homebrew/bin:$PATH`
 im Hide-Block (vhs-zsh sourced `~/.zshrc` nicht).
+
+## Stand 2026-07-20 (Abend) — Runde 2 gemerged, PO-Befunde erfasst, Runde 3 laeuft
+
+### Runde 2 erledigt (alles gemerged, voller Testlauf gruen)
+| bean | Commit | Ergebnis |
+|---|---|---|
+| bt-1o4g | `75d791a` | Feld-Cursor + enter in der Box-Form |
+| bt-s90e | `40e2a77`/`3d8e00f` -> merge `9aa0b22` | Fullscreen: flatView + Scroll |
+| bt-pt1r | `de46018` -> merge `e34ca00` | Projekt-Slug auch in Picker-Listen weg |
+| bt-z4w7 | `3e3ddd9` -> merge `e34ca00` | Footer-Labels aus der aktiven Bindung ABGELEITET |
+
+**Merge-Konflikte in `keyDetailFocus` selbst aufgeloest** (4 Dateien): Feld-Cursor im Split,
+Viewport-Scroll im Fullscreen — beide Absichten intakt. Ein Test rief `detailBoxForm` noch
+mit alter Signatur auf (Cursor-Parameter fehlte); faellt erst beim Build auf, nicht beim
+Textmerge. **Lehre: nach jedem Merge bauen UND testen, nie nur auf "kein Konflikt" vertrauen.**
+
+`bt-z4w7`s Klassen-Fix (Label aus der aktiven Bindung ableiten) hat sofort einen DRITTEN,
+unbekannten Fall gefunden: alle drei Such-Picker bewarben `↑/i up` / `↓/k down`, obwohl die
+Handler auf rohe KeyUp/KeyDown schalten, damit `i`/`k` tippbar bleiben. Beleg, dass der
+Fix an der Ursache richtig war.
+
+### PO-Befunde aus dem Live-Test -> 9 neue beans (Commit `dbacbe3`)
+16 Befunde, gebuendelt nach Dateimengen: `bt-6nuz` Relations-Overlay (#6-#9) ·
+`bt-f68z` Tree-Pane Header/Umbruch/Suchfeld (#11-#13) · `bt-vpvu` Maus im Tree (#14) ·
+`bt-oox1` Detail-Kleinigkeiten (#1,#4,#10) · `bt-adkn` Body-Blaettern (#5) ·
+`bt-p78f` Body-Ueberschriften Anker+Pencil (#15,#16) · `bt-hd42` Klick-Offset-Bug ·
+`bt-8d35` Fokus-Modell (#2,#3) · `bt-mx4k` Palette.
+
+### PO-Entscheidungen 2026-07-20
+- **Fokus-Modell:** tab/shift+tab bewegen INNERHALB der fokussierten Region, esc VERLAESST
+  sie. Regionen: Tree, Detail, Filter-Strip.
+- **Oeffnen: `enter` ueberall** (Konsistenz vor Bequemlichkeit). `space` schaltet nur Werte
+  in einer offenen Mehrfachauswahl um.
+- **Filter zuruecksetzen: `X`** (vorhandene FilterClear-Bindung, D07). **Folge-Constraint:
+  der Filter-Strip darf keine tippbaren Felder bekommen** — ein Textfeld wuerde das `X`
+  verschlucken. Bei spaeterer Freitextsuche im Strip neu bewerten.
+- **Pfeiltasten im Detail scrollen die ganze Ansicht**, sie bewegen NICHT den Feld-Cursor.
+  Das uebernimmt `tab`. Von bt-1o4g bleibt die **Scroll-Mitnahme** (fokussiertes Feld nie
+  ausserhalb des Viewports) — sie haengt nur an einer anderen Taste. `boxFormFieldOrder`/
+  `boxFormFieldAt`/`activateBoxFormTarget` bleiben unveraendert.
+- **Palette: nur noch `K`, `ctrl+k` entfaellt.** `K` war laengst gebunden (D07), nur das
+  Label hinkte. Spart sechs Zeichen im 80-Spalten-Header.
+- **Body-Blaettern: `pgup`/`pgdn`.** `ctrl+i` ist im Terminal IDENTISCH mit Tab (0x09) und
+  damit fuer immer unbrauchbar; `ctrl+k` war die Palette.
+
+### Runde 3 laeuft (4 Straenge)
+| bean(s) | Ort |
+|---|---|
+| `bt-8d35` Fokus-Modell | **Haupt-Tree** |
+| `bt-f68z` + `bt-vpvu` Tree-Darstellung + Maus | Worktree |
+| `bt-6nuz` + `bt-oox1` + `bt-mx4k` Overlay/Footer/Palette | Worktree |
+| `bt-hd42` Klick-Offset | Worktree |
+
+Bei Wiederaufnahme ZUERST: `git log --oneline -10`, `git worktree list`, `beans list --ready`.
+beans auf `in-progress` ohne zugehoerigen Commit = NICHT erledigt, neu dispatchen.
+
+**Worktree-Basis-Falle ist die Regel, nicht die Ausnahme:** ALLE bisherigen Worktree-Agenten
+bekamen `main` als Basis (~45 Commits zurueck). Alle vier haben Anweisung, das vor der
+ersten Code-Aenderung zu pruefen und zu korrigieren.
+
+**Golden werden diesmal in mehreren Straengen regeneriert** (Header-Text durch bt-mx4k,
+Zeilenumbruch durch bt-f68z). Konflikte beim Zusammenfuehren durch EINE erneute
+Regeneration auf dem gemergten Code aufloesen, nicht von Hand.
+
+### Noch offen danach
+`bt-ty48` (GIF — bewusst zuletzt, sonst veraltet) · `bt-adkn` (Body-Blaettern, wartet auf
+das Fokus-Modell) · `bt-p78f` (Body-Ueberschriften, wartet auf bt-hd42) ·
+`bt-dovm` (S7 huh-Ersatz, draft, PO-Freigabe noetig) · `bt-2o9a` (Merge auf main).
