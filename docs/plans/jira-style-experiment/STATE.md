@@ -226,3 +226,31 @@ end-to-end belegt, nicht nur unit-getestet.
 Bleibt `BT_BOXFORM` beim Merge auf main default-**aus**? Ein abgenommenes Feature hinter
 einem ungesetzten Env-Flag sieht niemand. Optionen: Default an (Flag als Notausgang) /
 Flag ganz raus / so lassen.
+
+## Laufender Stand 2026-07-20 (drei Implementer parallel)
+Basis: `experiment/jira-style-ui` @ `7dc4aa0`, Tree sauber, voller Testlauf gruen.
+
+| bean | Ort | Inhalt |
+|---|---|---|
+| `bt-1o4g` | **Haupt-Tree** | Feld-Navigation in der Box-Form (Pfeiltasten + Enter bei Detail-Fokus) |
+| `bt-s90e` | Worktree | Fullscreen: `flatView` beachten (B8) **und** Scroll-Offset durchreichen (Luecke aus ze10) |
+| `bt-z4w7` + `bt-pt1r` | Worktree | Footer-Label an der Ursache ableiten statt hart verdrahten; Projekt-Slug auch in Picker-Listen kuerzen |
+
+Bei Wiederaufnahme ZUERST pruefen: `git log --oneline -8`, `git worktree list`,
+`beans list --ready`. Stehen beans auf `in-progress` ohne zugehoerigen Commit, ist die
+Arbeit NICHT erledigt -> neu dispatchen.
+
+**Worktree-Basis-Falle:** `isolation: worktree` erzeugt den Worktree ggf. von `main` statt
+vom Arbeitsbranch (~40 Commits Rueckstand, die benoetigten Primitiven existieren dort
+nicht). Beide Worktree-Agenten haben Anweisung, die Basis vor der ersten Code-Aenderung zu
+pruefen und noetigenfalls `git reset --hard experiment/jira-style-ui` zu fahren.
+
+**Golden-Strategie bei drei Straengen:** Jeder Agent regeneriert in seinem eigenen Tree, was
+er braucht, und meldet es. Konflikte an geteilten Golden (`tree`, `backlog`, `browse_flat`,
+`browse_boxform`, `chrome`) werden beim Zusammenfuehren durch **eine erneute Regeneration
+auf dem gemergten Code** aufgeloest — nicht durch Handarbeit an den Golden-Dateien.
+
+**`bt-ty48` (GIF Body-Scroll) bewusst zurueckgestellt:** ein jetzt aufgezeichnetes GIF waere
+nach dem Merge der drei Straenge veraltet (Footer, Picker-Zeilen und Fullscreen aendern
+sich alle noch). Wird am Ende aufgenommen, gegen sproutling, mit `export PATH=/opt/homebrew/bin:$PATH`
+im Hide-Block (vhs-zsh sourced `~/.zshrc` nicht).
