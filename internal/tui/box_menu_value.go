@@ -19,6 +19,7 @@ import (
 	"github.com/xRiErOS/beans-tui/internal/theme"
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // valueMenuItem is one row of the combined s-menu. group is "status",
@@ -143,8 +144,44 @@ func (m model) openValueMenu(group string) model {
 	m.menu = listState{}
 	m.menu.setLen(len(m.menuItems))
 	m.menu.cursor = valueMenuCursorFor(m.menuItems, group, currentValueForGroup(b, group))
+	// Slice C (bt-f0y9, D09 revidiert): seed the anchor field HERE, the ONE
+	// place all four trigger paths (keyboard s/o/u, field-cursor Enter, mouse
+	// click, Palette) funnel through (S6 grounding §4) -- so this is the only
+	// call site that needs touching, not four. Read by composeOverlays'
+	// placeValueMenuOverlay (view_browse_repo.go) ONLY while boxFormEnabled().
+	m.valueMenuAnchorField = boxFormFieldIndexForGroup(group)
 	m.overlay = overlayValueMenu
 	return m
+}
+
+// boxFormFieldIndexForGroup maps a value-menu group ("status"/"type"/
+// "priority") to its boxFormFieldOrder (box_nav_field.go) index -- a STATIC
+// lookup (the group<->field position never varies per-bean or per-render,
+// unlike boxFormEffectiveCursor's per-session state), used by openValueMenu
+// (above) to seed m.valueMenuAnchorField regardless of which of the four
+// trigger paths opened the menu. -1 for an unrecognized group (defensive
+// only -- openValueMenu's own callers never pass one); placeValueMenuOverlay
+// falls back to the pre-existing centered placeOverlay whenever
+// boxFormFieldRect can't resolve the resulting index (same as a nil focused
+// bean).
+func boxFormFieldIndexForGroup(group string) int {
+	var target string
+	switch group {
+	case "status":
+		target = boxFormTargetStatus
+	case "type":
+		target = boxFormTargetType
+	case "priority":
+		target = boxFormTargetPriority
+	default:
+		return -1
+	}
+	for i, f := range boxFormFieldOrder {
+		if f.target == target {
+			return i
+		}
+	}
+	return -1
 }
 
 // keyValueMenu drives the open value menu: up/down move the cursor
@@ -279,4 +316,90 @@ func (m model) valueMenuBox() string {
 		b.WriteString(cursor + label + "\n")
 	}
 	return modalPanel(valueMenuTitle(m.menuItems), b.String(), "", clampModalWidth(40, m.width), theme.Mauve)
+}
+
+// valueMenuPopupY picks the value-menu popup's Y position (Slice C, bt-f0y9
+// "feld-verankertes Inline-Dropdown", D09 revidiert) given its triggering
+// field's own rect (anchorY, anchorH -- boxFormFieldRect, box_nav_field.go)
+// and the popup's own height (fgH) against the canvas height (canvasH):
+// conventional dropdown behavior, BELOW the field by default (PO-Vorgabe).
+//
+// If below would run past the bottom of the canvas, it flips ABOVE the
+// field instead -- as long as the field itself isn't already sitting at
+// canvas row 0 (anchorY == 0, "kein Platz" at all to flip into). The flipped
+// position is NOT required to fully fit above (Status/Type/Priority sit only
+// ~10 rows down in every real render, see this slice's own ERRATUM in
+// box_nav_field.go -- a popup taller than that can never fully fit above
+// them, so requiring a full fit would make the flip branch permanently dead
+// code for this feature's own fields): a partially-clipped-at-the-top popup
+// still beats one silently staying centered or bottom-clipped, and
+// placeOverlayAt's own silent-overflow-drop (Slice B, placeCompose) already
+// handles the clip the exact same way it handles every other overlay in
+// this codebase -- no new overflow mechanism introduced here.
+//
+// anchorY == 0 is the ONLY case that skips the flip (PO-Wortlaut "nur wenn
+// oben auch kein Platz: clampen") -- falls through to "below", clipped at
+// the bottom like any other overflow.
+func valueMenuPopupY(anchorY, anchorH, fgH, canvasH int) int {
+	below := anchorY + anchorH
+	if below+fgH <= canvasH {
+		return below
+	}
+	if anchorY > 0 {
+		return anchorY - fgH
+	}
+	return below
+}
+
+// placeValueMenuOverlay composes the value-menu overlay onto out (Slice C):
+// while boxFormEnabled() AND the anchor field's rect resolves
+// (boxFormFieldRect, box_nav_field.go, seeded via m.mutTarget/
+// m.valueMenuAnchorField at open time, openValueMenu above), the menu is
+// placed directly BELOW its triggering boxed field (or flipped above it,
+// valueMenuPopupY) via placeOverlayAt (Slice B) instead of the pre-existing
+// CENTERED placeOverlay. Falls back to placeOverlay in every other case:
+// boxFormEnabled() off (accordion mode has no boxed fields to anchor to at
+// all -- D09's own scope, "nur die endlichen Einzelfeld-Menüs"), or a rect
+// that fails to resolve (nil mutTarget bean, out-of-range anchor field --
+// defensive; should not happen in practice since openValueMenu always seeds
+// m.valueMenuAnchorField from the static boxFormFieldIndexForGroup lookup in
+// the SAME call that sets m.overlay).
+//
+// x is clamped so the popup never renders past the RIGHT edge of the canvas
+// (defensive only -- the popup's own width, clampModalWidth(40, m.width), is
+// unrelated to the ~15-cell field it anchors to and can run wider than the
+// remaining space toward the right edge of an 80-column pane; this clamp
+// keeps the render on-canvas, it does NOT resize/reflow the popup to the
+// field's own width -- that "should the popup ever shrink or reflow
+// horizontally" question is explicitly OUT of this slice's scope, see
+// bt-f0y9's own S6 grounding §3 and this slice's "## Notes for Reviewer").
+func (m model) placeValueMenuOverlay(out string, w, h int) string {
+	fg := m.valueMenuBox()
+	if !boxFormEnabled() {
+		return placeOverlay(out, fg, w, h)
+	}
+	b := m.idx.ByID[m.mutTarget] // nil-safe: a nil map / missing key both yield nil
+	rx, ry, _, rh, ok := boxFormFieldRect(m, b, m.valueMenuAnchorField)
+	if !ok {
+		return placeOverlay(out, fg, w, h)
+	}
+
+	fgLines := strings.Split(fg, "\n")
+	fgW, fgH := 0, len(fgLines)
+	for _, l := range fgLines {
+		if lw := ansi.StringWidth(l); lw > fgW {
+			fgW = lw
+		}
+	}
+
+	x := rx
+	if fgW < w && x+fgW > w {
+		x = w - fgW
+	}
+	if x < 0 {
+		x = 0
+	}
+	y := valueMenuPopupY(ry, rh, fgH, h)
+
+	return placeOverlayAt(out, fg, w, h, x, y)
 }

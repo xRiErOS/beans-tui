@@ -312,11 +312,28 @@ type model struct {
 	// (design decision d). menu is the shared cursor for the value menu
 	// (T1) / future pickers (T2/T3) -- one open at a time, so one field
 	// suffices. menuItems is the value-menu's row list, built fresh at
-	// open time (openValueMenu, box_menu_value.go).
-	overlay   overlayID
-	mutTarget string
-	menu      listState
-	menuItems []valueMenuItem
+	// open time (openValueMenu, box_menu_value.go). valueMenuAnchorField
+	// (Slice C, bt-f0y9 "feld-verankertes Inline-Dropdown", D09 revidiert) is
+	// the boxFormFieldOrder (box_nav_field.go) index the open value menu is
+	// anchored to -- a STATIC group->field lookup (boxFormFieldIndexForGroup,
+	// box_menu_value.go), seeded by openValueMenu itself in the SAME call
+	// that flips overlay to overlayValueMenu, regardless of WHICH of the four
+	// trigger paths called it (keyboard s/o/u, field-cursor Enter, mouse
+	// click, Palette all funnel through openValueMenu(group) -- this is the
+	// ONE place that needs setting, not four). Only ever READ while
+	// m.overlay == overlayValueMenu (composeOverlays' placeValueMenuOverlay,
+	// view_browse_repo.go), which openValueMenu never sets without also
+	// freshly writing this field first -- so a stale value between opens can
+	// never be observed. boxFormFieldIndexForGroup returns -1 for an
+	// unrecognized group (defensive only, openValueMenu's callers never pass
+	// one); placeValueMenuOverlay falls back to the pre-existing centered
+	// placeOverlay whenever boxFormFieldRect can't resolve it (accordion mode
+	// off entirely ignores this field, same as boxScroll/boxCursor above).
+	overlay              overlayID
+	mutTarget            string
+	menu                 listState
+	menuItems            []valueMenuItem
+	valueMenuAnchorField int
 
 	// Tag-Picker `t` (E3 Task 2, bean bt-8v69, box_picker_tag.go): tagItems
 	// is the usage-counted, deterministically sorted row list (count desc,

@@ -1089,7 +1089,12 @@ func (m model) composeOverlays(out string, w, h int) string {
 	}
 	switch m.overlay {
 	case overlayValueMenu:
-		out = placeOverlay(out, m.valueMenuBox(), w, h)
+		// Slice C (bt-f0y9, D09 revidiert): field-anchored below the
+		// triggering Status/Type/Priority box (placeOverlayAt) while
+		// boxFormEnabled(), falling back to the pre-existing CENTERED
+		// placeOverlay otherwise -- placeValueMenuOverlay (box_menu_value.go)
+		// owns that branch, not this switch.
+		out = m.placeValueMenuOverlay(out, w, h)
 	case overlayTagPicker:
 		out = placeOverlay(out, m.tagPickerBox(), w, h)
 	case overlayParentPicker:
