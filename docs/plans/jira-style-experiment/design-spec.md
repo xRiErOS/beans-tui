@@ -187,3 +187,31 @@ Wiederkehr dieser Fehlerklasse.
 - **Maus** aktiv: `internal/tui/app.go:84` (`tea.WithMouseCellMotion`), `internal/tui/mouse.go` mappt bereits Tree-/Backlog-/Detail-Feld-Klicks + Double-Click.
 - **Theme-Tokens** alle vorhanden: `internal/theme/theme.go` (Overlay/Mauve/Teal/Peach/Hint/Select + StatusColor/priorityColor/TypeStyle).
 - **Keymap** zentral: `internal/tui/keymap.go` — neue Keys dort, Help generiert daraus.
+
+## Glossar (verbindlich ab 2026-07-20)
+
+Gemeinsame Sprache fuer PO und Agenten. **Prosa-Begriff und Code-Bezeichner stehen
+nebeneinander**, damit nicht zwei Vokabulare entstehen. Wer ein neues Element baut, traegt
+es hier nach.
+
+| Begriff | Bedeutung | Code |
+|---|---|---|
+| **boxed field** | Ein Feld, jira-artig als Box dargestellt. **Box-Titel = Feld-Titel**, **Box-Badge = Keybind**. | `dropdownBox()` |
+| **Box-Titel** | Das Feld-Label, im Rahmen sitzend (heute oben). | `boxTopBorder(label, …)` |
+| **Box-Badge** | Der Keybind des Feldes, im Rahmen sitzend (heute unten, in Klammern: `(s)`). | `boxBottomBorder(hotkey, …)` |
+| **Box-Form** | Die gesamte Detail-Ansicht aus boxed fields (Title / Status\|Type\|Priority / Parent\|Tags / Body / Relations / History). | `detailBoxForm()`, Flag `BT_BOXFORM` |
+| **Panel** | Ein mehrzeiliges boxed field (Body, Relations, History). Gleiche Anatomie, nur hoch. | `panelBox()` |
+| **Filter-Strip** | Die persistente Zeile boxed fields oben (Type/Status/Priority/Tags). | `filterBar()` — **Bezeichner weicht ab**, s.u. |
+| **Zelle** | Ein boxed field innerhalb einer mehrspaltigen Zeile. | `scalarCell`, angeordnet von `gridRow()` |
+| **Region** | Fokussierbarer Bereich: Tree · Detail · Filter-Strip. `tab` bewegt INNERHALB, `esc` verlaesst. | — |
+
+### Anmerkungen
+- **Die Badge-Position ist nicht Teil der Definition.** Fuer den Body wird sie in den OBEREN
+  Rahmen wandern (bean bt-oox1), weil der untere bei langem Body wegscrollt. Es bleibt ein
+  Box-Badge.
+- **`filterBar` vs. „Filter-Strip":** der PO sagt Filter-Strip, der Code heisst `filterBar`.
+  Nicht umbenennen, solange kein anderer Grund dafuer spricht — eine reine
+  Umbenennung durch den halben Renderer waere Risiko ohne Nutzen. Hier vermerkt, damit
+  niemand zwei verschiedene Dinge vermutet.
+- **„Chip"** wurde frueher fuer die Filter-Felder benutzt. Aufgegeben — es sind boxed fields
+  wie alle anderen. In `box_filter_bar.go` steht der Begriff noch im Kopfkommentar.
