@@ -48,5 +48,16 @@ Box-Form live-sichtbar: `BT_BOXFORM=1 bt` (bzw. `BT_BOXFORM=1` + bt-test). Gate 
 - **D11?** Gilt der Box-Modus global (auch Backlog/Fullscreen/Review) oder nur Browse-Detail? (Gate sitzt aktuell im shared body → global.)
 - Richtungs-Urteil: ist das eine Verbesserung → S3+ (Filter-Leiste, Nested/Flat, Picker, huh-Ersatz) weiterbauen, oder anpassen/verwerfen?
 
+## Nutzer-Urteil am Checkpoint (2026-07-20)
+Richtung ok, ABER Layout anpassen: **1-up-Stapeln = Platzverschwendung.** Gewünschte FIXE Gruppierung im Detail (NICHT auf 1-up einklappen, egal wie schmal):
+- **D12:** Title full-width · `Status | Type | Priority` in EINER Zeile (3 Spalten) · `Parent | Tags` in einer Zeile (2 Spalten) · Body full-width · (Relations/History full-width darunter).
+- Also: responsive perRow-Schwellen (3/2/1 nach Breite) RAUS → feste Zeilen-Gruppen; Spalten schrumpfen mit, klappen nicht auf 1-up.
+
+## Reviewer-Findings (S1–S2b, umsetzen in S2e)
+- **B1 (high):** `detailBoxForm` Grid `colW = (w-(n-1)*gap)/n` verliert Rest → Zeilen zu schmal. Fix: Rest auf die ersten `rem` Spalten verteilen, Zeile summiert exakt auf `width`.
+- **B2/B3 (med):** `dropdownBox`/`panelBox` Hotkey-Badge: wenn `width(badgeSeg)+5 > width` → untere Zeile zu breit. Fix: fill-clamp so, dass Zeilenbreite nie `width` übersteigt (Badge ggf. kürzen/weglassen).
+- **B4 (low):** `box_panel` dupliziert Border-Logik von `box_dropdown` → gemeinsame `boxTopBorder(label,w,frame)`/`boxBottomBorder(hotkey,w,frame)` extrahieren, beide nutzen sie.
+- **B5 (low):** Tests prüfen nur `>width` → exakte `==width`-Assertion je Zeile ergänzen (fängt B1).
+
 ## Nächste Aktion (für Resume)
-WARTET auf Nutzer-Validierung am Checkpoint oben. Bei „weiter": zuerst F1 (Scroll) lösen — hängt an D10. Danach S3 (persistente Filter-Leiste, `dropdownBox`-Reuse), dann S4/S5/S7. Kombinierter Code-Reviewer über S1–S2b läuft am Checkpoint.
+S2e (autonom): `detailBoxForm` auf feste 3|2-Gruppierung umbauen (D12) + B1/B2/B3/B4/B5 fixen, exakte-Breite-Tests, Golden `detail_boxform.golden` + `browse_boxform.golden` regenerieren. sonnet. Danach F1 (Scroll für Relations/History unterhalb Body — Core passt jetzt in Pane) und S3 (Filter-Leiste). Reviewer war grün bis auf B1–B5.
