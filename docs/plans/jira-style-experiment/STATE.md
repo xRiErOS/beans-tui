@@ -81,4 +81,4 @@ Offene Weichen für den Nutzer:
 - **S7 (huh→Inline-Box-Editing):** großer/riskanter Umbau (D09). Timing bewusst offen gelassen — Nutzer wollte steuern.
 - **S6 (Maus):** B6 (Klick-Offset +3 durch Filter-Bar) + B7 (Value-Menü-Label) mitfixen.
 
-Bei „einfach weiter/entscheide selbst": S5 als eigenständiger Flat-Renderer (Backlog-Row-Rendering wiederverwenden, Master-Detail behalten), dann S6, S7 zuletzt. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
+Nutzer wählte „S5 eigenständiger Flat-Renderer". **S5 LÄUFT:** `G`-Key (uppercase, Views&Global-Gruppe) + `flatView bool` (default aus) + linke Browse-Pane rendert flache Tabelle (Backlog-Row-Rendering wiederverwenden) statt Tree, wenn an; Master-Detail bleibt; up/down bewegt Flat-Cursor → speist bestehende Detail-Pane. Default aus → tree.golden unverändert, neue Golden für Flat. Nicht gated (eigenes Feature). Danach S6 (Maus+B6/B7), S7 zuletzt. Alles weiter additiv + gated, bis Spike als „besser" abgenommen.
