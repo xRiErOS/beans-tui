@@ -1113,7 +1113,24 @@ func (m model) viewBrowseRepo() string {
 		var listRows []string
 		if m.fullscreen == fullscreenList {
 			searchLine := m.treeSearchLine(paneW-2, "") // D02: Tree never shows a sort suffix
-			listRows = append([]string{searchLine}, m.treeRows(nodes, true, bodyH-1)...)
+			// B8 (bean bt-s90e): the Vollbild-Liste sources its rows from the
+			// SAME m.flatView switch the split's own left pane does (the
+			// `else if m.flatView` branch below) -- this branch used to call
+			// treeRows() unconditionally, so `v` after `G` silently put the
+			// PO back in the Tree they had just toggled away from. Only the
+			// row SOURCE differs; the search head line, the bodyH-1 budget
+			// trade and the single-pane geometry are shared verbatim.
+			// Dispatch already handled flat mode here (keyTree routes to
+			// keyFlat, update.go; focusedBean resolves via flatSelected) --
+			// the render was the only half missing. NOT gated on
+			// boxFormEnabled(): `G` exists independently of BT_BOXFORM, and
+			// m.flatView's default false leaves the Tree path (and every
+			// pre-existing Vollbild golden) byte-for-byte untouched.
+			if m.flatView {
+				listRows = append([]string{searchLine}, m.flatRows(m.flatVisible(), true, bodyH-1)...)
+			} else {
+				listRows = append([]string{searchLine}, m.treeRows(nodes, true, bodyH-1)...)
+			}
 		}
 		var detailBean *data.Bean
 		if m.fullscreen == fullscreenDetail {
