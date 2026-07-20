@@ -64,6 +64,44 @@ func boxBottomBorder(hotkey string, width int, frame lipgloss.Style) string {
 	return frame.Render("╰") + frame.Render(borderDashes(fill)) + badgeSeg + right + frame.Render("╯")
 }
 
+// boxTopBorderHotkey builds the ╭─ label ─…─ (x) ─╮ row at exactly `width`
+// cells: boxTopBorder's layout with a hotkey badge parked on the right, the
+// same position and (x) shape boxBottomBorder uses.
+//
+// bean bt-oox1 (#4): the bottom border is the wrong place for a badge on a
+// box whose height follows its CONTENT. The Body panel grows with the bean's
+// body text, so on a long body its bottom border -- and the (e) badge with
+// it -- is scrolled out of the pane, hiding the edit key exactly where it is
+// most wanted. A top border is always visible, because a box is scrolled
+// into view from the top.
+//
+// Same defensive fallback as boxBottomBorder: if label plus badge plus the
+// minimum dashes cannot fit, the badge is dropped rather than allowed to
+// overflow -- a missing badge on an absurdly narrow box is acceptable, a
+// broken frame is not.
+func boxTopBorderHotkey(label, hotkey string, width int, frame lipgloss.Style) string {
+	if hotkey == "" {
+		return boxTopBorder(label, width, frame)
+	}
+	labelStyle := lipgloss.NewStyle().Foreground(theme.Subtext)
+	labelText := clampVisible(label, width-6)
+	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ")
+
+	badge := theme.BindingKey.Render("(" + hotkey + ")")
+	badgeSeg := " " + badge + " "
+
+	const minRightDashes = 3
+	const minLeftDashes = 1
+	// width - 2 corners must fit: labelSeg + leftDashes(>=1) + badgeSeg + rightDashes(3)
+	used := 2 + lipgloss.Width(labelText) + 1 + lipgloss.Width(badgeSeg) + minRightDashes
+	if width-2-used < minLeftDashes {
+		return boxTopBorder(label, width, frame)
+	}
+	fill := width - 2 - used
+	return frame.Render("╭") + labelSeg + frame.Render(borderDashes(fill)) +
+		badgeSeg + frame.Render(borderDashes(minRightDashes)) + frame.Render("╮")
+}
+
 // dropdownBox rendert das 3-Zeilen-Widget in exakt width Zellen Breite.
 // focused = Mauve-Rahmen, sonst Overlay. R1 (design-spec.md D08): das Label
 // im oberen Rahmen ist NICHT Teil des Rahmens selbst -- es rendert in

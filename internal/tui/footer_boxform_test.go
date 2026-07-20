@@ -54,7 +54,7 @@ func TestBrowseRepoLocalBindingsDropInlineKeysWhileBoxForm(t *testing.T) {
 	// Everything that is NOT inline-visible must survive -- the point is to
 	// de-duplicate, not to strip the footer. `r` (bean bt-6nuz) is in this
 	// list precisely because the Relations panel gives it no badge.
-	for _, k := range []string{"tab", "shift+tab", "/", "f", "c", "d", "b", "y", "r"} {
+	for _, k := range []string{"tab", "shift+tab", "/", "f", "c", "d", "b", "y", "r", "v"} {
 		found := false
 		for _, have := range got {
 			if have == k {
@@ -74,6 +74,10 @@ func TestBrowseRepoLocalBindingsDropInlineKeysWhileBoxForm(t *testing.T) {
 func TestBrowseRepoLocalBindingsUnchangedWithoutBoxForm(t *testing.T) {
 	t.Setenv("BT_BOXFORM", "")
 
+	// `v` (bean bt-oox1, #10) is deliberately absent here: the flag-OFF
+	// footer already fills its two lines at 80 columns, so Fullscreen is
+	// added under the box form only, where dropping the inline-badged keys
+	// makes room (browseRepoLocalBindings' own doc-stamp).
 	got := bindingKeys(browseRepoLocalBindings())
 	want := []string{"tab", "shift+tab", "/", "f", "s", "c", "d", "e", "b", "t", "y", "a", "r"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {

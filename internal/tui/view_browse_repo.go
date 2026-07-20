@@ -1038,7 +1038,21 @@ func browseRepoLocalBindings() []keybind.Binding {
 		}
 		out = append(out, b)
 	}
-	return out
+	// keys.Fullscreen (bean bt-oox1, PO finding #10): `v` has been live since
+	// E9 but appeared in NEITHER footer list, so the Help overlay was the only
+	// place it was ever advertised -- the same class of miss as `r` (bt-6nuz),
+	// which is why the two were fixed together.
+	//
+	// It is added only under the box form, and that is a budget decision, not
+	// a scoping accident: the flag-OFF footer already measures 152 cells and
+	// fills its two lines at 80 columns exactly, so ANY further entry spills
+	// it to three and costs a row of list content (mouse_test.go's own D02
+	// precondition pins those two lines). Dropping the four inline-badged
+	// keys leaves the flag-ON footer at 127 cells, with room to spare. Epic
+	// bt-vy1q's standing constraint -- everything additive and gated,
+	// flag-off output byte-identical -- points the same way, and the PO saw
+	// the miss with BT_BOXFORM=1 in the first place.
+	return append(out, keys.Fullscreen)
 }
 
 // boxFormInlineKeys are the footer keys the box-form Detail pane already

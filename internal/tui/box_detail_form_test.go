@@ -160,3 +160,57 @@ func TestDetailBoxFormGolden(t *testing.T) {
 		t.Errorf("detailBoxForm output differs from golden %q.\n--- got ---\n%s\n--- want ---\n%s", path, out, string(want))
 	}
 }
+
+// --- bean bt-oox1 (#1): the bean ID next to the title ---
+
+// TestDetailBoxFormShowsBeanIDNextToTitle guards PO finding #1: the Detail
+// pane showed no ID at all, so the one identifier the PO needs to quote in a
+// commit, a bean reference or a CLI call was nowhere on screen.
+//
+// It is the FULL ID, deliberately. bt-pl5p shortened the LIST rows
+// (sproutling-eq67 -> eq67) because the repo slug repeats on every row there
+// and costs the title its columns -- but that same decision explicitly kept
+// the complete, copyable ID readable in the Detail pane
+// (TestRelationRowKeepsFullIDInDetail is its counter-guard). The Detail pane
+// shows exactly one bean, so the slug costs nothing here and the ID stays
+// copy-paste-able. Do not "unify" this with the list shortening.
+func TestDetailBoxFormShowsBeanIDNextToTitle(t *testing.T) {
+	idx := data.NewIndex([]data.Bean{
+		{ID: "sproutling-eq67", Title: "A Bean With A Title", Status: "todo", Type: "task"},
+	})
+	b := idx.ByID["sproutling-eq67"]
+
+	out := ansi.Strip(detailBoxForm(idx, b, 60, -1))
+	lines := strings.Split(out, "\n")
+	if !strings.Contains(lines[0], "sproutling-eq67") {
+		t.Errorf("the Title box's own border does not carry the bean ID:\n%s", lines[0])
+	}
+	if !strings.Contains(lines[0], "Title") {
+		t.Errorf("the Title box lost its label:\n%s", lines[0])
+	}
+	if !strings.Contains(out, "A Bean With A Title") {
+		t.Errorf("the title text itself is gone:\n%s", out)
+	}
+}
+
+// TestDetailBoxFormIDClampsGracefullyWhenNarrow: the ID rides in the frame
+// label, which boxTopBorder clamps -- a narrow pane must still produce an
+// exactly-width frame rather than an overflowing one.
+func TestDetailBoxFormIDClampsGracefullyWhenNarrow(t *testing.T) {
+	idx := data.NewIndex([]data.Bean{
+		{ID: "a-very-long-repo-slug-indeed-eq67", Title: "T", Status: "todo", Type: "task"},
+	})
+	b := idx.ByID["a-very-long-repo-slug-indeed-eq67"]
+
+	// Widths at/above the pane's own usable floor: below ~30 the scalar
+	// gridRow already refuses to shrink its three columns further (a
+	// pre-existing, unrelated property), so narrower widths would measure
+	// that instead of the ID's clamping.
+	for _, w := range []int{30, 45, 60, 100} {
+		for i, ln := range strings.Split(detailBoxForm(idx, b, w, -1), "\n") {
+			if got := lipgloss.Width(ln); got != w {
+				t.Errorf("width %d: line %d width = %d, want %d: %q", w, i, got, w, ln)
+			}
+		}
+	}
+}
