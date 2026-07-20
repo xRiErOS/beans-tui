@@ -11,15 +11,16 @@ gesprochenen Begriff ab, wird das hier vermerkt statt stillschweigend umbenannt.
 
 ## Box-Darstellung (jira-Style)
 
-| Begriff | Bedeutung | Code |
-|---|---|---|
-| **boxed field** | Ein Feld, jira-artig als Box dargestellt. **Box-Titel = Feld-Titel**, **Box-Badge = Keybind**. | `dropdownBox()` |
-| **Box-Titel** | Das Feld-Label, im Rahmen sitzend (heute oben). | `boxTopBorder(label, …)` |
-| **Box-Badge** | Der Keybind des Feldes, im Rahmen sitzend (heute unten, in Klammern: `(s)`). | `boxBottomBorder(hotkey, …)` |
-| **Box-Form** | Die gesamte Detail-Ansicht aus boxed fields: Title / Status\|Type\|Priority / Parent\|Tags / Body / Relations / History. | `detailBoxForm()`, Flag `BT_BOXFORM` |
-| **Panel** | Ein mehrzeiliges boxed field (Body, Relations, History). Gleiche Anatomie, nur hoch. | `panelBox()` |
-| **Filter-Strip** | Die persistente Zeile boxed fields oben (Type/Status/Priority/Tags). | `filterBar()` — Bezeichner weicht ab, s.u. |
-| **Zelle** | Ein boxed field innerhalb einer mehrspaltigen Zeile. | `scalarCell`, angeordnet von `gridRow()` |
+| Begriff          | Bedeutung                                                                                                                | Code                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| **boxed field**  | Ein Feld, jira-artig als Box dargestellt. **Box-Titel = Feld-Titel**, **Box-Badge = Keybind**.                           | `dropdownBox()`                            |
+| **Box-Titel**    | Das Feld-Label, im Rahmen sitzend (heute oben).                                                                          | `boxTopBorder(label, …)`                   |
+| **Box-Badge**    | Der Keybind des Feldes, im Rahmen sitzend (heute unten, in Klammern: `(s)`).                                             | `boxBottomBorder(hotkey, …)`               |
+| **Box-Form**     | Die gesamte Detail-Ansicht aus boxed fields: Title / Status\|Type\|Priority / Parent\|Tags / Body / Relations / History. | `detailBoxForm()`, Flag `BT_BOXFORM`       |
+| **Panel**        | Ein mehrzeiliges boxed field (Body, Relations, History). Gleiche Anatomie, nur hoch.                                     | `panelBox()`                               |
+| **Filter-Strip** | Die persistente Zeile boxed fields oben (Type/Status/Priority/Tags).                                                     | `filterBar()` — Bezeichner weicht ab, s.u. |
+| **Zelle**        | Ein boxed field innerhalb einer mehrspaltigen Zeile.                                                                     | `scalarCell`, angeordnet von `gridRow()`   |
+| **Inline-Dropdown** (Anker-Popup) | Das Wertmenü eines endlichen Feldes (Status/Type/Priority), das **feld-verankert** direkt unter/über der Box aufklappt statt zentriert — maus-nativ wählbar. D09 REVIDIERT. | `placeValueMenuOverlay`, `boxFormFieldRect`, `placeOverlayAt` |
 
 ### Anmerkungen
 - **Die Badge-Position ist nicht Teil der Definition.** Für den Body wandert sie in den
@@ -36,12 +37,12 @@ gesprochenen Begriff ab, wird das hier vermerkt statt stillschweigend umbenannt.
 **Top-Level-Views** — je eine Konstante in `viewID` (`internal/tui/types.go`). Das sind die
 Bildschirme, zwischen denen umgeschaltet wird.
 
-| Name | Datei | Kommentar |
-|---|---|---|
-| **Lobby** | `view_lobby.go` | Repo-Picker mit ASCII-Logo. Entfällt beim Start in einem einzelnen Repo. Konstante `viewLobby`. |
-| **Browse** | `view_browse_repo.go` | Der Primat-View: Master-Detail, links Tree, rechts Detail. Konstante `viewBrowseRepo`. |
-| **Backlog** | `view_browse_backlog.go` | Flache Liste parentloser/ready beans, ebenfalls Master-Detail, sortierbar. Taste `b`. Konstante `viewBacklog`. |
-| **Tag-Management** | `view_tag_management.go` | Zentrale Tag-Verwaltung. Konstante `viewTagManagement`. |
+| Name               | Datei                    | Kommentar                                                                                                      |
+| ------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| **Lobby**          | `view_lobby.go`          | Repo-Picker mit ASCII-Logo. Entfällt beim Start in einem einzelnen Repo. Konstante `viewLobby`.                |
+| **Browse**         | `view_browse_repo.go`    | Der Primat-View: Master-Detail, links Tree, rechts Detail. Konstante `viewBrowseRepo`.                         |
+| **Backlog**        | `view_browse_backlog.go` | Flache Liste parentloser/ready beans, ebenfalls Master-Detail, sortierbar. Taste `b`. Konstante `viewBacklog`. |
+| **Tag-Management** | `view_tag_management.go` | Zentrale Tag-Verwaltung. Konstante `viewTagManagement`.                                                        |
 
 **Darstellungen innerhalb eines Views** — eigene Dateien, aber **keine** eigene `viewID`.
 Sie sind Zustände von Browse, nicht Geschwister davon:

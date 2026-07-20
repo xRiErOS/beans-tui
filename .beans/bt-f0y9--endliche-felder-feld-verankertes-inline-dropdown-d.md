@@ -1,11 +1,11 @@
 ---
 # bt-f0y9
 title: 'Endliche Felder: feld-verankertes Inline-Dropdown (D09 revidiert)'
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-20T18:05:08Z
-updated_at: 2026-07-20T20:55:11Z
+updated_at: 2026-07-20T21:01:24Z
 parent: bt-vy1q
 ---
 
