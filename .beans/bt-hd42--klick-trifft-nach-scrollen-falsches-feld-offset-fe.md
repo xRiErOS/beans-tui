@@ -1,11 +1,11 @@
 ---
 # bt-hd42
 title: Klick trifft nach Scrollen falsches Feld (Offset fehlt)
-status: todo
+status: in-progress
 type: bug
 priority: high
 created_at: 2026-07-20T09:24:15Z
-updated_at: 2026-07-20T09:24:15Z
+updated_at: 2026-07-20T09:49:37Z
 parent: bt-vy1q
 ---
 

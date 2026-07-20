@@ -769,6 +769,16 @@ func boxFormWheelHit(m model, msg tea.MouseMsg) bool {
 // "wrong action" the way mis-mapping Status/Type/Priority/Parent/Tags would
 // be, it is the exact same action a real `e` press already fires from
 // anywhere in the pane today.
+//
+// NO fullscreenDetail branch here, deliberately (bt-hd42, checked rather than
+// assumed): boxFormScrollBounds/boxFormPaneMetrics need their own accW branch
+// because the KEYBOARD reaches the Vollbild (bt-s90e), but handleMouse (above)
+// returns a flat no-op for `m.fullscreen != fullscreenNone` BEFORE the wheel
+// and left-click dispatch -- F01's documented v1 scope cut, "Maus im Vollbild".
+// Every caller of this function is downstream of that guard, so a Vollbild
+// click can never arrive here. A width branch would be code for a dead path;
+// if F01 is ever lifted, the accW below must gain boxFormPaneMetrics' own
+// innerW-4 branch in the same change.
 func detailBoxFormClickRow(m model, msg tea.MouseMsg) (target string, ok bool) {
 	w, h := m.width, m.height
 	if w <= 0 {
@@ -805,12 +815,25 @@ func detailBoxFormClickRow(m model, msg tea.MouseMsg) (target string, ok bool) {
 	}
 	clickCol := msg.X - (originX + lw)
 
-	// bt-1o4g: the row/column -> field mapping this function used to spell out
-	// inline now lives in boxFormFieldAt (box_nav_field.go), so the mouse hit-
-	// test and the KEYBOARD field cursor read the same table -- there is only
-	// ever ONE answer to "which box sits at (row, col)". The mapping itself is
-	// unchanged (the doc paragraph above still describes it verbatim).
-	field := boxFormFieldAt(clickRow, clickCol, accW)
+	// bt-hd42: clickRow is a SCREEN row; boxFormFieldAt's table is indexed by
+	// CONTENT row. Those two coincide only while the Detail pane sits at scroll
+	// offset 0 -- which is precisely why every pre-existing box-form click test
+	// passed and the bug still shipped. Adding the offset back is the whole
+	// fix: the pane renders content rows [off, off+bodyH) at screen rows
+	// [0, bodyH), so the inverse is contentRow = clickRow + off.
+	//
+	// The offset is read through boxFormEffectiveScroll -- NOT m.boxFormScroll
+	// directly -- for the same reason the render does (view_browse_repo.go's
+	// renderBeanAccordionPane): that helper applies bt-ze10's DERIVED per-bean
+	// reset (a stale offset belonging to a previously selected bean reads as 0
+	// rather than being nulled at N call sites). Reading the raw field here
+	// would resolve clicks against an offset the visible render is not using,
+	// re-opening this very bug in the bean-change direction.
+	//
+	// Both scroll INPUT paths (wheelMove/adjustBoxFormScroll above, keyboard
+	// boxFormNav in box_nav_field.go) write that one field pair, so neither can
+	// drift away from this correction.
+	field := boxFormFieldAt(clickRow+boxFormEffectiveScroll(m, m.focusedBean()), clickCol, accW)
 	if field < 0 {
 		return "", false // inside a row but not over a box (inter-box gap)
 	}
