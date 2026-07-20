@@ -678,9 +678,10 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // boxScroll (bean bt-ze10, epic bt-vy1q F1) is ONLY consulted inside the
 // boxFormEnabled() branch below -- the accordion branch (flag off) ignores
 // it entirely, so a caller with no box-form scroll of its own (e.g.
-// renderFullscreenBody, view_fullscreen.go, which passes 0 -- fullscreen
-// box-form scrolling is out of this task's scope, see that call site's own
-// doc comment) is always safe.
+// renderReviewDetailPane, view_review_cockpit.go, which passes 0) is always
+// safe. The Vollbild path (renderFullscreenBody, view_fullscreen.go) used to
+// be such a caller and now passes a REAL offset (bt-s90e) -- see its own doc
+// comment for the geometry rationale.
 func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll int) string {
 	var rows []string
 	if b != nil {
@@ -1118,7 +1119,7 @@ func (m model) viewBrowseRepo() string {
 		if m.fullscreen == fullscreenDetail {
 			detailBean = m.focusedBean() // resolves via focusedBean's own fullscreenDetail case (update.go)
 		}
-		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel)
+		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel, boxFormEffectiveScroll(m, detailBean))
 	} else if m.flatView {
 		// S5 (jira-style-ui experiment, Nested/Flat Browse toggle `G`,
 		// view_browse_flat.go): the LEFT pane renders the flat, sorted bean

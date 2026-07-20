@@ -1289,15 +1289,14 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// the box-form Detail pane's viewport instead, via the SAME
 	// adjustBoxFormScroll wheelMove (mouse.go) uses, so keyboard and wheel
 	// can never independently drift on the reset-on-bean-change/clamp rules.
-	// Guarded off inside fullscreenDetail (m.fullscreen ==
-	// fullscreenDetail): boxFormScrollBounds derives its height from the
-	// SPLIT pane's own clickPaneGeometry call (mouse.go), a DIFFERENT budget
-	// than the Vollbild-Detail's single full-width pane -- scrolling here
-	// would clamp against the wrong height (renderFullscreenBody's own doc
-	// comment, view_fullscreen.go, has the matching "out of scope" note for
-	// the render side). boxFormEnabled() off, or fullscreenDetail active,
-	// falls straight through to the ORIGINAL switch below, unchanged.
-	if boxFormEnabled() && m.fullscreen != fullscreenDetail {
+	// bt-s90e: this used to be guarded off inside fullscreenDetail, because
+	// boxFormScrollBounds reconstructed the SPLIT pane's geometry only and
+	// would have clamped a Vollbild scroll against a foreign budget. That
+	// helper is fullscreen-aware now (mouse.go's own accW branch), so the
+	// Vollbild scrolls through the very SAME mutation point -- no second
+	// scroll path, no independent drift. boxFormEnabled() off still falls
+	// straight through to the ORIGINAL switch below, unchanged.
+	if boxFormEnabled() {
 		switch navKey(msg.String()) {
 		case "up":
 			return m.adjustBoxFormScroll(b, -1), nil
