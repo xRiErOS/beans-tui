@@ -965,11 +965,83 @@ func detailBoxFormClickRow(m model, msg tea.MouseMsg) (target string, ok bool) {
 // (this file). Matches the S6 task spec verbatim ("Trigger the SAME action
 // those keys fire").
 func (m model) mouseBoxFormDetailClick(b *data.Bean, msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// bean bt-p78f #16: a click on the Body anchor bar jumps to that heading
+	// BEFORE the generic box-hit dispatch -- the anchor row sits inside the Body
+	// panel, whose whole span otherwise collapses onto the "open editor" target.
+	if nm, ok := m.boxFormAnchorClick(b, msg); ok {
+		return nm, nil
+	}
 	target, ok := detailBoxFormClickRow(m, msg)
 	if !ok {
 		return m, nil
 	}
 	return m.activateBoxFormTarget(b, target)
+}
+
+// boxFormAnchorClick handles a left-click on the Body anchor bar (bean bt-p78f
+// #16): when the click lands on the anchor bar's content row and on a chip, it
+// jumps the viewport so that heading sits at the top -- through the SAME
+// adjustBoxFormScroll the wheel/keys/pgup-pgdn use (no second scroll path,
+// bean Fallstrick "Scroll-Kopplung"), recording the owning bean. Returns
+// handled=false for any click that is not an anchor-chip hit, so the caller
+// falls through to the ordinary box dispatch.
+//
+// Geometry is reconstructed exactly like detailBoxFormClickRow (Golden-Rule-
+// Drift-Schutz): the content row is the screen row plus boxFormEffectiveScroll
+// (bt-hd42's correction), and the chip column subtracts the fixed indent before
+// the bar text -- renderPane's own border (1) plus the Body panel's border+
+// space (2) = 3 columns.
+func (m model) boxFormAnchorClick(b *data.Bean, msg tea.MouseMsg) (model, bool) {
+	if b == nil {
+		return m, false
+	}
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	innerW := w - 2
+
+	var head, localKeys string
+	if m.view == viewBacklog {
+		head, localKeys = m.backlogChrome(innerW)
+	} else {
+		head, localKeys = m.browseRepoChrome(innerW)
+	}
+	_, lw, rw, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
+	if m.view != viewBacklog {
+		originY += filterBarHeight // B6 precedent, detailBoxFormClickRow above
+	}
+	if msg.X < originX+lw || msg.X >= originX+lw+rw {
+		return m, false
+	}
+	accW := rw - 2
+	if accW < 1 {
+		accW = 1
+	}
+
+	blocks := boxFormBlocks(m.idx, b, accW, boxFormEffectiveCursor(m, b))
+	anchorRow := boxFormAnchorRow(blocks)
+	if anchorRow < 0 {
+		return m, false
+	}
+	if (msg.Y-originY)+boxFormEffectiveScroll(m, b) != anchorRow {
+		return m, false
+	}
+
+	_, chips, hl := boxFormBodyPanelContent(b, accW-4)
+	const anchorContentX = 3 // renderPane border (1) + panel border+space (2)
+	sec := anchorBarHit(chips, (msg.X-(originX+lw))-anchorContentX)
+	if sec < 0 {
+		return m, false
+	}
+	target := boxFormAnchorTargetLine(blocks, hl, sec)
+	if target < 0 {
+		return m, false
+	}
+	return m.adjustBoxFormScroll(b, target-boxFormEffectiveScroll(m, b)), true
 }
 
 // activateBoxFormTarget dispatches a boxFormTarget* onto its overlay/picker/
