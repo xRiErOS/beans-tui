@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-20T07:24:38Z
-updated_at: 2026-07-21T10:58:41Z
+updated_at: 2026-07-21T11:46:14Z
 ---
 
 Spike: ist eine flachere, salientere jira-artige Darstellung eine Verbesserung fuer beans-tui?
@@ -88,3 +88,8 @@ Woertlich: 'Wir bauen das Experiment mit dem Inhaltsverzeichnis zurueck. Die Rel
 ## Review 2026-07-21 (Rework-Abnahme bt-adkn)
 US-01 · Body-Blaettern mit pgup/pgdn ohne Tab, Tree-Cursor bleibt · a
 US-02 · Sticky Seiten-Indikator in der Body-Titelzeile · r: 'Die Position passt noch nicht sauber. das (e) immer an der gleichen Stelle belassen und dafuer ── ●○ verschieben. Das fuehrt zu einer stabilen praesentation' → bt-adkn
+
+## Review 2026-07-21 — Nachtrag (bt-adkn Rework final)
+US-02 · Seiten-Indikator-Position (Body-Header) · a (nach 3 Nacharbeits-Runden: links verankert + fixe Zahlbreite + (e) an/aus stabil)
+US-03 · n/N-Fallback bei sehr langem Body · a
+Bilanz bt-adkn Rework: 3/3 accepted (US-01/US-02/US-03). bt-adkn completed. Offen im Epic: bt-ty48 (GIF), bt-2o9a (Merge-Gate PO).
