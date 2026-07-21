@@ -132,7 +132,12 @@ func boxTopBorderBadges(label, badge, hotkey string, width int, frame lipgloss.S
 	}
 
 	const minMidDashes = 1
-	const minRightDashes = 2
+	// minRightDashes MUST match boxTopBorderHotkey's (3), so (e) parks at the
+	// exact same column whether the indicator is present (this function) or
+	// absent (the badge=="" fallback above, which delegates to boxTopBorderHotkey)
+	// -- otherwise (e) jumps by one column as a bean's body switches between
+	// fitting and overflowing (bean bt-adkn US-02, 2nd PO-Reject 2026-07-21).
+	const minRightDashes = 3
 	// interior (width-2) = labelSeg + badgeSeg + midDashes + rightSeg + rightDashes
 	used := 3 + lipgloss.Width(labelText) + 2 + lipgloss.Width(badgeSeg) + lipgloss.Width(rightSeg) + minRightDashes
 	if width-2-used < minMidDashes {

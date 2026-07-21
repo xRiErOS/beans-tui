@@ -816,13 +816,13 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 			// (boxFormBlocks' same cursor->row rule) so the pinned copy matches the
 			// natural one. The dot budget is the header's ACTUAL free width (accW
 			// minus corners, "─ Body ─ " label+sep, " (e) " hotkey and the minimum
-			// dashes = 20 cells), NOT accW: a long body has more pages than fit as
+			// dashes = 21 cells), NOT accW: a long body has more pages than fit as
 			// dots, so a too-generous budget made boxFormPageBadge emit a dot row
 			// that then overflowed boxTopBorderBadges' fit check and was DROPPED
 			// whole (real 80c smoke: a 25-page body showed no indicator at all).
 			// Bounding the budget to what the header can hold makes boxFormPageBadge
 			// fall back to the compact "n/N" form instead, so it always renders.
-			dotsBudget := accW - 20
+			dotsBudget := accW - 21
 			if dotsBudget < 1 {
 				dotsBudget = 1
 			}

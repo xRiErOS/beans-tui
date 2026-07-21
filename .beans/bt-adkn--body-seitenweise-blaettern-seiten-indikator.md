@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-07-20T09:23:37Z
-updated_at: 2026-07-21T11:19:18Z
+updated_at: 2026-07-21T11:27:25Z
 parent: bt-vy1q
 ---
 
@@ -186,3 +186,18 @@ boxFormPageBadge: 'n/N'-Zahl auf die Stellenzahl von count gepaddet (' 9/91' / '
 - W=58, Seite 9→13: '─  9/91 ──── (e) ──╮' → '─ 13/91 ──── (e) ──╮' — (e) identische Spalte, Zahl rechtsbuendig.
 - W=54 (zu schmal): Indikator konsistent weggelassen, (e) konstant — kein Flackern.
 Reproduziert mit vorhandenen Langtext-Beans (bt-vy1q, 27–102 Seiten je nach Breite); kein Wegwerf-Test-Bean noetig.
+
+## US-02-Nacharbeit v3 (2026-07-21) — (e)-Sprung Indikator-an/aus
+
+### Root-Cause (3. Reject, PO zeigte: mit ●○○ vs ohne Indikator)
+Diskrepanz minRightDashes: boxTopBorderBadges parkte (e) an 2 Dashes, der Fallback boxTopBorderHotkey (Body ohne Indikator, z.B. count=1 / Body passt) an 3. Wechselt der Body eines Beans zwischen 'passt' (kein Indikator) und 'ueberlaeuft' (Indikator), springt (e) um 1 Spalte. Bei fixer Breite (v2) blieb der intra-Bean-Blaetter-Fall stabil, aber der an/aus-Uebergang nicht.
+
+### Fix
+boxTopBorderBadges minRightDashes 2→3 = identisch zu boxTopBorderHotkey. (e) parkt jetzt an derselben Spalte, ob Indikator da oder nicht — und deckt sich mit den uebrigen Panel-Hotkeys ((r)/(a) etc., alle 3 Dashes). dotsBudget accW-21.
+
+### Test-Output (RED->GREEN)
+- RED: TestBoxTopBorderBadgesStableIndicatorPosition (erweitert um present-vs-absent) — '(e) not stable across present/absent: 13 vs 16'.
+- GREEN nach Fix. Voller Lauf gruen (internal/tui 153s), Golden neu (Body-(e) an 3 Dashes, deckt sich mit (r)/(a)).
+
+### Smoke (80c)
+Body-Header ' 1/27 ──… (e) ───╮' — (e) an 3 Dashes, konsistent ueber Beans. Zusammen mit v2 (fixe Zahlbreite) + v1 (links verankert): (e) unbewegt bei Blaettern UND beim Indikator-an/aus.

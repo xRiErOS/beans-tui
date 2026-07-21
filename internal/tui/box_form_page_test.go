@@ -324,8 +324,8 @@ func TestBoxFormBodyIndicatorRendersWhenPagesExceedDotBudget(t *testing.T) {
 	total, height := requireOverflow(t, m, b)
 	_, count := boxFormPageIndex(total, height, 0)
 	accW, _ := boxFormPaneMetrics(m, b)
-	if count <= accW-20 {
-		t.Skipf("config must make count(%d) exceed the header dot budget(%d) to exercise the n/N fallback", count, accW-20)
+	if count <= accW-21 {
+		t.Skipf("config must make count(%d) exceed the header dot budget(%d) to exercise the n/N fallback", count, accW-21)
 	}
 
 	// Page into the body so the header is pinned at the top (a tiny pane may not

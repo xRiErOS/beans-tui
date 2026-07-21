@@ -96,4 +96,21 @@ func TestBoxTopBorderBadgesStableIndicatorPosition(t *testing.T) {
 	if iNarrow >= eNarrow {
 		t.Fatalf("indicator at col %d is not left of (e) at col %d", iNarrow, eNarrow)
 	}
+
+	// (e) must sit at the SAME column whether the indicator is PRESENT or
+	// ABSENT (bean bt-adkn US-02, 2nd PO-Reject 2026-07-21: "das (e) springt
+	// weiterhin" -- shown paging between a body with a dot indicator and one
+	// without). An empty badge falls back to the plain hotkey border; if that
+	// border parks (e) at a different distance from the corner, (e) jumps as a
+	// bean's body switches between fitting (no indicator) and overflowing.
+	absent := ansi.Strip(boxTopBorderBadges("Body", "", "e", w, frame))
+	ePresent := strings.LastIndex(narrow, "(e)")
+	eAbsent := strings.LastIndex(absent, "(e)")
+	if eAbsent < 0 {
+		t.Fatalf("(e) missing in indicator-absent header: %q", absent)
+	}
+	if len(narrow)-ePresent != len(absent)-eAbsent {
+		t.Fatalf("(e) not at a stable column across indicator present/absent: distance from right = %d (present) vs %d (absent) -- (e) must not move when the indicator appears or disappears",
+			len(narrow)-ePresent, len(absent)-eAbsent)
+	}
 }
