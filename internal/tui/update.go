@@ -1354,6 +1354,20 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "down":
 			return m.adjustBoxFormScroll(b, 1), nil
 		}
+		// pgup/pgdn (bean bt-adkn): page the viewport by one FULL screen through
+		// the SAME adjustBoxFormScroll the line-wise up/down and the wheel use --
+		// one page == the pane's own visible line budget (boxFormScrollBounds'
+		// height), so the two scroll granularities share one clamp/reset path and
+		// cannot drift (SSTD load-bearing constraint). Everywhere up/down scroll
+		// (split AND Vollbild), so BEFORE the split-only field-cursor block below.
+		switch {
+		case keybind.Matches(msg, boxFormPageUp):
+			_, page := boxFormScrollBounds(m, b)
+			return m.adjustBoxFormScroll(b, -page), nil
+		case keybind.Matches(msg, boxFormPageDown):
+			_, page := boxFormScrollBounds(m, b)
+			return m.adjustBoxFormScroll(b, page), nil
+		}
 		if m.fullscreen != fullscreenDetail {
 			switch {
 			case keybind.Matches(msg, boxFormFieldNext):

@@ -760,6 +760,7 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // Vollbild passes -1: there, up/down scroll instead of walking fields.
 func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll, boxCursor int) string {
 	var rows []string
+	pageBadge := "" // bean bt-adkn: box-form page indicator, overlaid on the frame below
 	if b != nil {
 		bodyW := w - 4
 		if bodyW < 1 {
@@ -799,6 +800,14 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 			form := detailBoxForm(idx, b, accW, boxCursor)
 			win, _ := scrollView(form, h, boxScroll)
 			rows = append(rows, strings.Split(win, "\n")...)
+			// bean bt-adkn: turn the SAME (total, h, boxScroll) the window used
+			// into a page indicator. accW is the box-form's own width budget; the
+			// badge shares the outer frame's bottom border, so cap it a few cells
+			// short of accW to leave the corners/spacing overlayPaneBottomBadge
+			// needs. count<=1 (fits) yields "" -> the overlay is a no-op and the
+			// render stays byte-identical to the pre-bt-adkn box-form output.
+			page, count := boxFormPageIndex(lineCount(form), h, boxScroll)
+			pageBadge = boxFormPageBadge(page, count, accW-4)
 		} else {
 			rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
 			secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
@@ -821,7 +830,7 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}
-	return renderPane(pane{rows: rows}, w, h, focused)
+	return overlayPaneBottomBadge(renderPane(pane{rows: rows}, w, h, focused), pageBadge, w, focused)
 }
 
 // windowRelationsSection windows the RELATIONS section's body to fit the

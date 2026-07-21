@@ -50,6 +50,29 @@ var (
 	boxFormFieldPrev = keybind.NewBinding(keybind.WithKeys("shift+tab"), keybind.WithHelp("shift+tab", "prev field"))
 )
 
+// boxFormPageUp/boxFormPageDown page the focused Detail pane by one FULL
+// screen (bean bt-adkn, PO-Entscheidung 2026-07-20: pgup/pgdn -- ctrl+i is
+// Tab (0x09, indistinguishable), ctrl+k is the Command-Palette, both
+// excluded; pgup/pgdn mean exactly "blaettern" and collide with nothing,
+// TestKeymapNoCtrlSQ is the precedent for hard terminal-collision guards).
+//
+// Standalone keybind.Bindings, NOT keyMap fields -- SAME rationale as
+// boxFormFieldNext/Prev above: keymap_test.go's TestHelpGroupsCoverEvery
+// BindingExactlyOnce reflects over keyMap fields only, and these are
+// experiment-gated Detail-region-local keys, not global Help entries. (The
+// SSTD handover note said "keymap.go single source"; the closer, verified
+// precedent -- the sibling field-nav bindings right here -- governs where a
+// box-form-local binding actually belongs, so it lives beside them.)
+//
+// Both route through the SAME adjustBoxFormScroll mutation point up/down and
+// the wheel use (keyDetailFocus, update.go), one screen == boxFormScrollBounds'
+// reported height, so line-wise and page-wise scrolling can never drift on the
+// reset/clamp rules (SSTD load-bearing constraint).
+var (
+	boxFormPageUp   = keybind.NewBinding(keybind.WithKeys("pgup"), keybind.WithHelp("pgup", "page up"))
+	boxFormPageDown = keybind.NewBinding(keybind.WithKeys("pgdown"), keybind.WithHelp("pgdn", "page down"))
+)
+
 // boxFormRow* index detailBoxForm's block slice (boxFormBlocks,
 // box_detail_form.go) -- one entry per rendered layout row.
 const (

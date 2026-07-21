@@ -62,6 +62,39 @@ func renderPane(p pane, w, h int, focused bool) string {
 		Render(strings.Join(lines, "\n"))
 }
 
+// overlayPaneBottomBadge re-renders paneStr's bottom border line with `badge`
+// parked at the right, mirroring boxBottomBorder's badge position but on the
+// OUTER renderPane frame instead of an inner box (bean bt-adkn): the outer
+// frame is fixed chrome that never scrolls, so a page indicator placed here
+// stays visible while the body pages underneath it. No-op when badge is empty
+// or the line is too narrow to hold it (badge dropped rather than overflowing,
+// same defensive contract as boxBottomBorder). w is renderPane's own Width(w),
+// so the interior between the corners is exactly w cells; col matches
+// renderPane's border color (focused = Mauve, else Overlay).
+func overlayPaneBottomBadge(paneStr, badge string, w int, focused bool) string {
+	if badge == "" {
+		return paneStr
+	}
+	lines := strings.Split(paneStr, "\n")
+	if len(lines) < 2 {
+		return paneStr
+	}
+	col := theme.Overlay
+	if focused {
+		col = theme.Mauve
+	}
+	frame := lipgloss.NewStyle().Foreground(col)
+	badgeSeg := " " + badge + " "
+	const minRight = 2
+	fill := w - lipgloss.Width(badgeSeg) - minRight
+	if fill < 1 {
+		return paneStr
+	}
+	lines[len(lines)-1] = frame.Render("╰") + frame.Render(borderDashes(fill)) +
+		badgeSeg + frame.Render(borderDashes(minRight)) + frame.Render("╯")
+	return strings.Join(lines, "\n")
+}
+
 // borderedPane pads/caps content to h inner lines and wraps it in a
 // RoundedBorder (Golden Rule #1: no Height() on a bordered style). Total
 // height = h+2.

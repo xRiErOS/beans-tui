@@ -95,6 +95,13 @@ brauchbar als Referenz, die Bezeichner nicht.
   darf nie außerhalb des sichtbaren Bereichs liegen. Beim Wandern über ein Feld, das höher
   als der Ausschnitt ist, wird es erst vollständig gezeigt und dann weitergesprungen
   (*reveal-then-move*).
+- **Seiten-Indikator** — Punktreihe unten rechts im **äußeren** Detail-Pane-Rahmen: ein
+  Punkt je Seite, hell = aktuelle, dunkel = übrige (`●○○`, Grau-Token aus `internal/theme/`).
+  Sitzt bewusst auf der fixen Chrome, nicht auf dem Body-Panel-Rahmen — der scrollt bei
+  langem Body weg, der Indikator soll aber **während des Blätterns sichtbar** bleiben. Eine
+  Seite = das sichtbare Zeilen-Budget des Panes (dieselbe Höhe, um die `pgup`/`pgdn`
+  springen), sodass Punkt-Grenze und Blätter-Halt exakt zusammenfallen. `boxFormPageIndex()`
+  / `boxFormPageBadge()` / `overlayPaneBottomBadge()`.
 
 ## Arbeitsweise
 
