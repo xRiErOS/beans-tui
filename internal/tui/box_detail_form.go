@@ -175,10 +175,7 @@ func boxFormBlocks(idx *data.Index, b *data.Bean, width, cursor int) []string {
 		// bean bt-oox1 (#4): the Body panel is the ONE box here whose height
 		// follows its content, so its bottom border can scroll out of the
 		// pane -- its (e) badge rides in the TOP border instead.
-		// bean bt-p78f (#16): the anchor bar rides as line 0 of the Body content
-		// (boxFormBodyPanelContent) -- a no-op string when the body has no
-		// headings, so bodies without structure render exactly as before.
-		panelBoxTopHotkey("Body", boxFormBodyContent(b, width-4), "e", width, on(boxFormRowBody)),
+		panelBoxTopHotkey("Body", bodySectionBody(b, width-4), "e", width, on(boxFormRowBody)),
 		panelBox("Relations", relationsBody, "r", width, on(boxFormRowRelations)),
 		panelBox("History", historieSectionBody(b, width-4), "", width, on(boxFormRowHistory)),
 	}
