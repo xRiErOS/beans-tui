@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-20T07:24:38Z
-updated_at: 2026-07-21T08:48:11Z
+updated_at: 2026-07-21T10:58:41Z
 ---
 
 Spike: ist eine flachere, salientere jira-artige Darstellung eine Verbesserung fuer beans-tui?
@@ -84,3 +84,7 @@ bt-adkn (Body blaettern) · bt-p78f (Anker-Leiste + Pencil) · bt-ty48 (GIF, bew
 
 ### PO-Entscheidung D01: Inhaltsverzeichnis-Experiment (bt-p78f) SCRAPPED
 Woertlich: 'Wir bauen das Experiment mit dem Inhaltsverzeichnis zurueck. Die Relevanz ist gering und die Implementierung zu aufwaendig. Daher scrapped.' Code (Parser + Ankerleiste) wird per git revert zurueckgebaut; bt-adkn (Paging) bleibt separat in rework.
+
+## Review 2026-07-21 (Rework-Abnahme bt-adkn)
+US-01 · Body-Blaettern mit pgup/pgdn ohne Tab, Tree-Cursor bleibt · a
+US-02 · Sticky Seiten-Indikator in der Body-Titelzeile · r: 'Die Position passt noch nicht sauber. das (e) immer an der gleichen Stelle belassen und dafuer ── ●○ verschieben. Das fuehrt zu einer stabilen praesentation' → bt-adkn

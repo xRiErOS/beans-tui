@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-07-20T09:23:37Z
-updated_at: 2026-07-21T10:01:59Z
+updated_at: 2026-07-21T11:06:57Z
 parent: bt-vy1q
 ---
 
@@ -142,3 +142,30 @@ PageDown bei TREE-Fokus (kein Tab): Body pagt, Tree-Cursor bleibt auf vy1q (link
 
 ### Notes
 GLOSSARY 'Seiten-Indikator' aktualisiert (Body-Header + sticky + fokus-unabhaengig). Kopplung bt-p78f (#4) obsolet — TOC-Experiment scrapped, Body-Hotkey bleibt oben.
+
+## Review 2026-07-21 (US-02 rejected)
+**PO woertlich:** 'Die Position passt noch nicht sauber. das (e) immer an der gleichen Stelle belassen und dafuer ── ●○ verschieben. Das fuehrt zu einer stabilen praesentation.'
+
+**Fix-Prelude · medium · Layout-Stabilitaet des Body-Header-Indikators**
+- **Fundort:** boxTopBorderBadges (internal/tui/box_dropdown.go) + Dots-Platzierung in renderAccordionPane (internal/tui/view_browse_repo.go).
+- **Ist:** Indikator (●○ / n-N) ist RIGHT-geparkt direkt LINKS vom (e)-Badge. Dadurch schwankt die linke Kante des Indikators mit seiner Breite (Punktzahl bzw. 1/25 vs 10/25) — wirkt unruhig, obwohl (e) rechts fixiert ist.
+- **Soll:** (e) bleibt fest ganz rechts (unveraendert). Indikator NACH LINKS ankern — direkt hinter das 'Body'-Label: '╭─ Body ── ●○ ─────────── (e) ─╮'. Dashes fuellen die Mitte. Beim Blaettern aendert sich nur, WELCHER Punkt hell ist, nicht die Position → stabile Praesentation. Gilt auch fuer die n/N-Fallback-Form (ebenfalls links).
+- **Verifikation:** Golden neu (browse_boxform / value_menu_anchored) + 80c-tmux-Smoke: Indikator-Position konstant beim Durchblaettern, (e) unbewegt.
+- **Quelle:** PO-Review 2026-07-21.
+
+US-01 (Blaettern ohne Tab) + US-03 (n/N-Fallback bei vielen Seiten) im selben Review ACCEPTED — nur die Indikator-Position (US-02) ist Nacharbeit.
+
+## US-02-Nacharbeit umgesetzt (2026-07-21, agent-abgeschlossen)
+
+### Summary
+Seiten-Indikator in der Body-Titelzeile LINKS verankert (direkt hinter 'Body ─'), (e) fest ganz rechts: '╭─ Body ─ 1/27 ─────── (e) ──╮'. Beim Blaettern aendert sich nur die Zahl/der helle Punkt, nicht die Position — (e) und Indikator-Linkskante bleiben fix, nur die mittleren Dashes absorbieren Breitenaenderungen. boxTopBorderBadges (box_dropdown.go) von right-parked auf left-anchored umgebaut; dotsBudget accW-20 (neue Reservierung).
+
+### Test-Output (RED->GREEN)
+- RED: TestBoxTopBorderBadgesStableIndicatorPosition — 'indicator not left-anchored: starts at col 133 (narrow) vs 127 (wide)'.
+- GREEN nach Fix + bestehende Header-/Golden-Tests. Voller Lauf 'command go test ./...' gruen (internal/tui 153s). Golden neu (browse_boxform / value_menu_anchored).
+
+### Smoke (80x24, echtes Repo, 27-Seiten-Body)
+PageDown x2: '1/27' -> '2/27' -> '3/27'. Indikator startet konstant an derselben Spalte, (e) unbewegt, mittlere Dashes konstant (Zahlbreite gleich) — stabile Praesentation wie vom PO gefordert.
+
+### Notes
+US-01 + US-03 im Review bereits accepted. US-02 (Position) mit dieser Nacharbeit erledigt; PO-Endabnahme im Chat. GLOSSARY-Skizze weiterhin gueltig (Indikator in Body-Header).

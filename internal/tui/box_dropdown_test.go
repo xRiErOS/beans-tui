@@ -59,3 +59,41 @@ func TestDropdownBoxHotkeyOverflowClamp(t *testing.T) {
 		}
 	}
 }
+
+// TestBoxTopBorderBadgesStableIndicatorPosition guards bean bt-adkn US-02
+// (PO-Reject 2026-07-21: "das (e) immer an der gleichen Stelle belassen und
+// dafuer die Punkte verschieben. Das fuehrt zu einer stabilen praesentation").
+// The hotkey badge (e) must sit at a FIXED column regardless of the indicator's
+// width, and the indicator must be LEFT-anchored right after the label (its
+// left edge fixed), so paging -- which changes the indicator's content/width --
+// never shifts (e) or the indicator's start. Both are asserted by rendering the
+// same header with a narrow and a wide badge and comparing columns.
+func TestBoxTopBorderBadgesStableIndicatorPosition(t *testing.T) {
+	frame := lipgloss.NewStyle()
+	const w = 60
+	narrow := ansi.Strip(boxTopBorderBadges("Body", "1/9", "e", w, frame))
+	wide := ansi.Strip(boxTopBorderBadges("Body", "10/99", "e", w, frame))
+
+	// (e) is parked at a fixed distance from the RIGHT corner in both.
+	eNarrow := strings.LastIndex(narrow, "(e)")
+	eWide := strings.LastIndex(wide, "(e)")
+	if eNarrow < 0 || eWide < 0 {
+		t.Fatalf("(e) missing: narrow=%q wide=%q", narrow, wide)
+	}
+	if len(narrow)-eNarrow != len(wide)-eWide {
+		t.Fatalf("(e) not right-anchored: distance from right = %d (narrow) vs %d (wide) -- (e) must stay put while the indicator width changes",
+			len(narrow)-eNarrow, len(wide)-eWide)
+	}
+
+	// The indicator is LEFT-anchored: its first character starts at the SAME
+	// column in both, right after the "Body" label -- not floating against (e).
+	iNarrow := strings.IndexAny(narrow, "0123456789")
+	iWide := strings.IndexAny(wide, "0123456789")
+	if iNarrow != iWide {
+		t.Fatalf("indicator not left-anchored: starts at col %d (narrow) vs %d (wide) -- its left edge must be fixed", iNarrow, iWide)
+	}
+	// And it sits left of (e), not right of it.
+	if iNarrow >= eNarrow {
+		t.Fatalf("indicator at col %d is not left of (e) at col %d", iNarrow, eNarrow)
+	}
+}

@@ -102,36 +102,44 @@ func boxTopBorderHotkey(label, hotkey string, width int, frame lipgloss.Style) s
 		badgeSeg + frame.Render(borderDashes(minRightDashes)) + frame.Render("╮")
 }
 
-// boxTopBorderBadges is boxTopBorderHotkey with an extra right-parked badge
-// sitting just LEFT of the hotkey: ╭─ label ─…─ <badge> (x) ─╮ (bean bt-adkn
-// Rework B3: the Body panel's page indicator rides in its own title row, right
-// of the (e) edit badge). Empty badge -> exactly boxTopBorderHotkey (byte-
-// identical, so the fits-case draws no page dots and shows no golden drift).
-// Same defensive contract as its siblings: if label + badge + hotkey + the
-// minimum dashes cannot fit, the badge is dropped (falling back to the plain
-// hotkey border) rather than overflowing the frame.
+// boxTopBorderBadges is boxTopBorderHotkey with an extra LEFT-anchored badge
+// sitting right after the label, with the hotkey parked at the far right:
+// ╭─ label ─ <badge> ─…─ (x) ─╮ (bean bt-adkn Rework, US-02, PO 2026-07-21:
+// "das (e) immer an der gleichen Stelle belassen und dafuer die Punkte
+// verschieben -- das fuehrt zu einer stabilen praesentation"). Anchoring the
+// indicator on the LEFT (its start fixed right after the label) and (x) on the
+// RIGHT means paging -- which changes the indicator's content/width -- moves
+// neither: only the middle dash fill absorbs the width change, so the header
+// reads as a stable frame. Empty badge -> exactly boxTopBorderHotkey (byte-
+// identical, no golden drift for the fits-case). Same defensive contract as its
+// siblings: if label + badge + hotkey + the minimum dashes cannot fit, the
+// badge is dropped (falling back to the plain hotkey border) rather than
+// overflowing the frame.
 func boxTopBorderBadges(label, badge, hotkey string, width int, frame lipgloss.Style) string {
 	if badge == "" {
 		return boxTopBorderHotkey(label, hotkey, width, frame)
 	}
 	labelStyle := lipgloss.NewStyle().Foreground(theme.Subtext)
 	labelText := clampVisible(label, width-6)
-	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ")
+	// labelSeg ends with "─ " so the badge sits after a dash separator, then a
+	// trailing space frames it against the middle fill: "─ Body ─ <badge> …".
+	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ─ ")
+	badgeSeg := badge + " "
 
-	rightSeg := " " + badge + " "
+	rightSeg := ""
 	if hotkey != "" {
-		rightSeg += theme.BindingKey.Render("("+hotkey+")") + " "
+		rightSeg = " " + theme.BindingKey.Render("("+hotkey+")") + " " // " (e) ", flush-right against the dashes
 	}
 
+	const minMidDashes = 1
 	const minRightDashes = 2
-	const minLeftDashes = 1
-	// width - 2 corners must fit: labelSeg + leftDashes(>=1) + rightSeg + rightDashes(2)
-	used := 2 + lipgloss.Width(labelText) + 1 + lipgloss.Width(rightSeg) + minRightDashes
-	if width-2-used < minLeftDashes {
+	// interior (width-2) = labelSeg + badgeSeg + midDashes + rightSeg + rightDashes
+	used := 3 + lipgloss.Width(labelText) + 2 + lipgloss.Width(badgeSeg) + lipgloss.Width(rightSeg) + minRightDashes
+	if width-2-used < minMidDashes {
 		return boxTopBorderHotkey(label, hotkey, width, frame)
 	}
-	fill := width - 2 - used
-	return frame.Render("╭") + labelSeg + frame.Render(borderDashes(fill)) +
+	mid := width - 2 - used
+	return frame.Render("╭") + labelSeg + badgeSeg + frame.Render(borderDashes(mid)) +
 		rightSeg + frame.Render(borderDashes(minRightDashes)) + frame.Render("╮")
 }
 
