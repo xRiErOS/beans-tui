@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-07-20T09:23:37Z
-updated_at: 2026-07-21T11:06:57Z
+updated_at: 2026-07-21T11:19:18Z
 parent: bt-vy1q
 ---
 
@@ -169,3 +169,20 @@ PageDown x2: '1/27' -> '2/27' -> '3/27'. Indikator startet konstant an derselben
 
 ### Notes
 US-01 + US-03 im Review bereits accepted. US-02 (Position) mit dieser Nacharbeit erledigt; PO-Endabnahme im Chat. GLOSSARY-Skizze weiterhin gueltig (Indikator in Body-Header).
+
+## US-02-Nacharbeit v2 (2026-07-21) — (e)-Sprung an Stellen-Grenze
+
+### Root-Cause (2. Reject 'das (e) springt weiterhin', schmale Geometrie)
+Der Indikator war zwar links verankert, aber die 'n/N'-Zahl waechst beim Blaettern ueber Stellen-Grenzen (9→10→100). Bei schmaler Breite nahe der Fit-Schwelle kippt sie dabei ueber das Budget → Indikator faellt auf den wideren Seiten weg → (e) springt auf die badge-lose Fallback-Position (boxTopBorderHotkey). An breiten Terminals unsichtbar (Dashes absorbieren), an schmalen (bt-sprout) sichtbar.
+
+### Fix
+boxFormPageBadge: 'n/N'-Zahl auf die Stellenzahl von count gepaddet (' 9/91' / '13/91' / '100/102') → Badge-Breite pro Bean KONSTANT ueber alle Seiten. Damit weder (e)-Verschiebung noch Wegfall mitten im Blaettern: der Badge passt (oder nicht) auf jeder Seite identisch.
+
+### Test-Output (RED->GREEN)
+- RED: TestBoxFormPageBadgeConstantWidthAcrossPages — 'badge width not constant: 1->5 50->6 100->7'.
+- GREEN nach Fix. Voller Lauf gruen (internal/tui 151s), kein Golden-Drift.
+
+### Smoke (schmal, kritischer Fall)
+- W=58, Seite 9→13: '─  9/91 ──── (e) ──╮' → '─ 13/91 ──── (e) ──╮' — (e) identische Spalte, Zahl rechtsbuendig.
+- W=54 (zu schmal): Indikator konsistent weggelassen, (e) konstant — kein Flackern.
+Reproduziert mit vorhandenen Langtext-Beans (bt-vy1q, 27–102 Seiten je nach Breite); kein Wegwerf-Test-Bean noetig.

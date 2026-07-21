@@ -361,3 +361,21 @@ func TestBoxFormPageIndicatorAbsentWhenFits(t *testing.T) {
 		t.Fatalf("dot run = %q, want none (a fitting box-form must not show a page indicator)", run)
 	}
 }
+
+// TestBoxFormPageBadgeConstantWidthAcrossPages guards bean bt-adkn US-02 (2nd
+// PO-Reject 2026-07-21: "(e) springt weiterhin", narrow terminal): as the page
+// number widens while paging (1 -> 50 -> 100), the badge width must stay
+// CONSTANT so it neither shifts the (e) badge nor crosses the header's fit
+// threshold and drops mid-paging. A variable-width "n/N" fails this; the fix is
+// to pad the page number to the width of count.
+func TestBoxFormPageBadgeConstantWidthAcrossPages(t *testing.T) {
+	const count, budget = 102, 7 // budget holds the widest "100/102"
+	w := func(page int) int { return len([]rune(ansi.Strip(boxFormPageBadge(page, count, budget)))) }
+	w1, w50, w100 := w(0), w(49), w(99)
+	if w1 == 0 {
+		t.Fatalf("badge dropped at page 1 (width %d budget %d)", w1, budget)
+	}
+	if w1 != w50 || w50 != w100 {
+		t.Fatalf("badge width not constant across pages: 1->%d 50->%d 100->%d -- a widening page number must not shift or drop the indicator mid-paging", w1, w50, w100)
+	}
+}

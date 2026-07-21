@@ -93,7 +93,15 @@ func boxFormPageBadge(page, count, maxWidth int) string {
 		return b.String()
 	}
 
-	txt := fmt.Sprintf("%d/%d", page+1, count)
+	// FIXED width (bean bt-adkn US-02, 2nd PO-Reject: "(e) springt weiterhin"):
+	// pad the page number to count's digit width so the badge is the SAME width
+	// on every page (" 1/27", "12/27", "100/102"). A variable-width "n/N" grows
+	// as the page number crosses a digit boundary mid-paging, which either
+	// shifts the (e) badge or -- at a narrow width near the fit threshold --
+	// drops the indicator entirely on the wider pages. A constant width does
+	// neither: it fits (or not) identically for every page.
+	countStr := fmt.Sprintf("%d", count)
+	txt := fmt.Sprintf("%*d/%s", len(countStr), page+1, countStr)
 	if lipgloss.Width(txt) > maxWidth {
 		return ""
 	}
