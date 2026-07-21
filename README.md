@@ -49,6 +49,10 @@ focusable field cursor (`tab`/`shift+tab`), and paged Body scrolling
 the flag unset the UI is byte-for-byte the classic Accordion. Design notes:
 [`docs/plans/jira-style-experiment/`](docs/plans/jira-style-experiment/).
 
+| Box-Form Detail (`BT_BOXFORM=1`) |
+|---|
+| ![Box-Form — jira-style titled fields](docs/screenshots/boxform.png) |
+
 ## Screenshots
 
 | Lobby / Repo-Picker |
