@@ -1,13 +1,13 @@
 ---
 # bt-5h4d
 title: E5 Polish — Toast, Help, Yank, Maus, Settings, Lobby, Archiv
-status: in-progress
+status: completed
 type: epic
 priority: normal
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-15T13:47:17Z
+updated_at: 2026-07-21T08:39:00Z
 parent: bt-apmy
 blocked_by:
     - bt-tfqi

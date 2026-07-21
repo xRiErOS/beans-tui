@@ -248,6 +248,7 @@ func (m model) applyRepoSwitched(msg repoSwitchedMsg) (tea.Model, tea.Cmd) {
 	m = m.clearFacets()
 	m.showArchived = false // E5 Task 7 (bean bt-ggt2, T6-Note bug class, bt-zhwl "Notes for T7"): the archive-default toggle must not leak across a repo switch, same reset breadth as every other search/filter field here.
 	m.backlogList = listState{}
+	m.flatList = listState{} // S5: same stale-cursor hygiene as backlogList just above -- flatView itself (a display-mode preference, not per-repo state) deliberately survives the switch
 
 	_ = config.SetLastRepo(msg.repoDir) // best-effort persistence (Port devd DD2-273 RMW pattern, state.go) -- a failed write must not block the switch itself
 	return m, nil
@@ -713,7 +714,9 @@ func (m model) beanETag(id string) (etag string, ok bool) {
 const createInFlightNote = "Creation already in progress — please wait"
 
 // keyNodeAction routes the node-focused mutation keys (design-spec §7:
-// s/t/a/B/c/d/e -- Status/TagAssign/Assign/Blocking/Create/Delete/Editor).
+// s/t/a/B/c/d/e -- Status/TagAssign/Assign/Blocking/Create/Delete/Editor;
+// plus jira-style-ui experiment S4's o/u -- Type/Priority, wired onto the
+// SAME value-menu machinery as Status, not gated behind BT_BOXFORM).
 // Placed in handleKey directly after the Refresh check and BEFORE the
 // m.detailFocus dispatch, since node actions must act on m.focusedBean()
 // regardless of which pane currently has focus (focusedBean() already
@@ -755,6 +758,8 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		nm, cmd := m.openCreateForm()
 		return true, nm, cmd
 	case keybind.Matches(msg, keys.Status),
+		keybind.Matches(msg, keys.Type),
+		keybind.Matches(msg, keys.Priority),
 		keybind.Matches(msg, keys.TagAssign),
 		keybind.Matches(msg, keys.Assign),
 		keybind.Matches(msg, keys.Blocking),
@@ -767,15 +772,28 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		if keybind.Matches(msg, keys.Status) {
 			return true, m.openValueMenu("status"), nil
 		}
+		// Type (o) / Priority (u) — jira-style-ui experiment S4: same
+		// value-menu machinery as Status, only the seeded group differs
+		// (openValueMenu/applyValueMenuSelection already fully support
+		// "type"/"priority", box_menu_value.go -- pre-existing via the
+		// Command-Center and the Meta field-level enter cascade).
+		if keybind.Matches(msg, keys.Type) {
+			return true, m.openValueMenu("type"), nil
+		}
+		if keybind.Matches(msg, keys.Priority) {
+			return true, m.openValueMenu("priority"), nil
+		}
 		if keybind.Matches(msg, keys.TagAssign) {
 			nm, cmd := m.openTagPicker()
 			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Assign) {
-			return true, m.openParentPicker(), nil
+			nm, cmd := m.openParentPicker()
+			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Blocking) {
-			return true, m.openBlockingPicker(), nil
+			nm, cmd := m.openBlockingPicker()
+			return true, nm, cmd
 		}
 		if keybind.Matches(msg, keys.Editor) {
 			// D01 (design-spec.md §15 PF-17, bean bt-z4b1, supersedet E8-
@@ -804,7 +822,7 @@ func (m model) keyNodeAction(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			// fires until keyDeleteConfirm's own enter.
 			return true, m.openDeleteConfirm(), nil
 		}
-		return true, m, nil // unreachable: msg matched one of the six keys in this case's condition above
+		return true, m, nil // unreachable: msg matched one of the eight keys in this case's condition above
 	case keybind.Matches(msg, keys.Yank):
 		// E5 Task 3 (bean bt-e4a6, design decision b): `y` always acts on
 		// m.focusedBean() -- Tree/Backlog identical (focusedBean is already
@@ -1065,13 +1083,36 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.requestQuit()
 	}
 
+	// Both replace the former raw `case "tab":` AT THE SAME dispatch point
+	// (still ahead of keyNodeAction/keyDetailFocus/keyBacklog/keyTree below) --
+	// no new collision risk (Kollisionsanalyse, epic-E7-plan.md Task 6).
+	//
+	// bt-8d35 (PO-Fokus-Modell, epic bt-vy1q): "tab/shift+tab bewegen INNERHALB
+	// der fokussierten Region, esc VERLAESST die Region". While the Detail
+	// region already HAS focus (split geometry) and boxFormEnabled(), tab is
+	// therefore no longer a pane swap at all -- it is the region-local field
+	// cursor, routed straight to keyDetailFocus (boxFormFieldNext/Prev,
+	// box_nav_field.go). Consequences, both deliberate:
+	//
+	//   - shift+tab stops being the deterministic exit (PF-13, bt-t1uy): it is
+	//     the BACKWARD field step now, and esc is the single documented way out
+	//     of a region (keyDetailFocus's Back-case).
+	//   - the Vollbild-Detail is excluded (m.fullscreen check): it renders no
+	//     field cursor at all (fieldCursor -1, view_fullscreen.go), so tab keeps
+	//     its global meaning there.
+	//
+	// Flag OFF -> the entire block below is the untouched PF-13 behaviour, and
+	// so are the Tree region's own tab/shift+tab (no intra-region targets are
+	// defined for the Tree, so tab-out-of-Tree stays the region ENTRY).
+	inFocusedDetailRegion := boxFormEnabled() && m.detailFocus && m.fullscreen != fullscreenDetail
+
 	// PF-13 (design-spec.md §15, E7 T6, bean bt-t1uy): FocusIn (tab) keeps its
 	// existing bidirectional toggle (Q01) -- FocusOut (shift+tab) is NEW, a
-	// deterministic one-way exit back to the Tree. Both replace the former raw
-	// `case "tab":` AT THE SAME dispatch point (still ahead of keyNodeAction/
-	// keyDetailFocus/keyBacklog/keyTree below) -- no new collision risk
-	// (Kollisionsanalyse, epic-E7-plan.md Task 6).
+	// deterministic one-way exit back to the Tree.
 	if keybind.Matches(msg, keys.FocusIn) {
+		if inFocusedDetailRegion {
+			return m.keyDetailFocus(msg)
+		}
 		m.detailFocus = !m.detailFocus
 		if m.detailFocus {
 			// enterDetailFocus-equivalent (devd view_detail_issue.go:236-243,
@@ -1080,13 +1121,36 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// PREVIOUS detail-focus visit (possibly on a different bean, whose
 			// section/field shape may differ) must never leak into this one.
 			m.secCursor, m.accOpen, m.detailLevel, m.fieldCursor = 0, 1, 0, 0
+			// bt-8d35 Flow #2 entry step ("tab aus dem Tree -> Fokus auf das
+			// erste Feld (Title)"): the box-form cursor gets the SAME
+			// no-stale-state treatment. Clearing the owning bean rather than
+			// just the index reuses boxFormEffectiveCursor's own derived reset
+			// (box_nav_field.go) instead of adding a second reset rule.
+			m.boxFormCursor, m.boxFormCursorBean = 0, ""
 		}
 		return m, nil
 	}
 	if keybind.Matches(msg, keys.FocusOut) {
+		if inFocusedDetailRegion {
+			return m.keyDetailFocus(msg)
+		}
 		// Deterministic exit only -- no cursor-state reset (that only ever
 		// happens on tab-IN, above): a no-op when the Tree already has focus.
 		m.detailFocus = false
+		return m, nil
+	}
+
+	// S5 (jira-style-ui experiment, bean/slice: Nested/Flat Browse toggle):
+	// `G` flips m.flatView -- checked at the SAME "fokus-/Ansichts-Modus-
+	// Familie" checkpoint as FocusIn/FocusOut/Fullscreen just above/below
+	// (global reach, view-agnostic dispatch). Only viewBrowseRepo's render
+	// path (viewBrowseRepo, view_browse_repo.go) actually branches on
+	// flatView -- toggling it while e.g. the Backlog view is active is a
+	// harmless no-visible-effect state change (Backlog is already its own
+	// flat, full-screen list), symmetric with how Fullscreen's `v` is also
+	// globally reachable without every view rendering differently for it.
+	if keybind.Matches(msg, keys.FlatView) {
+		m.flatView = !m.flatView
 		return m, nil
 	}
 
@@ -1105,6 +1169,38 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if keybind.Matches(msg, keys.Refresh) {
 		return m, loadCmd(m.client)
+	}
+
+	// bean bt-adkn Rework (B1, PO-Reject 2026-07-21 "PageDown/PageUp scrollt das
+	// gesamte linke pane"): pgup/pgdn page the Detail-Body by one FULL screen,
+	// FOCUS-INDEPENDENTLY -- exactly like the mouse wheel (mouse.go's
+	// boxFormWheelHit), which pages the Body no matter which pane has focus. The
+	// original bt-adkn wired this into keyDetailFocus, so it only fired AFTER a
+	// tab into the Detail region; at the default Tree focus pgdn fell through to
+	// keyTree (no pgup/pgdn binding there) and was a silent no-op -- the very
+	// symptom the PO reported. Lifting it to this global checkpoint (ahead of
+	// keyNodeAction/detailFocus/keyTree, the same position the node-action keys
+	// occupy for the same focus-agnostic reason) makes pgup/pgdn act on
+	// focusedBean() regardless of focus, through the SAME adjustBoxFormScroll
+	// mutation point line-wise up/down and the wheel use (one clamp/reset path,
+	// no drift -- SSTD load-bearing constraint). One page == the pane's own
+	// visible line budget (boxFormScrollBounds' height, fullscreen-aware).
+	//
+	// fullscreenList is excluded: it renders the Master list full-width with no
+	// Detail-Body to page. fullscreenDetail is INCLUDED (focusedBean() resolves
+	// the fullscreen bean, keyDetailFocus's own doc comment) so paging works in
+	// Vollbild-Detail too. Flag off -> inert (whole path experiment-gated).
+	if boxFormEnabled() && m.fullscreen != fullscreenList {
+		if b := m.focusedBean(); b != nil {
+			switch {
+			case keybind.Matches(msg, boxFormPageUp):
+				_, page := boxFormScrollBounds(m, b)
+				return m.adjustBoxFormScroll(b, -page), nil
+			case keybind.Matches(msg, boxFormPageDown):
+				_, page := boxFormScrollBounds(m, b)
+				return m.adjustBoxFormScroll(b, page), nil
+			}
+		}
 	}
 
 	// E3 (bean bt-dlgk): node-focused mutation keys (s/t/a/B/c/d/e) --
@@ -1159,6 +1255,14 @@ func (m model) focusedBean() *data.Bean {
 	case viewBacklog: // E2 Task 5: the Backlog list's own selection, NOT the (possibly stale/irrelevant) tree cursor
 		return m.backlogSelected()
 	default: // viewBrowseRepo (T8)
+		// S5 (jira-style-ui experiment, Nested/Flat Browse toggle): in flat
+		// mode the flat list's OWN cursor (flatList) is the selection, not
+		// the (frozen, untouched-while-flat) Tree cursorID -- mirrors the
+		// viewBacklog case just above (a view/mode-local cursor overrides
+		// the Tree's own).
+		if m.flatView {
+			return m.flatSelected()
+		}
 		nodes := m.visibleNodes()
 		pos := m.cursorPos(nodes)
 		if pos < 0 || pos >= len(nodes) || nodes[pos].orphan || nodes[pos].placeholder {
@@ -1240,6 +1344,64 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detailLevel = 0
 		m.fieldCursor = 0
 		return m, nil
+	}
+
+	// F1 (bean bt-ze10) + N8 (bean bt-1o4g) + bt-s90e + bt-8d35, epic bt-vy1q:
+	// while boxFormEnabled(), the Accordion nav below has "no effect" (box-form
+	// has no Section/Field two-level machine of its own), so the keys are
+	// repurposed here.
+	//
+	// bt-8d35 (PO-Fokus-Modell, PO-Entscheidung 3) replaced the former
+	// split-vs-Vollbild Fallunterscheidung with ONE rule for both geometries:
+	//
+	//   up/down -> PLAIN VIEWPORT SCROLL, everywhere. bt-1o4g had put the field
+	//     cursor on the arrows in the split pane; the PO took that back
+	//     ("Pfeiltasten im Detail scrollen die GESAMTE Ansicht") so the region
+	//     model reads the same in the Vollbild and in the split. Both go through
+	//     the very same adjustBoxFormScroll mutation point the wheel uses, so
+	//     keyboard and wheel cannot drift on the reset/clamp rules. bt-s90e made
+	//     boxFormScrollBounds fullscreen-aware (mouse.go's accW branch), so it
+	//     clamps against whichever budget is actually on screen.
+	//
+	//   tab/shift+tab -> FIELD CURSOR, split pane only. boxFormNav
+	//     (box_nav_field.go) steps linearly through boxFormFieldOrder with WRAP
+	//     and drags bt-ze10's scroll offset along, so a field tab jumps to can
+	//     never sit outside the viewport. enter opens the cursored field's
+	//     editor through activateBoxFormTarget (mouse.go) -- the same dispatch a
+	//     click takes.
+	//
+	//     NOT in the Vollbild: renderFullscreenBody passes fieldCursor -1 on
+	//     purpose (view_fullscreen.go), so there is no cursor rendered there to
+	//     walk -- moving an invisible one would be a Fokus-Modell without a
+	//     visible focus. tab/shift+tab keep their global meaning there
+	//     (handleKey, which only routes them here for the split geometry).
+	//
+	// boxFormEnabled() off falls straight through to the ORIGINAL switch below,
+	// unchanged -- the whole Fokus-Modell is experiment-gated (epic bt-vy1q:
+	// "alles additiv + gated").
+	if boxFormEnabled() {
+		switch navKey(msg.String()) {
+		case "up":
+			return m.adjustBoxFormScroll(b, -1), nil
+		case "down":
+			return m.adjustBoxFormScroll(b, 1), nil
+		}
+		// pgup/pgdn are NOT handled here anymore (bean bt-adkn Rework B1): they
+		// are a FOCUS-INDEPENDENT global paging checkpoint in handleKey now, so
+		// they page the Body without a prior tab into the Detail region. This
+		// function is only reached AFTER that checkpoint, so pgup/pgdn never
+		// arrive here.
+		if m.fullscreen != fullscreenDetail {
+			switch {
+			case keybind.Matches(msg, boxFormFieldNext):
+				return m.boxFormNav(b, "next"), nil
+			case keybind.Matches(msg, boxFormFieldPrev):
+				return m.boxFormNav(b, "prev"), nil
+			}
+			if keybind.Matches(msg, keys.Enter) {
+				return m.boxFormActivateCursor(b)
+			}
+		}
 	}
 
 	switch navKey(msg.String()) {
@@ -1500,6 +1662,32 @@ func (m model) openFilterMenu() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// openFilterMenuAt is openFilterMenu (above) plus a SEED: after the same
+// reset, it jumps m.filterTab (and m.filterMenu.cursor) to the given facet's
+// own tab/first row instead of always landing on tab 0 (Status) -- bt-wtqs
+// (epic bt-vy1q): a click on one of the filter strip's four chips
+// (box_filter_bar.go) must open the menu already focused on THAT chip's own
+// facet, not force the PO to tab/shift+tab there manually. Mirrors
+// filterMenuSwitchTab's own "jump the cursor to the new tab's first element"
+// contract (box_filter_facets.go) -- it reuses filterFacetOrder/
+// filterFacetRange rather than duplicating that lookup. facet not found in
+// filterFacetOrder (cannot happen in practice: buildFilterItems always emits
+// all four chip facets) leaves tab 0 untouched, openFilterMenu's own default.
+func (m model) openFilterMenuAt(facet string) (tea.Model, tea.Cmd) {
+	tm, cmd := m.openFilterMenu()
+	mm := tm.(model)
+	facets := filterFacetOrder(mm.filterItems)
+	for i, f := range facets {
+		if f == facet {
+			mm.filterTab = i
+			start, _ := filterFacetRange(mm.filterItems, f)
+			mm.filterMenu.cursor = start
+			break
+		}
+	}
+	return mm, cmd
+}
+
 // keyTree drives the tree: up/down move the cursor, right/left expand/
 // collapse, enter toggles expand (no-op on a leaf, per task scope). `/`, `f`,
 // `X`, and the esc-cascade's search/filter-clearing rung (E2 Task 3+4) are
@@ -1547,6 +1735,16 @@ func (m model) keyTree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// (design-spec.md §12 E5, plan Task 3 Port-Referenzen: the cascade
 		// ends here, a documented Scope-Cut rather than a TBD).
 		return m, nil
+	}
+
+	// S5 (jira-style-ui experiment, Nested/Flat Browse toggle `G`,
+	// keymap.go/view_browse_flat.go): once the shared search/filter/Backlog/
+	// FilterClear/Back handling above has run (identical in both modes --
+	// flat mode narrows/widens the SAME m.beanMatches-filtered set the Tree
+	// does), flat mode's own up/down-only cursor takes over instead of the
+	// Tree's node walk below.
+	if m.flatView {
+		return m.keyFlat(msg)
 	}
 
 	nodes := m.visibleNodes()

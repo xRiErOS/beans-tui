@@ -1,11 +1,11 @@
 ---
 # bt-6oyy
 title: Tag-Management-Page (zentrale Tag-Definition)
-status: in-progress
+status: scrapped
 type: feature
 priority: normal
 created_at: 2026-07-15T14:11:37Z
-updated_at: 2026-07-16T15:47:02Z
+updated_at: 2026-07-18T15:05:10Z
 ---
 
 PO-Wunsch (2026-07-15, im Zuge E7-Feedback): Tags behalten UND zentral definieren können über eine eigene Page in bt.

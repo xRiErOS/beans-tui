@@ -1,13 +1,13 @@
 ---
 # bt-362n
 title: E10 — Tag-Management-Page (zentrale Tag-Definition)
-status: todo
+status: completed
 type: epic
 priority: high
 tags:
     - accepted
 created_at: 2026-07-16T15:39:48Z
-updated_at: 2026-07-17T09:51:07Z
+updated_at: 2026-07-18T15:04:50Z
 ---
 
 E10 — Tag-Management-Page (zentrale Tag-Definition). Liefert das Feature aus

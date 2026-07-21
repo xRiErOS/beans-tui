@@ -47,7 +47,7 @@ func screenLines(m model) []string {
 // the boundary matches the real render exactly.
 func leftPaneClickAt(t *testing.T, m model, head, localKeys, substr string) tea.MouseMsg {
 	t.Helper()
-	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
+	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys, m.statusLine(m.width-2), m.settings.Layout.TreeWidth)
 	boundary := originX + lw
 	for y, l := range screenLines(m) {
 		i := strings.Index(l, substr)
@@ -78,7 +78,7 @@ func treeClickAt(t *testing.T, m model, substr string) tea.MouseMsg {
 // mouseDetailClick dispatch path.
 func rightPaneClickAt(t *testing.T, m model, head, localKeys, substr string) tea.MouseMsg {
 	t.Helper()
-	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
+	_, lw, _, originX, _ := clickPaneGeometry(m.width, m.height, head, localKeys, m.statusLine(m.width-2), m.settings.Layout.TreeWidth)
 	boundary := originX + lw
 	for y, l := range screenLines(m) {
 		i := strings.Index(l, substr)
@@ -205,6 +205,13 @@ func TestClickSetsTreeCursor(t *testing.T) {
 }
 
 // --- Doppelklick: devd D03 semantics (design decision f) ---
+//
+// NOTE (bean bt-vpvu): devd-D03's "a single click EXPANDS a closed node" half
+// was dropped on PO request -- a single click now only selects, and the
+// double click toggles in BOTH directions. The two tests below cover the
+// halves that survived unchanged (double click collapses an open node; a lone
+// single click never toggles); the new semantics live in
+// mouse_tree_select_test.go.
 
 // TestDoubleClickTogglesExpand: a SECOND click on the SAME node within
 // doubleClickInterval collapses an already-open, expandable node.
@@ -419,7 +426,7 @@ func TestToastClickDismissesEvenWithFormOpen(t *testing.T) {
 // the SAME value this file hardcoded before T6b, so the seven Golden
 // snapshot tests stay byte-identical.
 func TestTreeWidthZeroFallsBackToDefault(t *testing.T) {
-	_, lw, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", 0)
+	_, lw, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", "", 0)
 	if lw != 24 {
 		t.Fatalf("clickPaneGeometry(treeWidth=0): lw = %d, want 24 (fallback, byte-identical to the pre-T6b hardcoded floor)", lw)
 	}
@@ -431,8 +438,8 @@ func TestTreeWidthZeroFallsBackToDefault(t *testing.T) {
 // this task, the Settings-Form's tree_width field was persisted/validated
 // but had NO effect on the render, a silent no-op for the PO).
 func TestTreeWidthFromSettingsAffectsGeometry(t *testing.T) {
-	_, lwDefault, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", 0)
-	_, lwConfigured, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", 28)
+	_, lwDefault, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", "", 0)
+	_, lwConfigured, _, _, _ := clickPaneGeometry(72, 30, "head", "footer", "", 28)
 	if lwConfigured != 28 {
 		t.Fatalf("clickPaneGeometry(treeWidth=28): lw = %d, want 28", lwConfigured)
 	}
@@ -451,7 +458,7 @@ func TestTreeWidthFromSettingsAffectsGeometry(t *testing.T) {
 // after.
 func TestClickPaneGeometryOriginYExcludesTitleAndSeparator(t *testing.T) {
 	head := "head"
-	_, _, _, _, originY := clickPaneGeometry(80, 24, head, "footer", 0)
+	_, _, _, _, originY := clickPaneGeometry(80, 24, head, "footer", "", 0)
 	want := 1 + lipgloss.Height(head) + 1 + 1
 	if originY != want {
 		t.Fatalf("originY = %d, want %d (outer border(1) + head(%d) + divider(1) + pane's own top border(1) -- PF-10 drops only the pane's title+separator lines)", originY, want, lipgloss.Height(head))
@@ -467,35 +474,51 @@ func TestClickPaneGeometryOriginYExcludesTitleAndSeparator(t *testing.T) {
 // bodyH/footerY boundary math has not been exercised at any OTHER footH value
 // since D02 landed. This is a SYNTHETIC (hand-built, not render-grounded)
 // regression: a fabricated >=3-line localKeys string proves the dynamic
-// footH := lipgloss.Height(localKeys)+2 mechanism (mouse.go) generalizes to
-// any footer height, independent of whether a real view ever happens to
-// diverge from 2 lines again. head="H" (1 line) + a 3-line localKeys + w=80/
-// h=40 is a small enough fixture that bodyH/originY/footerY can be verified
-// against literal numbers, not a second call into the function under test
-// (LESSONS-LEARNED #5: a pin test must pin LITERALS, never the constant/
-// formula it's supposed to be checking).
+// footH := lipgloss.Height(localKeys)+1+statusLineHeight(status) mechanism
+// (mouse.go) generalizes to any footer height, independent of whether a real
+// view ever happens to diverge from 2 lines again. head="H" (1 line) + a
+// 3-line localKeys + w=80/h=40 is a small enough fixture that bodyH/originY/
+// footerY can be verified against literal numbers, not a second call into the
+// function under test (LESSONS-LEARNED #5: a pin test must pin LITERALS,
+// never the constant/formula it's supposed to be checking).
 //
-//	innerH = h-2            = 38
-//	footH  = 3 (localKeys lines) + 2 = 5
-//	avail  = innerH - head(1) - footH(5) - 1(divider) = 31
-//	bodyH  = avail - 2 (both panes' own border)        = 29
+// bt-oqsv UPDATE: the footer's status row is no longer a permanently
+// reserved line, so footH's old constant "+2" became "+1 (divider) +
+// statusLineHeight(status)". Both states are pinned below -- the empty
+// status (the normal case, one row MORE for the panes) and a present one
+// (the pre-bt-oqsv numbers, unchanged).
+//
+//	innerH = h-2                                          = 38
+//	footH  = 3 (localKeys lines) + 1 (divider) + 0|1 (status) = 4 | 5
+//	avail  = innerH - head(1) - footH - 1(divider)        = 32 | 31
+//	bodyH  = avail - 2 (both panes' own border)           = 30 | 29
 //	originY = 1 (outer border) + head(1) + 1 (divider) + 1 (pane's own border) = 4
 //	footerY = originY + bodyH + 2 (pane bottom border + divider, D02-era
-//	          TestDetailClickBacklogFooterAt80Cols precedent)             = 35
+//	          TestDetailClickBacklogFooterAt80Cols precedent)   = 36 | 35
 func TestClickPaneGeometryMultiLineFooterHeightPin(t *testing.T) {
 	head := "H"
 	localKeys := "line one\nline two\nline three" // 3 lines -- the bean's own ">=3-Zeilen" requirement
-	bodyH, _, _, _, originY := clickPaneGeometry(80, 40, head, localKeys, 0)
 
-	if bodyH != 29 {
-		t.Fatalf("bodyH = %d, want 29 (innerH 38 - head 1 - footH 5 - divider 1 = avail 31, bodyH = avail-2)", bodyH)
+	bodyH, _, _, _, originY := clickPaneGeometry(80, 40, head, localKeys, "", 0)
+	if bodyH != 30 {
+		t.Fatalf("bodyH (no status line) = %d, want 30 (innerH 38 - head 1 - footH 4 - divider 1 = avail 32, bodyH = avail-2)", bodyH)
 	}
 	if originY != 4 {
 		t.Fatalf("originY = %d, want 4 (outer border 1 + head 1 + divider 1 + pane's own border 1) -- must stay independent of footer height", originY)
 	}
-	footerY := originY + bodyH + 2
-	if footerY != 35 {
-		t.Fatalf("footerY = %d, want 35 (originY 4 + bodyH 29 + pane-bottom-border/divider 2)", footerY)
+	if footerY := originY + bodyH + 2; footerY != 36 {
+		t.Fatalf("footerY (no status line) = %d, want 36 (originY 4 + bodyH 30 + pane-bottom-border/divider 2)", footerY)
+	}
+
+	bodyHStatus, _, _, _, originYStatus := clickPaneGeometry(80, 40, head, localKeys, "watch unavailable", 0)
+	if bodyHStatus != 29 {
+		t.Fatalf("bodyH (status line present) = %d, want 29 (footH 5: 3 localKeys + 1 divider + 1 status)", bodyHStatus)
+	}
+	if originYStatus != 4 {
+		t.Fatalf("originY (status line present) = %d, want 4 -- the status row sits BELOW the panes, it can never move their origin", originYStatus)
+	}
+	if footerY := originYStatus + bodyHStatus + 2; footerY != 35 {
+		t.Fatalf("footerY (status line present) = %d, want 35 (originY 4 + bodyH 29 + pane-bottom-border/divider 2)", footerY)
 	}
 }
 
@@ -1039,7 +1062,7 @@ func TestDetailClickBacklogFooterAt80Cols(t *testing.T) {
 		t.Fatalf("precondition: browse footer at 80 cols = %d lines, want 2", lipgloss.Height(browseKeys))
 	}
 
-	bodyH, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, _, originX, originY := clickPaneGeometry(m.width, m.height, head, localKeys, m.statusLine(m.width-2), m.settings.Layout.TreeWidth)
 
 	// Render-grounded anchor: locate the footer's first line (Q06 order
 	// starts with "tab focus in"; renderBindings glues key/desc with NBSP)

@@ -489,9 +489,63 @@ func treeNodeMarker(n treeNode) string {
 	return "▸ "
 }
 
+// shortBeanID strips the CURRENT repo's own bean-ID prefix from id (bean
+// bt-pl5p, Nebenbefund N5, epic bt-vy1q): the left pane showed full IDs
+// ("sproutling-btv7") although the header breadcrumb already names the open
+// repo -- the slug is pure redundancy there, and the columns it eats are
+// exactly the columns the title needs (PO belegte den harten Titel-Clamp in
+// beans-tui-boxform-narrow.gif).
+//
+// Deliberately NOT "cut at the last '-'": bean IDs carry multi-segment
+// prefixes (lean-stack-58j0) and the pane also shows FOREIGN/dangling
+// references from other repos, which must stay unambiguous. Only the exact
+// "<slug>-" prefix of the repo that is open right now is removed; anything
+// else (foreign prefix, empty slug, empty remainder) returns id unchanged.
+func shortBeanID(id, slug string) string {
+	if slug == "" {
+		return id
+	}
+	rest, ok := strings.CutPrefix(id, slug+"-")
+	if !ok || rest == "" {
+		return id
+	}
+	return rest
+}
+
+// beanIDPrefix is the slug shortBeanID strips from the rows of the currently
+// open repo -- data.RepoSlug reads .beans.yml's beans.prefix, the SAME field
+// the bean IDs themselves are minted from (repo_slug.go's own doc comment),
+// so this can never drift from the real ID shape. Resolved once per render
+// by the row builders, not once per row (RepoSlug does file IO).
+func (m model) beanIDPrefix() string {
+	if m.repoDir == "" {
+		return ""
+	}
+	return data.RepoSlug(m.repoDir)
+}
+
 // treeRowText renders one row's plain content: indent + expand marker +
-// status glyph + type icon + ID (Sapphire) + title (design-spec.md §8).
-func treeRowText(n treeNode) string {
+// status glyph + type icon + ID (Sapphire, repo-prefix stripped via
+// shortBeanID -- bean bt-pl5p) + title (design-spec.md §8). slug is the
+// caller's m.beanIDPrefix(); "" disables shortening entirely.
+func treeRowText(n treeNode, slug string) string {
+	head, title := treeRowParts(n, slug)
+	return head + title
+}
+
+// treeRowParts splits one Tree row into its fixed-width HEAD (indent + expand
+// marker + status glyph + type icon + ID) and its variable TITLE -- the split
+// bean bt-f68z's hanging-indent wrapping needs: the continuation lines are
+// padded to the head's own visible width so they start in the title column
+// (hangingWrap, line_window.go). treeRowText (above) is the unwrapped
+// concatenation, kept as the single-line composer the tests and the
+// non-wrapping call sites still use, so head/title can never drift from the
+// row they describe.
+//
+// Placeholder/orphan rows carry no title: their whole content is already a
+// hint, and hanging-indenting a hint would be noise -- they return an empty
+// title and therefore stay single-line by construction.
+func treeRowParts(n treeNode, slug string) (head, title string) {
 	indent := strings.Repeat("  ", n.depth)
 	marker := treeNodeMarker(n)
 	if n.placeholder {
@@ -500,13 +554,26 @@ func treeRowText(n treeNode) string {
 		// PO-Wortlaut. hasKids is zero-value false on a placeholder node, so
 		// treeNodeMarker already returned the blank "  " above -- same width
 		// as every ▾/▸ marker, no layout shift (B03 precedent).
-		return indent + marker + theme.Muted.Render(fmt.Sprintf("%d archiviert — f→Archive", n.hiddenCount))
+		return indent + marker + theme.Muted.Render(fmt.Sprintf("%d archiviert — f→Archive", n.hiddenCount)), ""
 	}
 	if n.orphan {
-		return indent + marker + theme.Dim.Render("(orphaned)")
+		return indent + marker + theme.Dim.Render("(orphaned)"), ""
 	}
 	b := n.bean
-	return indent + marker + theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(b.ID) + " " + b.Title
+	return indent + marker + theme.StatusIcon(b.Status) + " " + theme.TypeIcon(b.Type) + " " + theme.Key.Render(shortBeanID(b.ID, slug)) + " ", b.Title
+}
+
+// treeRowLines renders one Tree row as one OR MORE terminal lines: the title
+// wraps at `width` with a hanging indent aligned to the title column (bean
+// bt-f68z / PO-Befund #13, the PO's own sketch). width is the row's total cell
+// budget INCLUDING nothing else -- the caller's cursor column is added by
+// treeBlocks around this result.
+func treeRowLines(n treeNode, slug string, width int) []string {
+	head, title := treeRowParts(n, slug)
+	if title == "" {
+		return []string{truncate(head, width)}
+	}
+	return hangingWrap(head, lipgloss.Width(head), title, width)
 }
 
 // treeRows renders every visible row, applying the D08 cursor treatment to
@@ -523,23 +590,58 @@ func treeRowText(n treeNode) string {
 // cursor (devd windowAround/windowStart port, view_browse_project.go:
 // 647-670) so a tree taller than the pane never hides the cursor below the
 // fold.
-func (m model) treeRows(nodes []treeNode, focused bool, bodyH int) []string {
+func (m model) treeRows(nodes []treeNode, focused bool, bodyH, width int) []string {
+	rows, _ := blockWindow(m.treeBlocks(nodes, focused, width), bodyH, m.cursorPos(nodes))
+	return rows
+}
+
+// treeBlocks builds ONE line block per node -- the structure both the renderer
+// (treeRows, above) and the mouse hit-test (treeClickRow, below) consume, so
+// the click can never land on a different bean than the one the PO sees
+// (bean bt-f68z, the "Zeilen sind nicht mehr 1:1 zu beans" follow-up the bean
+// itself flags; same Golden-Rule-Drift-Schutz rationale as clickPaneGeometry).
+//
+// The D08 cursor treatment applies to EVERY line of the cursor's block, not
+// just its first: a two-line bean whose second line lost the `▌` bar and the
+// accent tint would read as two separate half-selected beans.
+//
+// width is the row's total cell budget (renderPane's own w-2 truncate budget);
+// one cell of it is spent on the cursor column, so the wrap budget handed
+// down is width-1.
+func (m model) treeBlocks(nodes []treeNode, focused bool, width int) [][]string {
 	pos := m.cursorPos(nodes)
-	rows := make([]string, len(nodes))
+	slug := m.beanIDPrefix()
+	blocks := make([][]string, len(nodes))
 	for i, n := range nodes {
-		text := treeRowText(n)
-		if i == pos {
-			plain := ansi.Strip(text)
-			if focused {
-				rows[i] = theme.Accent.Render("▌" + plain)
-			} else {
-				rows[i] = theme.Dim.Render("▌" + plain)
-			}
+		lines := treeRowLines(n, slug, width-1)
+		blocks[i] = decorateRowBlock(lines, i == pos, focused)
+	}
+	return blocks
+}
+
+// decorateRowBlock prepends the 1-cell cursor column to every line of one
+// row's block: the D08 `▌` bar plus the whole-line accent tint on the cursor
+// row (own per-cell colors stripped first, devd view_browse_project.go:
+// 382-398), a plain space otherwise. focused=false (the Detail pane has focus)
+// freezes the cursor muted instead of accent -- only the focused pane's cursor
+// is highlighted (devd D03). Shared verbatim by the Tree, the Browse flat list
+// and the Backlog (view_browse_flat.go / view_browse_backlog.go), which all
+// three used to carry their own copy of this five-line block.
+func decorateRowBlock(lines []string, isCursor, focused bool) []string {
+	out := make([]string, len(lines))
+	for j, l := range lines {
+		if !isCursor {
+			out[j] = " " + l
+			continue
+		}
+		plain := ansi.Strip(l)
+		if focused {
+			out[j] = theme.Accent.Render("▌" + plain)
 		} else {
-			rows[i] = " " + text
+			out[j] = theme.Dim.Render("▌" + plain)
 		}
 	}
-	return windowAround(rows, bodyH, pos)
+	return out
 }
 
 // windowStart computes the window start index so cursor stays visible --
@@ -622,7 +724,15 @@ func (m model) renderDetailPane(nodes []treeNode, w, h int, focused bool) string
 // `for i := 0; ... && len(lines) < h`) prevents any overflow past the pane's
 // border, the same mechanism the Tree pane relies on.
 func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) string {
-	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused)
+	// N8 (bean bt-1o4g): the box-form field cursor is only VISIBLE while the
+	// Detail pane actually holds focus -- an unfocused pane passes -1 (no
+	// Mauve frame anywhere), which is byte-identical to the pre-cursor render
+	// and is what keeps browse_boxform.golden untouched.
+	boxCursor := -1
+	if boxFormEnabled() && focused {
+		boxCursor = boxFormEffectiveCursor(m, b)
+	}
+	return renderAccordionPane(m.idx, b, w, h, m.accOpen, m.secCursor, m.fieldCursor, m.detailLevel, focused, boxFormEffectiveScroll(m, b), boxCursor)
 }
 
 // renderAccordionPane (I02, E4-T3-Review PFLICHT carried into E4 Task 4,
@@ -637,7 +747,18 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // state backs the accordion stays entirely at each call site, mirroring
 // I01's copy-on-write doctrine applied to "shared render body, independent
 // state" instead of maps.
-func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool) string {
+// boxScroll (bean bt-ze10, epic bt-vy1q F1) is ONLY consulted inside the
+// boxFormEnabled() branch below -- the accordion branch (flag off) ignores
+// it entirely, so a caller with no box-form scroll of its own (e.g.
+// renderReviewDetailPane, view_review_cockpit.go, which passes 0) is always
+// safe. The Vollbild path (renderFullscreenBody, view_fullscreen.go) used to
+// be such a caller and now passes a REAL offset (bt-s90e) -- see its own doc
+// comment for the geometry rationale.
+// boxCursor (bean bt-1o4g) is the box-form field cursor index the
+// boxFormEnabled() branch renders with a Mauve frame, or -1 for none -- the
+// accordion branch ignores it exactly the way it ignores boxScroll. The
+// Vollbild passes -1: there, up/down scroll instead of walking fields.
+func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll, boxCursor int) string {
 	var rows []string
 	if b != nil {
 		bodyW := w - 4
@@ -652,23 +773,107 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 		// (ID/Title/type-status-prio) renders ABOVE the Accordion, same width
 		// as the Accordion itself (accW) -- not the App-Chrome header (PO-
 		// Antwort Q01: Detail-Pane only).
-		rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
-		secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
-		// NB-2 (Reopen bt-b0w0, PO-Review Runde 3, US-05, design-spec.md §15
-		// PF-17 Akzeptanz-Zusatz): when RELATIONS (the ONLY section this
-		// applies to, deliberately -- see windowRelationsSection's own doc
-		// comment) is the open section, its body is windowed to the pane's
-		// own line budget BEFORE renderAccordion ever joins it in -- the OLD
-		// path handed the full body to renderPane below, whose line cap just
-		// cut the tail off with no scroll/indicator (this function's own doc
-		// comment already anticipated exactly this drift). Every OTHER
-		// section (Meta/Body/History) is untouched, renderPane's existing cap
-		// still applies to them unchanged.
-		if open == relationsSectionIdx+1 {
-			secs[relationsSectionIdx].body = windowRelationsSection(secs[relationsSectionIdx].body, h, secs[relationsSectionIdx].activeLine)
+		if boxFormEnabled() {
+			// S2b (jira-style-experiment, BT_BOXFORM env gate, box_form_flag.go):
+			// swap the accordion body for detailBoxForm's jira-style boxes.
+			// accW is the SAME outer box width detailHeaderBlock/renderAccordion
+			// use above/below -- detailBoxForm's own dropdownBox/panelBox calls
+			// expect a full outer-box width (border included), not bodyW's
+			// content-only budget, so reusing accW (not inventing a new width)
+			// keeps this row-for-row consistent with the accordion path's own
+			// convention. Accordion nav (open/secCursor/fieldCursor) has no
+			// effect in this mode -- field-level nav for box-form is a later
+			// slice (see design-spec.md), acceptable for this experiment slice.
+			// F1 (bean bt-ze10, epic bt-vy1q): detailBoxForm has no windowing
+			// of its own, so a tall form (long Body, or Relations/History
+			// with many entries) used to just get cut off by renderPane's
+			// own Golden-Rule-#1 line cap below -- windowed to `h` (the SAME
+			// content-height budget renderPane itself gets handed a few
+			// lines down, so the two never disagree) via scrollView (view.go,
+			// the SAME primitive windowRelationsSection already uses for the
+			// accordion's own Relations section), offset boxScroll. At
+			// boxScroll==0 with a form that already fits (total<=h, D12's
+			// "Normalfall passt" claim), scrollView's own padding-to-h
+			// converges with renderPane's pre-existing pad-to-h loop below --
+			// byte-identical to the pre-F1 output, no golden drift.
+			// bean bt-adkn Rework B3 (PO "Sticky Body-Kopfzeile", 2026-07-21):
+			// the page indicator no longer sits on the outer pane frame -- it
+			// rides in the BODY panel's own title row, and that row is pinned to
+			// the top of the viewport while the body is paged, so the section
+			// title and its indicator stay visible while the body text scrolls
+			// beneath. Built from BLOCKS (not the joined detailBoxForm string) so
+			// the Body block's boundaries are known: only its first line (the top
+			// border) is re-rendered with the dots, and only that line is pinned.
+			blocks := boxFormBlocks(idx, b, accW, boxCursor)
+			total := 0
+			for _, bl := range blocks {
+				total += lineCount(bl)
+			}
+			page, count := boxFormPageIndex(total, h, boxScroll)
+
+			// Re-render the Body top border with the page indicator LEFT-anchored
+			// after the label (US-02), in the Body block's OWN focus color
+			// (boxFormBlocks' same cursor->row rule) so the pinned copy matches the
+			// natural one. The dot budget is the header's ACTUAL free width (accW
+			// minus corners, "─ Body ─ " label+sep, " (e) " hotkey and the minimum
+			// dashes = 21 cells), NOT accW: a long body has more pages than fit as
+			// dots, so a too-generous budget made boxFormPageBadge emit a dot row
+			// that then overflowed boxTopBorderBadges' fit check and was DROPPED
+			// whole (real 80c smoke: a 25-page body showed no indicator at all).
+			// Bounding the budget to what the header can hold makes boxFormPageBadge
+			// fall back to the compact "n/N" form instead, so it always renders.
+			dotsBudget := accW - 21
+			if dotsBudget < 1 {
+				dotsBudget = 1
+			}
+			bodyBorder := theme.Overlay
+			if boxFormCursorRow(boxCursor) == boxFormRowBody {
+				bodyBorder = theme.Mauve
+			}
+			dots := boxFormPageBadge(page, count, dotsBudget)
+			bodyHeader := boxTopBorderBadges("Body", dots, "e", accW, lipgloss.NewStyle().Foreground(bodyBorder))
+			if rest := strings.SplitN(blocks[boxFormRowBody], "\n", 2); len(rest) == 2 {
+				blocks[boxFormRowBody] = bodyHeader + "\n" + rest[1]
+			} else {
+				blocks[boxFormRowBody] = bodyHeader
+			}
+
+			form := strings.Join(blocks, "\n")
+			win, _ := scrollView(form, h, boxScroll)
+			winLines := strings.Split(win, "\n")
+
+			// Sticky pin: while the viewport top is scrolled INTO the body (the
+			// Body title has passed above the top edge but body content still
+			// fills the top), overlay the Body header onto the first content row.
+			// The one body line it covers is the topmost -- the least-missed.
+			bodyStart := 0
+			for i := 0; i < boxFormRowBody; i++ {
+				bodyStart += lineCount(blocks[i])
+			}
+			bodyEnd := bodyStart + lineCount(blocks[boxFormRowBody])
+			if boxScroll > bodyStart && boxScroll < bodyEnd && len(winLines) > 0 {
+				winLines[0] = bodyHeader
+			}
+			rows = append(rows, winLines...)
+		} else {
+			rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
+			secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
+			// NB-2 (Reopen bt-b0w0, PO-Review Runde 3, US-05, design-spec.md §15
+			// PF-17 Akzeptanz-Zusatz): when RELATIONS (the ONLY section this
+			// applies to, deliberately -- see windowRelationsSection's own doc
+			// comment) is the open section, its body is windowed to the pane's
+			// own line budget BEFORE renderAccordion ever joins it in -- the OLD
+			// path handed the full body to renderPane below, whose line cap just
+			// cut the tail off with no scroll/indicator (this function's own doc
+			// comment already anticipated exactly this drift). Every OTHER
+			// section (Meta/Body/History) is untouched, renderPane's existing cap
+			// still applies to them unchanged.
+			if open == relationsSectionIdx+1 {
+				secs[relationsSectionIdx].body = windowRelationsSection(secs[relationsSectionIdx].body, h, secs[relationsSectionIdx].activeLine)
+			}
+			acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
+			rows = append(rows, strings.Split(acc, "\n")...)
 		}
-		acc := renderAccordion(secs, open, accW, focused, secCursor, fieldCursor)
-		rows = append(rows, strings.Split(acc, "\n")...)
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}
@@ -771,12 +976,44 @@ func (m model) treeSearchLine(w int, sortSuffix string) string {
 	if sortSuffix != "" {
 		suffix = theme.Muted.Render(" · " + sortSuffix)
 	}
+	text, state := m.searchHeadText()
+	switch state {
+	case searchHeadTyping:
+		return truncate(searchShield+" "+text+suffix, w)
+	case searchHeadFiltered:
+		styled := lipgloss.NewStyle().Foreground(theme.Red).Render(searchShield + " " + text)
+		return truncate(styled+suffix, w)
+	}
+	return truncate(theme.Muted.Render(searchShield+" "+text)+suffix, w)
+}
+
+// searchHeadState names the three states the search head can be in. Extracted
+// (bean bt-f68z, PO-Befund #11) so the plain single-line head (treeSearchLine,
+// above) and the BOXED head (searchHeadBox, below) can differ in FRAMING while
+// sharing their CONTENT -- the two must never disagree on what the search
+// state is, only on how it is drawn.
+type searchHeadState int
+
+const (
+	searchHeadIdle searchHeadState = iota
+	searchHeadTyping
+	searchHeadFiltered
+)
+
+// searchHeadText returns the search head's content WITHOUT the ⌕ shield, the
+// sort suffix or any styling. The three branches are verbatim the ones
+// treeSearchLine carried inline before -- so treeSearchLine's own composition
+// (and therefore every pre-existing golden that depends on it) stays
+// byte-identical, which is exactly why the shield stayed in the CALLER and did
+// not move in here: the boxed variant carries a "Search" frame label instead
+// and must not repeat the glyph.
+func (m model) searchHeadText() (string, searchHeadState) {
 	if m.searchActive {
-		line := searchShield + " " + m.searchInput.View()
+		text := m.searchInput.View()
 		if fs := m.filterSummary(); fs != "" {
-			line += "  " + fs
+			text += "  " + fs
 		}
-		return truncate(line+suffix, w)
+		return text, searchHeadTyping
 	}
 	if m.treeActive() {
 		var parts []string
@@ -790,11 +1027,97 @@ func (m model) treeSearchLine(w int, sortSuffix string) string {
 		if fs := m.filterSummary(); fs != "" {
 			parts = append(parts, fs)
 		}
-		line := searchShield + " " + strings.Join(parts, "  ")
-		styled := lipgloss.NewStyle().Foreground(theme.Red).Render(line)
-		return truncate(styled+suffix, w)
+		return strings.Join(parts, "  "), searchHeadFiltered
 	}
-	return truncate(theme.Muted.Render(searchShield+" / search")+suffix, w)
+	return "/ search", searchHeadIdle
+}
+
+// searchHeadBoxHeight is the boxed search head's line count (top frame, value
+// row, bottom frame) -- the same 3 lines every dropdownBox occupies.
+const searchHeadBoxHeight = 3
+
+// searchHeadBox renders the search head as a framed box (bean bt-f68z,
+// PO-Befund #11: "⌕ / search verschwindet optisch. Soll ebenfalls boxed
+// dargestellt werden, wie die uebrigen Felder"), built from the SAME
+// boxTopBorder/boxBottomBorder primitives dropdownBox and the filter chips use
+// (box_dropdown.go) -- label in the top frame, hotkey badge in the bottom one.
+//
+// The frame turns Mauve while the field is focused, mirroring dropdownBox's
+// own focus contract; an ACTIVE query/filter additionally tints the value Red,
+// the "Filter aktiv" signal (DD2-53) treeSearchLine already carried.
+func (m model) searchHeadBox(width int) []string {
+	if width < 8 {
+		width = 8
+	}
+	borderColor := theme.Overlay
+	if m.searchActive {
+		borderColor = theme.Mauve
+	}
+	frame := lipgloss.NewStyle().Foreground(borderColor)
+
+	text, state := m.searchHeadText()
+	inner := width - 4
+	switch state {
+	case searchHeadFiltered:
+		text = lipgloss.NewStyle().Foreground(theme.Red).Render(clampVisible(text, inner))
+	case searchHeadIdle:
+		text = theme.Muted.Render(clampVisible(text, inner))
+	default:
+		text = clampVisible(text, inner)
+	}
+	pad := inner - lipgloss.Width(text)
+	if pad < 0 {
+		pad = 0
+	}
+	mid := frame.Render("│") + " " + text + strings.Repeat(" ", pad) + " " + frame.Render("│")
+	return []string{boxTopBorder("Search", width, frame), mid, boxBottomBorder("/", width, frame)}
+}
+
+// treeHeaderWideMin is the pane width from which the column header spells its
+// labels out instead of abbreviating them to the single letters (bean bt-f68z,
+// PO-Befund #12: "Master-Detail (schmal): Header auf die Keybindings kuerzen.
+// Vollbild (v, breit): Header ausschreiben. Also breitenabhaengig, nicht zwei
+// getrennte Implementierungen"). The split's left pane is ~30 cells even on a
+// wide terminal (masterDetailWidths' 1fr:2fr, view.go), the Vollbild pane is
+// the full inner width -- 48 separates the two cleanly at every terminal size
+// the app supports, without a second code path.
+const treeHeaderWideMin = 48
+
+// treeColumnHeader renders the Tree/flat pane's column legend (bean bt-f68z,
+// PO-Befund #12). One implementation, two label sets chosen by width.
+//
+// The NARROW form is column-aligned with the rows below it: one leading cell
+// for the cursor column, two for the expand marker, then the 1-cell status and
+// type glyph columns, the 4-cell short bean ID and the title. The WIDE form
+// deliberately drops that alignment for the two glyph columns -- they are ONE
+// cell wide by construction, so "Status" and "Type" cannot sit above them; it
+// reads as a spelled-out legend instead, which is what "ausschreiben" asks
+// for and what the extra Vollbild width makes room for.
+func treeColumnHeader(width int) string {
+	label := "   S T ID   Title"
+	if width >= treeHeaderWideMin {
+		label = "   Status Type ID   Title"
+	}
+	return lipgloss.NewStyle().Foreground(theme.Subtext).Render(truncate(label, width))
+}
+
+// treePaneHeadRows builds the rows that precede the bean rows in the Browse
+// left pane: the search head (1 line plain, 3 lines boxed under
+// boxFormEnabled() -- bean bt-f68z #11) followed by the column header (#12).
+//
+// This is the ONE place that decides how tall that head is. viewBrowseRepo
+// trades its length out of the row budget and treeClickRow/flatClickRow offset
+// their hit-test by exactly len(...) -- so a future head row can never desync
+// the render from the mouse (the failure bt-vpvu was filed for: the filter bar
+// was reclaimed from bodyH by the renderer but not by the hit-test).
+func (m model) treePaneHeadRows(width int) []string {
+	var out []string
+	if boxFormEnabled() {
+		out = append(out, m.searchHeadBox(width)...)
+	} else {
+		out = append(out, m.treeSearchLine(width, ""))
+	}
+	return append(out, treeColumnHeader(width))
 }
 
 // repoLabel is the breadcrumb `> repo` segment: the repo directory's base
@@ -822,7 +1145,12 @@ func (m model) composeOverlays(out string, w, h int) string {
 	}
 	switch m.overlay {
 	case overlayValueMenu:
-		out = placeOverlay(out, m.valueMenuBox(), w, h)
+		// Slice C (bt-f0y9, D09 revidiert): field-anchored below the
+		// triggering Status/Type/Priority box (placeOverlayAt) while
+		// boxFormEnabled(), falling back to the pre-existing CENTERED
+		// placeOverlay otherwise -- placeValueMenuOverlay (box_menu_value.go)
+		// owns that branch, not this switch.
+		out = m.placeValueMenuOverlay(out, w, h)
 	case overlayTagPicker:
 		out = placeOverlay(out, m.tagPickerBox(), w, h)
 	case overlayParentPicker:
@@ -926,13 +1254,67 @@ func (m model) browseRepoChrome(innerW int) (head, localKeys string) {
 // PF-11's own doc comment flagged (f/X/b/t/a/B/y were handled by
 // keyNodeAction/keyTree but never shown in the footer). X (FilterClear)
 // stays deliberately OUT (Q06's list omits it too, same as before).
+//
+// bt-fy5d (Nebenbefund N2, epic bt-vy1q): while boxFormEnabled(), the Detail
+// pane renders each scalar field as a titled box carrying its own hotkey
+// badge in the bottom border ((e) (s) (o) (u) (a) (t), box_detail_form.go) --
+// the footer repeated all of them, which at 80 columns cost a whole third
+// footer line for information already on screen, more saliently. Those keys
+// are therefore dropped from the footer DISPLAY while the flag is on. This
+// is display-only: the bindings stay registered in keymap.go (single source)
+// and keep their Help-overlay entry, so TestHelpGroupsCoverEveryBindingExactlyOnce's
+// drift guard is untouched. With the flag OFF nothing is shown inline, so
+// the list stays byte-identical to the pre-bt-fy5d one.
 func browseRepoLocalBindings() []keybind.Binding {
-	return []keybind.Binding{
+	bs := []keybind.Binding{
 		keys.FocusIn, keys.FocusOut,
 		keys.Search, keys.Filter, keys.Status, keys.Create, keys.Delete, keys.Editor,
 		keys.Backlog, keys.TagAssign, keys.Yank, keys.Assign, keys.Blocking,
 	}
+	if !boxFormEnabled() {
+		return bs
+	}
+	out := bs[:0:0]
+	for _, b := range bs {
+		if boxFormInlineKeys[b.Help().Key] {
+			continue
+		}
+		out = append(out, b)
+	}
+	// keys.Fullscreen (bean bt-oox1, PO finding #10): `v` has been live since
+	// E9 but appeared in NEITHER footer list, so the Help overlay was the only
+	// place it was ever advertised -- the same class of miss as `r` (bt-6nuz),
+	// which is why the two were fixed together.
+	//
+	// It is added only under the box form, and that is a budget decision, not
+	// a scoping accident: the flag-OFF footer already measures 152 cells and
+	// fills its two lines at 80 columns exactly, so ANY further entry spills
+	// it to three and costs a row of list content (mouse_test.go's own D02
+	// precondition pins those two lines). Dropping the four inline-badged
+	// keys leaves the flag-ON footer at 127 cells, with room to spare. Epic
+	// bt-vy1q's standing constraint -- everything additive and gated,
+	// flag-off output byte-identical -- points the same way, and the PO saw
+	// the miss with BT_BOXFORM=1 in the first place.
+	return append(out, keys.Fullscreen)
 }
+
+// boxFormInlineKeys are the footer keys the box-form Detail pane already
+// shows itself (bt-fy5d). e/s/a/t are literal (x) badges rendered by
+// detailBoxForm's Title/Status/Parent/Tags boxes and panelBox("Body") --
+// o (Type) and u (Priority) are badges too but were never in the footer set
+// to begin with.
+//
+// The membership rule is exactly "this key is rendered as an inline (x)
+// badge", nothing looser. bean bt-6nuz (PO finding #6) removed `r`
+// (Blocking), which bt-fy5d had admitted on the weaker ground that its
+// SUBJECT -- the Relations panel -- is on screen. But a panel is not a
+// badge: the Relations panel carries no (r), so hiding `r` from the footer
+// left the key advertised nowhere at all while it stayed fully live. Since
+// a footer entry is the only discovery surface a badge-less key has,
+// dropping one is a net loss of information rather than a de-duplication.
+// TestBoxFormInlineKeysAllHaveAnInlineBadge (footer_boxform_test.go) now
+// holds this rule structurally against the real detailBoxForm render.
+var boxFormInlineKeys = map[string]bool{"e": true, "s": true, "a": true, "t": true}
 
 // viewBrowseRepo renders the two-pane master-detail Browse view. Mirrors
 // Chrome()'s own algebra exactly (view.go) so the frame always fills
@@ -958,18 +1340,33 @@ func (m model) viewBrowseRepo() string {
 	// critical). bt-81f0 (Notifications vereinheitlichen, Q1-Annahme):
 	// m.err lost this slot entirely -- Toast is the ONE visible channel for
 	// real load failures now, the status line carries ONLY this indicator.
-	indicator := ""
-	if m.watchUnavailable {
-		indicator = "watch unavailable — ctrl+r for manual reload"
-	}
-	status := statusBar(indicator, innerW)
+	status := m.statusLine(innerW)
 
 	// E5 Task 4 (bean bt-mne6): bodyH/lw/rw now come from the SAME
 	// clickPaneGeometry helper treeClickRow (below) uses to map a click back
 	// to a row -- single source for the numeric pane geometry, not just the
 	// head/localKeys strings above (Golden-Rule-Drift-Schutz).
-	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, rw, _, _ := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
 	nodes := m.visibleNodes()
+
+	// S3 (jira-style-experiment, BT_BOXFORM): the persistent filter chip row
+	// (box_filter_bar.go, design-spec.md D02/D08) sits between the header
+	// divider and the Tree/Detail split, ONLY when boxFormEnabled() --
+	// existing composition (bodyH/content below) stays byte-for-byte
+	// unchanged when the flag is off. filterBarRow's height is reclaimed
+	// from bodyH BEFORE the split renders, so the outer frame's total line
+	// count still matches clickPaneGeometry's own avail budget (Golden Rule
+	// #1: no forced Height() -- the frame grows exactly to its content, so
+	// adding a row without reclaiming its height would grow the frame past
+	// the terminal).
+	var filterBarRow string
+	if boxFormEnabled() {
+		filterBarRow = m.filterBar(innerW)
+		bodyH -= lipgloss.Height(filterBarRow)
+		if bodyH < 1 {
+			bodyH = 1
+		}
+	}
 
 	var body string
 	if m.fullscreen != fullscreenNone {
@@ -993,14 +1390,47 @@ func (m model) viewBrowseRepo() string {
 		paneW := innerW - 2
 		var listRows []string
 		if m.fullscreen == fullscreenList {
-			searchLine := m.treeSearchLine(paneW-2, "") // D02: Tree never shows a sort suffix
-			listRows = append([]string{searchLine}, m.treeRows(nodes, true, bodyH-1)...)
+			headRows := m.treePaneHeadRows(paneW - 2) // search head + column header (bean bt-f68z #11/#12)
+			// B8 (bean bt-s90e): the Vollbild-Liste sources its rows from the
+			// SAME m.flatView switch the split's own left pane does (the
+			// `else if m.flatView` branch below) -- this branch used to call
+			// treeRows() unconditionally, so `v` after `G` silently put the
+			// PO back in the Tree they had just toggled away from. Only the
+			// row SOURCE differs; the search head line, the bodyH-1 budget
+			// trade and the single-pane geometry are shared verbatim.
+			// Dispatch already handled flat mode here (keyTree routes to
+			// keyFlat, update.go; focusedBean resolves via flatSelected) --
+			// the render was the only half missing. NOT gated on
+			// boxFormEnabled(): `G` exists independently of BT_BOXFORM, and
+			// m.flatView's default false leaves the Tree path (and every
+			// pre-existing Vollbild golden) byte-for-byte untouched.
+			if m.flatView {
+				listRows = append(headRows, m.flatRows(m.flatVisible(), true, bodyH-len(headRows), paneW-2)...)
+			} else {
+				listRows = append(headRows, m.treeRows(nodes, true, bodyH-len(headRows), paneW-2)...)
+			}
 		}
 		var detailBean *data.Bean
 		if m.fullscreen == fullscreenDetail {
 			detailBean = m.focusedBean() // resolves via focusedBean's own fullscreenDetail case (update.go)
 		}
-		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel)
+		body = renderFullscreenBody(m.fullscreen, paneW, bodyH, listRows, true, m.idx, detailBean, m.secCursor, m.accOpen, m.fieldCursor, m.detailLevel, boxFormEffectiveScroll(m, detailBean))
+	} else if m.flatView {
+		// S5 (jira-style-ui experiment, Nested/Flat Browse toggle `G`,
+		// view_browse_flat.go): the LEFT pane renders the flat, sorted bean
+		// list instead of the Tree -- everything else (search head row
+		// budget trade, Detail pane via the SAME shared renderBeanAccordionPane,
+		// master-detail Split) mirrors the Tree branch below verbatim, just
+		// sourced from flatVisible()/flatRows()/renderFlatDetailPane instead
+		// of nodes/treeRows()/renderDetailPane. Checked BEFORE the Tree
+		// branch so m.flatView's default false leaves that branch, and every
+		// pre-existing golden depending on it, byte-for-byte untouched.
+		vis := m.flatVisible()
+		headRows := m.treePaneHeadRows(lw - 2) // D02 precedent: flat mode has no Sort-Toggle (unlike Backlog), no suffix
+		flatRowsWithHead := append(headRows, m.flatRows(vis, !m.detailFocus, bodyH-len(headRows), lw-2)...)
+		flatBox := renderPane(pane{rows: flatRowsWithHead}, lw, bodyH, !m.detailFocus)
+		detailBox := m.renderFlatDetailPane(vis, rw, bodyH, m.detailFocus)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, flatBox, detailBox)
 	} else {
 		// E2 Task 3 (bean bt-4ep2): the search head row is prepended to the Tree
 		// pane's rows, costing 1 line of its bodyH content budget -- the actual
@@ -1008,14 +1438,18 @@ func (m model) viewBrowseRepo() string {
 		// now that renderPane no longer reserves its own title+separator lines)
 		// so the combined [searchLine, ...treeRows] slice still fits renderPane's
 		// own Golden-Rule-#1 line cap.
-		searchLine := m.treeSearchLine(lw-2, "") // D02: Tree never shows a sort suffix
-		treeRowsWithHead := append([]string{searchLine}, m.treeRows(nodes, !m.detailFocus, bodyH-1)...)
+		headRows := m.treePaneHeadRows(lw - 2) // D02: Tree never shows a sort suffix
+		treeRowsWithHead := append(headRows, m.treeRows(nodes, !m.detailFocus, bodyH-len(headRows), lw-2)...)
 		treeBox := renderPane(pane{rows: treeRowsWithHead}, lw, bodyH, !m.detailFocus)
 		detailBox := m.renderDetailPane(nodes, rw, bodyH, m.detailFocus)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, treeBox, detailBox)
 	}
 
-	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + localKeys + "\n" + status
+	content := head + "\n" + div
+	if boxFormEnabled() {
+		content += "\n" + filterBarRow
+	}
+	content = appendStatusLine(content+"\n"+body+"\n"+div+"\n"+localKeys, status)
 	out := outerBorder(content, innerW, true)
 
 	return m.composeOverlays(out, w, h)
@@ -1047,29 +1481,50 @@ func treeClickRow(m model, nodes []treeNode, msg tea.MouseMsg) (idx int, ok bool
 	innerW := w - 2
 	head, localKeys := m.browseRepoChrome(innerW)
 
-	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.settings.Layout.TreeWidth)
+	bodyH, lw, _, originX, originY := clickPaneGeometry(w, h, head, localKeys, m.statusLine(innerW), m.settings.Layout.TreeWidth)
+	if boxFormEnabled() {
+		// B6 (S6, jira-style-ui experiment): boxFormEnabled()'s persistent
+		// filter bar (box_filter_bar.go) sits between the header divider and
+		// the Tree/Detail split ONLY while the flag is on (viewBrowseRepo,
+		// above) -- it reclaims its 3 rows from bodyH BEFORE the split
+		// renders, but clickPaneGeometry's own originY has no knowledge of
+		// it (that helper is shared with Backlog, which never shows the
+		// bar). treeClickRow is BROWSE-only (mouseTreeClick's own call
+		// site, mouse.go), so an unconditional boxFormEnabled() check here
+		// is correct without an extra m.view guard.
+		//
+		// bt-vpvu ROOT CAUSE: the originY correction above landed in S6, but
+		// the matching bodyH correction did NOT -- the renderer reclaims the
+		// bar's 3 rows from bodyH before windowing, this hit-test kept
+		// windowing against the UNREDUCED bodyH. Both halves computed a
+		// different window start, so every click landed on the wrong bean the
+		// moment the list was scrolled far enough for the two starts to
+		// diverge (at the top of an unscrolled list both clamp to 0, which is
+		// why it looked like "sometimes works"). Reproduced live at 80x30
+		// against sproutling before the fix.
+		originY += filterBarHeight
+		bodyH -= filterBarHeight
+	}
+	if bodyH < 1 {
+		bodyH = 1
+	}
 
 	if msg.X < originX || msg.X >= originX+lw {
 		return 0, false // right Detail pane, or off-screen -- no Tree target
 	}
-	clickRow := msg.Y - originY
-	if clickRow <= 0 {
-		return 0, false // above the pane, or row 0 == the search head line
+	// The head rows (search head + column header, bean bt-f68z) are never a
+	// node target -- and their COUNT is now variable (the boxed search head is
+	// 3 lines, the plain one 1), so it is read from the one function that
+	// builds them rather than assumed to be 1.
+	headRows := m.treePaneHeadRows(lw - 2)
+	clickRow := msg.Y - originY - len(headRows)
+	if clickRow < 0 {
+		return 0, false // above the pane, or on the search head / column header
 	}
 
-	windowRows := bodyH - 1
-	if windowRows < 0 {
-		windowRows = 0
-	}
-	pos := m.cursorPos(nodes)
-	start := windowStart(len(nodes), windowRows, pos)
-	visible := windowRows
-	if len(nodes)-start < visible {
-		visible = len(nodes) - start
-	}
-	nodeWindowIdx := clickRow - 1
-	if nodeWindowIdx < 0 || nodeWindowIdx >= visible {
-		return 0, false
-	}
-	return start + nodeWindowIdx, true
+	// Rows are no longer 1:1 with beans (hanging-indent title wrapping, bean
+	// bt-f68z), so the clicked LINE is resolved through the very same
+	// blockWindow the renderer used -- not by dividing by one.
+	_, rowElem := blockWindow(m.treeBlocks(nodes, !m.detailFocus, lw-2), bodyH-len(headRows), m.cursorPos(nodes))
+	return blockWindowElemAt(rowElem, clickRow)
 }

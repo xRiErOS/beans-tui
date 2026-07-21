@@ -1,3 +1,6 @@
+---
+uid: 106f2a53-4891-4c71-b333-5cea7650c819
+---
 # LESSONS-LEARNED — beans-tui
 
 Append-only-Log. Einträge werden NIE umgeschrieben oder gelöscht, nur unten
@@ -380,3 +383,31 @@ neue Sektion). Jeder Eintrag hat exakt drei Felder:
 - **Was lief nicht rund:** `beans list`-ETag hasht die default-gefüllte In-Memory-Repräsentation, `--if-match` die rohen Datei-Bytes — nie mutierte beans ohne `priority:`-Zeile konflikten deterministisch und unheilbar per Watcher-Refresh (PO-Befund im lean-stack-Repo, 9 beans betroffen).
 - **Wie gefixt:** Datenheilung per einmaliger kanonischer Mutation (raw-Hash als if-match); Upstream-Issue-Entwurf erstellt (docs/_free-notes/); beans-tui bewusst OHNE Workaround (D04).
 - **Forward-Guard:** Bei „Conflict trotz Refresh"-Symptomen zuerst list-ETag vs. fnv1a64(raw bytes) diffen (Loop aus bt-0xrb-Diagnose) statt bt-seitig zu debuggen; bei bulk-importierten beans-Repos Heilungs-Sweep einplanen, bis Upstream gefixt.
+
+## 2026-07-20 — jira-Style-UI: PO-Befund-Runde (Quellen: bt-wtqs-ERRATA, Reviews)
+
+### 1. clickPaneGeometry-originY zeigt auf die MITTLERE Strip-Zeile, nicht die erste
+
+- **Was lief nicht rund:** Filter-Strip-Klick (bt-wtqs) traf zunächst daneben — der Klick auf die oberste Strip-Zeile öffnete nichts. `clickPaneGeometry`s rohes `originY` liegt auf der MITTLEREN der drei Strip-Zeilen (`filterBarHeight == 3`), nicht auf der Oberkante. Genau die Off-by-one-Klasse, die dieses Repo schon zweimal biss (bt-hd42/bt-vpvu).
+- **Wie gefixt:** `stripTop := rawOriginY - 1` in `mouse.go` (`filterBarFieldAt`/`filterBarHit`), per echtem `View()`-Dump verifiziert; der `-1` ist load-bearing (Reviewer-Mutations-Probe: Kippen → alle 6 Geometrie-Fälle RED bei 80 UND 120 Spalten).
+- **Forward-Guard:** Jeder neue Maus-Hit-Test auf eine mehrzeilige Region MUSS render-geerdet testen (Klick-Koordinate aus `ansi.Strip(m.View())` ableiten, NIE handrechnen) — dann fällt die originY-Zeilensemantik im Test sofort auf. Merke: `clickPaneGeometry`-originY ist NICHT die Region-Oberkante; die Zeilen-Ableitung immer per Render-Dump gegenprüfen.
+
+### 2. Render-geerdeter Geometrie-Test doppelt als Reorder-Drift-Guard
+
+- **Was lief nicht rund:** Kein echter Fehler — Implementer sorgte sich, dass das hartcodierte Chip→Facet-Mapping (`filterBarFieldAt` `facets`-Slice, synchron zu `box_filter_bar.go` `cells`) still driftet.
+- **Wie gefixt:** Nichts zu fixen — der Reviewer zeigte, dass der label-lokalisierende Test (Klick-Spalte aus der gerenderten Chip-Beschriftung) einen Chip-REORDER automatisch rot färbt: die Spalte verschiebt sich, die hartcodierte Facette passt nicht mehr.
+- **Forward-Guard:** Muster festhalten — Geometrie-Tests, die ihre Klick-Koordinate aus dem gerenderten Label ableiten (statt aus einem angenommenen Index), sind zugleich Reorder-Drift-Guards. Keinen separaten Guard doppeln. Restrisiko nur bei Chip-ANZAHL-Änderung (Slice-Länge vs. `gridColWidths`), das gehört in ein eigenes bean.
+
+### 3. Overlay-Geometrie-Tests, die nur EINE Popup-Ecke prüfen, übersehen Chrome-Korruption + Spaltenkollision
+
+- **Was lief nicht rund:** Der bt-f0y9-Slice-C-Umbau (Value-Menü feld-verankert) hatte eine grüne, render-geerdete Testsuite — die aber je Test nur die untere linke Popup-Ecke an einer berechneten Position prüfte. Zwei echte Bugs überlebten das an Standardmaßen: **B01** — Flip-up ergab negatives y, Popup-Mitte überschrieb die App-Titelzeile bei 80×24; **B02** — der feld-unabhängige Rechts-Clamp klemmte Type- UND Priority-Popup auf dieselbe Spalte (beide 38), Anker-Treue gebrochen. Erst ein voller `ansi.Strip(m.View())`-Dump bei 80×24 machte beide sichtbar.
+- **Wie gefixt:** B01 per Chrome-Floor-Klemmung (`valueMenuPopupY` liefert nie ein y in die App-Kopfzeilen); B02 per inhaltsbemessener Popup-Breite (~29 statt fix 42) + linksbündiger, minimal geschobener Positionierung. Neue Tests prüfen **Chrome-Integrität** (alle Zeilen oberhalb des Popups byte-identisch zum Vor-Öffnen-Zustand) und **verschiedene, feld-nahe Anker** je Feld — nicht nur eine Ecke (Commit 27dc35d).
+- **Forward-Guard:** Für jedes verankerte/positionierte Overlay gilt: Geometrie-Test MUSS (a) die Integrität der App-Chrome ober-/unterhalb des Popups assertieren (ganze Zeilen, nicht eine Ecke) und (b) bei mehreren möglichen Ankerpositionen belegen, dass sie SICHTBAR VERSCHIEDEN und je feld-nah sind. Ein voller `View()`-Dump bei 80×24 (Standard-Terminalmaß) gehört in den Review-Durchlauf jedes Popup-Umbaus — die Ein-Ecken-Prüfung ist strukturell blind für Nachbar-Kollision und Chrome-Überschreibung.
+
+## 2026-07-21 — jira-Style-UI: Seiten-Indikator-Position (bt-adkn Rework, 3 PO-Runden)
+
+### 1. Rahmen-Badge-Position muss über ALLE Zustände invariant sein — nicht nur „schön ausgerichtet"
+
+- **Was lief nicht rund:** Der Seiten-Indikator in der Body-Titelzeile (`╭─ Body ─ ●○ ── (e) ─╮`) provozierte DREI PO-Rejects hintereinander, alle „das (e) springt": (a) right-parked → linke Kante schwankte mit der Badge-Breite; (b) `n/N` wuchs beim Blättern über Stellen-Grenzen (9→10→100) und fiel am schmalen Budget-Rand weg → (e) sprang auf die badge-lose Fallback-Position; (c) `boxTopBorderBadges` (Indikator da) parkte (e) an 2 Dashes, der Fallback `boxTopBorderHotkey` (Indikator weg, z.B. Body passt) an 3 → (e) sprang beim Bean-Wechsel passt↔überläuft.
+- **Wie gefixt:** Drei Stabilisatoren übereinander: Indikator LINKS ankern + (e) fest rechts; Seitenzahl auf `count`-Stellen padden (Badge-Breite pro Bean konstant → kein Wegfall/Sprung beim Blättern); `minRightDashes` in `boxTopBorderBadges` an `boxTopBorderHotkey` angleichen (3), damit (e) mit UND ohne Indikator dieselbe Spalte hat (deckt sich zugleich mit `(r)`/`(a)`).
+- **Forward-Guard:** Ein positionsstabiles Badge/Chip in einem Rahmen erfordert, dass die (e)-Spalte invariant ist gegen (1) Inhaltsbreite des Nachbar-Badges, (2) Anwesenheit/Abwesenheit des Nachbar-Badges (Fallback-Pfad!), (3) Content-abhängige Breitensprünge über die Zeit (Stellenzahl). Test-Trias: fixe Breite pro Datensatz, gleiche Anker-Spalte present-vs-absent, gleiche Spalte narrow-vs-wide. Die Prüfung MUSS bei GRENZBREITE laufen — 80-Spalten-Smoke reicht NICHT: die Sprünge (b)/(c) waren erst bei ~54–58 Spalten sichtbar, weil dort das Badge-Budget nahe der Fit-Schwelle liegt. Schmalen Smoke (≤60 Spalten, über Seite 9→10 hinaus blättern) in den Review-Durchlauf jeder Rahmen-Badge-Änderung aufnehmen.

@@ -508,7 +508,7 @@ func TestBacklogChromeHeaderShowsExactlyFourGlobals(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	head, _ := m.backlogChrome(200) // wide enough to never trigger breadcrumb's narrow-stack fallback
 	plain := stripHint(head)
-	for _, want := range []string{"ctrl+k commands", "p repos", "? help", "q quit"} {
+	for _, want := range []string{"K commands", "p repos", "? help", "q quit"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("backlogChrome header = %q, want it to contain %q", plain, want)
 		}
@@ -554,7 +554,7 @@ func TestBacklogChromeFooterMatchesQ06List(t *testing.T) {
 	m := fixtureModel(t, backlogBeans())
 	_, localKeys := m.backlogChrome(500) // wide enough for the whole list on one line
 	plain := stripHint(localKeys)
-	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking"
+	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Relations"
 	if plain != want {
 		t.Errorf("backlogChrome footer = %q, want exactly %q", plain, want)
 	}

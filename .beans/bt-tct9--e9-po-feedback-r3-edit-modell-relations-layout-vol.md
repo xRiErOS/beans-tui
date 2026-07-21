@@ -1,13 +1,13 @@
 ---
 # bt-tct9
 title: 'E9 — PO-Feedback R3: Edit-Modell, Relations-Layout, Vollbild-Navigation'
-status: in-progress
+status: completed
 type: epic
 priority: high
 tags:
     - accepted
 created_at: 2026-07-16T06:21:08Z
-updated_at: 2026-07-17T06:27:29Z
+updated_at: 2026-07-18T15:04:09Z
 parent: bt-apmy
 ---
 

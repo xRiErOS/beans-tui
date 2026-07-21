@@ -76,6 +76,43 @@ func wrapText(s string, w int) string {
 // that param is gone. The status line itself stays (Q1: cap the Fehler-
 // Anbindung only, no dynamic footer height / layout rework) -- it now
 // carries ONLY the scroll indicator.
+// statusLine is the ONE source for the footer's optional status row across
+// viewBrowseRepo/viewBacklog/viewTagManagement AND their click-geometry
+// reconstructions (clickPaneGeometry, mouse.go) -- bean bt-oqsv: the row is
+// no longer RESERVED, it is rendered only when it carries something, so
+// view and hit-test must agree on "is it there?" from the same expression.
+// I04: a failed data.Watch start (no live reload) must never degrade
+// silently -- it is the only tenant of this slot since bt-81f0 moved real
+// load failures to Toast.
+func (m model) statusLine(width int) string {
+	indicator := ""
+	if m.watchUnavailable {
+		indicator = "watch unavailable — ctrl+r for manual reload"
+	}
+	return statusBar(indicator, width)
+}
+
+// statusLineHeight is the number of screen rows statusLine's result occupies
+// (bean bt-oqsv): 0 for the empty string. Before bt-oqsv the row was
+// unconditionally appended, so an empty status still cost a permanently
+// blank line -- footH's own "+2" in clickPaneGeometry encoded exactly that
+// reservation. Both sides now use THIS function instead of a constant.
+func statusLineHeight(status string) int {
+	if status == "" {
+		return 0
+	}
+	return lipgloss.Height(status)
+}
+
+// appendStatusLine appends status as its own row to content, or returns
+// content untouched when there is nothing to show (bean bt-oqsv).
+func appendStatusLine(content, status string) string {
+	if status == "" {
+		return content
+	}
+	return content + "\n" + status
+}
+
 func statusBar(indicator string, width int) string {
 	right := ""
 	if indicator != "" {
@@ -272,18 +309,33 @@ func Chrome(o ChromeOpts) string {
 	wrapped := lipgloss.NewStyle().Padding(0, 1).Render(wrapText(o.Body, innerW-2))
 	localKeys := footer(o.FooterHint, innerW)
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
-	footH := lipgloss.Height(localKeys) + 2             // + status line + divider above the footer
-	avail := innerH - lipgloss.Height(head) - footH - 1 // - divider under the top bar
-	if avail < 4 {
-		if o.fallbackAvail > 0 {
-			avail = o.fallbackAvail
-		} else {
-			avail = 18 // height unknown (init/tests) → generous fallback
+	// bean bt-oqsv: the status line is no longer RESERVED, so its height is
+	// not a constant here either. Chrome's own indicator is a chicken-and-egg
+	// case the two-pane views do not have: scrollView produces `ind`, but it
+	// needs `avail`, which needs to know whether `ind` will occupy a line.
+	// Resolved with a monotone two-pass -- pass 1 assumes no status line;
+	// if one IS needed, pass 2 re-windows one line shorter. Shrinking the
+	// window can only ever make MORE content overflow, never less, so a
+	// non-empty indicator can never become empty on the second pass: the
+	// loop provably settles after at most one correction.
+	availFor := func(statusH int) int {
+		footH := lipgloss.Height(localKeys) + 1 + statusH   // + divider above the footer
+		avail := innerH - lipgloss.Height(head) - footH - 1 // - divider under the top bar
+		if avail < 4 {
+			if o.fallbackAvail > 0 {
+				return o.fallbackAvail
+			}
+			return 18 // height unknown (init/tests) → generous fallback
 		}
+		return avail
 	}
-	win, ind := scrollView(wrapped, avail, o.Scroll)
+	win, ind := scrollView(wrapped, availFor(0), o.Scroll)
 	status := statusBar(ind, innerW)
-	content := head + "\n" + div + "\n" + win + "\n" + div + "\n" + localKeys + "\n" + status
+	if statusH := statusLineHeight(status); statusH > 0 {
+		win, ind = scrollView(wrapped, availFor(statusH), o.Scroll)
+		status = statusBar(ind, innerW)
+	}
+	content := appendStatusLine(head+"\n"+div+"\n"+win+"\n"+div+"\n"+localKeys, status)
 	// outerBorder's width param is the CONTENT width the border wraps around
 	// (lipgloss's Border() adds 2 columns on top of Width()) — pass innerW
 	// (already reduced above), not o.Width, or the frame ends up o.Width+2

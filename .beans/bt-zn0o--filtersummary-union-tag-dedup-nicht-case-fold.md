@@ -1,11 +1,11 @@
 ---
 # bt-zn0o
 title: 'filterSummary-Union: Tag-Dedup nicht case-fold'
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-07-17T11:58:00Z
-updated_at: 2026-07-17T11:58:00Z
+updated_at: 2026-07-18T15:05:07Z
 parent: bt-5uzr
 ---
 

@@ -219,9 +219,9 @@ func (m model) dispatchPalette(it paletteItem) (tea.Model, tea.Cmd) {
 			// above relies on).
 			return m.openTagPicker()
 		case "parent":
-			return m.openParentPicker(), nil
+			return m.openParentPicker()
 		case "blocking":
-			return m.openBlockingPicker(), nil
+			return m.openBlockingPicker()
 		case "edit_title":
 			if b := m.focusedBean(); b != nil {
 				return m.openEditTitleForm(b)

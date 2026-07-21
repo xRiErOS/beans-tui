@@ -705,7 +705,7 @@ func TestFullscreenNeverChangesViewID(t *testing.T) {
 // the FULL innerW (not a Split lw/rw).
 func TestRenderFullscreenBodyListUsesFullPaneWidth(t *testing.T) {
 	rows := []string{"row one", "row two"}
-	out := renderFullscreenBody(fullscreenList, 40, 10, rows, true, nil, nil, 0, 1, 0, 0)
+	out := renderFullscreenBody(fullscreenList, 40, 10, rows, true, nil, nil, 0, 1, 0, 0, 0)
 	lines := strings.Split(out, "\n")
 	if len(lines) == 0 {
 		t.Fatal("renderFullscreenBody returned no lines")
@@ -721,7 +721,7 @@ func TestRenderFullscreenBodyDetailUsesFullPaneWidth(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	b := m.idx.ByID["ms-1"]
 
-	out := renderFullscreenBody(fullscreenDetail, 50, 12, nil, true, m.idx, b, 0, 1, 0, 0)
+	out := renderFullscreenBody(fullscreenDetail, 50, 12, nil, true, m.idx, b, 0, 1, 0, 0, 0)
 	lines := strings.Split(out, "\n")
 	if len(lines) == 0 {
 		t.Fatal("renderFullscreenBody returned no lines")

@@ -101,7 +101,9 @@ func TestHelpCapturesSingleKeysWhileOpen(t *testing.T) {
 		t.Fatal("`q` while Help is open must not ALSO trigger quit-confirm (full capture)")
 	}
 
-	for _, msg := range []tea.KeyMsg{runeMsg('c'), runeMsg('s'), {Type: tea.KeyCtrlK}} {
+	// bt-mx4k: the palette probe is `K`, not the retired ctrl+k -- an
+	// unbound key can no longer prove that Help captures it.
+	for _, msg := range []tea.KeyMsg{runeMsg('c'), runeMsg('s'), runeMsg('K')} {
 		nm2 := step(t, m, msg) // m.helpOpen is still true here
 		if !nm2.helpOpen {
 			t.Errorf("%v closed Help, want it to stay open (only esc/?/q close it)", msg)

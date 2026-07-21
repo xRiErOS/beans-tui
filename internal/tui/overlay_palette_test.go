@@ -388,29 +388,42 @@ func TestKeyPaletteBackspaceTrims(t *testing.T) {
 
 // --- Capture-Order (design decision h) ---
 
-func TestHandleKeyCtrlKOpensPaletteFromTree(t *testing.T) {
+func TestHandleKeyPaletteOpensPaletteFromTree(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
-	m = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	m = step(t, m, runeMsg('K'))
 	if !m.paletteOpen {
-		t.Fatal("ctrl+k from the tree did not open the palette")
+		t.Fatal("K from the tree did not open the palette")
 	}
 }
 
-func TestHandleKeyCtrlKUnreachableWhileFilterOpen(t *testing.T) {
+// TestHandleKeyCtrlKNoLongerBound guards bean bt-mx4k: the Command-Center used
+// to answer to BOTH ctrl+k and K. The PO retired ctrl+k (one key, one
+// function; D07 case convention: uppercase = view/global) -- K is now the
+// sole binding, and the header six characters shorter, which matters at 80
+// columns.
+func TestHandleKeyCtrlKNoLongerBound(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
-	m.filterOpen = true
 	m = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlK})
 	if m.paletteOpen {
-		t.Fatal("ctrl+k opened the palette while filterOpen -- capture order violated (design decision h)")
-	}
-	if !m.filterOpen {
-		t.Fatal("filterOpen was cleared -- ctrl+k must have been swallowed by keyFilterMenu, not routed to the palette")
+		t.Fatal("ctrl+k opened the palette -- the binding was retired in bt-mx4k, K is the only key")
 	}
 }
 
-func TestHandleKeyCtrlKOpensPaletteEvenWithOverlayOpen(t *testing.T) {
+func TestHandleKeyPaletteUnreachableWhileFilterOpen(t *testing.T) {
+	m := fixtureModel(t, fixtureBeans())
+	m.filterOpen = true
+	m = step(t, m, runeMsg('K'))
+	if m.paletteOpen {
+		t.Fatal("K opened the palette while filterOpen -- capture order violated (design decision h)")
+	}
+	if !m.filterOpen {
+		t.Fatal("filterOpen was cleared -- K must have been swallowed by keyFilterMenu, not routed to the palette")
+	}
+}
+
+func TestHandleKeyPaletteOpensPaletteEvenWithOverlayOpen(t *testing.T) {
 	// Sanity: an E3 node-action overlay (e.g. Value-Menu) captures BEFORE
-	// the palette check -- ctrl+k must NOT reach openPalette while overlay
+	// the palette check -- K must NOT reach openPalette while overlay
 	// != overlayNone (same capture-order contract as filterOpen above).
 	m := fixtureModel(t, fixtureBeans())
 	m = focusBean(m, "tk-2")
@@ -418,9 +431,9 @@ func TestHandleKeyCtrlKOpensPaletteEvenWithOverlayOpen(t *testing.T) {
 	if m.overlay == overlayNone {
 		t.Fatal("test setup invalid: value menu did not open")
 	}
-	m = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	m = step(t, m, runeMsg('K'))
 	if m.paletteOpen {
-		t.Fatal("ctrl+k opened the palette while an overlay was open -- capture order violated")
+		t.Fatal("K opened the palette while an overlay was open -- capture order violated")
 	}
 }
 

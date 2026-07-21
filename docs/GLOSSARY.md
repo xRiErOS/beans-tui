@@ -1,3 +1,6 @@
+---
+uid: 35ff28b5-4577-40af-8da8-751a122abf32
+---
 # Glossar — beans-tui
 
 Gemeinsame Sprache für PO und Agenten. **Prosa-Begriff und Code-Bezeichner stehen
@@ -8,15 +11,16 @@ gesprochenen Begriff ab, wird das hier vermerkt statt stillschweigend umbenannt.
 
 ## Box-Darstellung (jira-Style)
 
-| Begriff | Bedeutung | Code |
-|---|---|---|
-| **boxed field** | Ein Feld, jira-artig als Box dargestellt. **Box-Titel = Feld-Titel**, **Box-Badge = Keybind**. | `dropdownBox()` |
-| **Box-Titel** | Das Feld-Label, im Rahmen sitzend (heute oben). | `boxTopBorder(label, …)` |
-| **Box-Badge** | Der Keybind des Feldes, im Rahmen sitzend (heute unten, in Klammern: `(s)`). | `boxBottomBorder(hotkey, …)` |
-| **Box-Form** | Die gesamte Detail-Ansicht aus boxed fields: Title / Status\|Type\|Priority / Parent\|Tags / Body / Relations / History. | `detailBoxForm()`, Flag `BT_BOXFORM` |
-| **Panel** | Ein mehrzeiliges boxed field (Body, Relations, History). Gleiche Anatomie, nur hoch. | `panelBox()` |
-| **Filter-Strip** | Die persistente Zeile boxed fields oben (Type/Status/Priority/Tags). | `filterBar()` — Bezeichner weicht ab, s.u. |
-| **Zelle** | Ein boxed field innerhalb einer mehrspaltigen Zeile. | `scalarCell`, angeordnet von `gridRow()` |
+| Begriff          | Bedeutung                                                                                                                | Code                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| **boxed field**  | Ein Feld, jira-artig als Box dargestellt. **Box-Titel = Feld-Titel**, **Box-Badge = Keybind**.                           | `dropdownBox()`                            |
+| **Box-Titel**    | Das Feld-Label, im Rahmen sitzend (heute oben).                                                                          | `boxTopBorder(label, …)`                   |
+| **Box-Badge**    | Der Keybind des Feldes, im Rahmen sitzend (heute unten, in Klammern: `(s)`).                                             | `boxBottomBorder(hotkey, …)`               |
+| **Box-Form**     | Die gesamte Detail-Ansicht aus boxed fields: Title / Status\|Type\|Priority / Parent\|Tags / Body / Relations / History. | `detailBoxForm()`, Flag `BT_BOXFORM`       |
+| **Panel**        | Ein mehrzeiliges boxed field (Body, Relations, History). Gleiche Anatomie, nur hoch.                                     | `panelBox()`                               |
+| **Filter-Strip** | Die persistente Zeile boxed fields oben (Type/Status/Priority/Tags).                                                     | `filterBar()` — Bezeichner weicht ab, s.u. |
+| **Zelle**        | Ein boxed field innerhalb einer mehrspaltigen Zeile.                                                                     | `scalarCell`, angeordnet von `gridRow()`   |
+| **Inline-Dropdown** (Anker-Popup) | Das Wertmenü eines endlichen Feldes (Status/Type/Priority), das **feld-verankert** direkt unter/über der Box aufklappt statt zentriert — maus-nativ wählbar. D09 REVIDIERT. | `placeValueMenuOverlay`, `boxFormFieldRect`, `placeOverlayAt` |
 
 ### Anmerkungen
 - **Die Badge-Position ist nicht Teil der Definition.** Für den Body wandert sie in den
@@ -33,12 +37,12 @@ gesprochenen Begriff ab, wird das hier vermerkt statt stillschweigend umbenannt.
 **Top-Level-Views** — je eine Konstante in `viewID` (`internal/tui/types.go`). Das sind die
 Bildschirme, zwischen denen umgeschaltet wird.
 
-| Name | Datei | Kommentar |
-|---|---|---|
-| **Lobby** | `view_lobby.go` | Repo-Picker mit ASCII-Logo. Entfällt beim Start in einem einzelnen Repo. Konstante `viewLobby`. |
-| **Browse** | `view_browse_repo.go` | Der Primat-View: Master-Detail, links Tree, rechts Detail. Konstante `viewBrowseRepo`. |
-| **Backlog** | `view_browse_backlog.go` | Flache Liste parentloser/ready beans, ebenfalls Master-Detail, sortierbar. Taste `b`. Konstante `viewBacklog`. |
-| **Tag-Management** | `view_tag_management.go` | Zentrale Tag-Verwaltung. Konstante `viewTagManagement`. |
+| Name               | Datei                    | Kommentar                                                                                                      |
+| ------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| **Lobby**          | `view_lobby.go`          | Repo-Picker mit ASCII-Logo. Entfällt beim Start in einem einzelnen Repo. Konstante `viewLobby`.                |
+| **Browse**         | `view_browse_repo.go`    | Der Primat-View: Master-Detail, links Tree, rechts Detail. Konstante `viewBrowseRepo`.                         |
+| **Backlog**        | `view_browse_backlog.go` | Flache Liste parentloser/ready beans, ebenfalls Master-Detail, sortierbar. Taste `b`. Konstante `viewBacklog`. |
+| **Tag-Management** | `view_tag_management.go` | Zentrale Tag-Verwaltung. Konstante `viewTagManagement`.                                                        |
 
 **Darstellungen innerhalb eines Views** — eigene Dateien, aber **keine** eigene `viewID`.
 Sie sind Zustände von Browse, nicht Geschwister davon:
@@ -79,6 +83,29 @@ brauchbar als Referenz, die Bezeichner nicht.
 | **Facetten-Overlay** | Das Filter-Overlay hinter `f`. | `box_filter_facets.go` |
 | **Command-Palette** | Der globale Befehlsaufruf, Taste `K`. | `overlay_palette.go` |
 | **Toast** | Kurze Einblendung für Rückmeldungen; hat die frühere reservierte Statuszeile abgelöst. | — |
+
+## Layout und Scrollen
+
+- **Hängender Einzug** — Umbruch einer Listenzeile, bei dem die Folgezeilen auf der
+  Spalte des Titels beginnen statt am Zeilenanfang.
+- **Zeilen-Budget** — eine Höhenbegrenzung, die gerenderte Terminal**zeilen** zählt; das
+  Gegenstück ist der **Element-Cap**, der Listen**einträge** zählt. Nur das Zeilen-Budget
+  begrenzt Höhe verlässlich — sobald Titel umbrechen, erzeugt ein Eintrag mehrere Zeilen.
+- **Scroll-Mitnahme** — Regel, dass der Viewport dem Fokus folgt: ein fokussiertes Feld
+  darf nie außerhalb des sichtbaren Bereichs liegen. Beim Wandern über ein Feld, das höher
+  als der Ausschnitt ist, wird es erst vollständig gezeigt und dann weitergesprungen
+  (*reveal-then-move*).
+- **Seiten-Indikator** — Punktreihe rechts in der **Body-Titelzeile** (`╭─ Body ── ●○○ (e) ─╮`):
+  ein Punkt je Seite, hell = aktuelle, dunkel = übrige (Grau-Token aus `internal/theme/`).
+  Bei mehr Seiten als Punkte passen, kompakte `n/N`-Form (`2/25`). Sitzt bewusst **in der
+  Body-Box**, nicht am äußeren Pane-Rahmen (B3, PO-Entscheidung 2026-07-21). Die Body-
+  Titelzeile ist **sticky**: solange man in den Body blättert, wird sie an die oberste
+  Viewport-Zeile geheftet und der Body-Text scrollt darunter — so bleibt Indikator **und**
+  Abschnittstitel **während des Blätterns sichtbar**, obwohl der Body-Box-Rahmen sonst
+  wegscrollen würde. Eine Seite = das sichtbare Zeilen-Budget des Panes (dieselbe Höhe, um
+  die `pgup`/`pgdn` springen), sodass Punkt-Grenze und Blätter-Halt exakt zusammenfallen.
+  `pgup`/`pgdn` blättern **fokus-unabhängig** (kein Tab nötig, wie das Mausrad — globaler
+  `handleKey`-Checkpoint). `boxFormPageIndex()` / `boxFormPageBadge()` / `boxTopBorderBadges()`.
 
 ## Arbeitsweise
 

@@ -171,7 +171,7 @@ func TestHandleKeyOnTagManagementViewDoesNotLeakHelpOrPalette(t *testing.T) {
 		t.Fatalf("want view to stay viewTagManagement, got %v", mm.view)
 	}
 
-	nm2, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
+	nm2, _ := m.Update(runeMsg('K'))
 	mm2 := nm2.(model)
 	if mm2.paletteOpen {
 		t.Fatalf("want paletteOpen=false (full-capture), got true")
@@ -682,10 +682,12 @@ func TestKeyTagMgmtInputCapturesEveryKeyNoLeak(t *testing.T) {
 		t.Fatal("setup: want input active after 'n'")
 	}
 
-	for _, r := range "d?" {
+	// bt-mx4k: `K` replaces the retired ctrl+k as the palette probe -- it is
+	// also an ordinary character, so it must land in the input like any
+	// other captured key.
+	for _, r := range "d?K" {
 		m = step(t, m, runeMsg(r))
 	}
-	m = step(t, m, keyMsg(tea.KeyCtrlK))
 
 	// I02 (T4-Review Runde 1): the Delete-Confirm is D15's page-local BOOL
 	// (tagMgmtDeleteConfirm), never an overlayID case -- the former
@@ -705,12 +707,12 @@ func TestKeyTagMgmtInputCapturesEveryKeyNoLeak(t *testing.T) {
 		t.Fatal("'?' while typing must not open Help")
 	}
 	if m.paletteOpen {
-		t.Fatal("ctrl+k while typing must not open the Command-Center")
+		t.Fatal("`K` while typing must not open the Command-Center")
 	}
 	if !m.tagMgmtInputActive || m.view != viewTagManagement {
 		t.Fatalf("want to stay in the input sub-mode on the Page, active=%v view=%v", m.tagMgmtInputActive, m.view)
 	}
-	if got, want := m.tagMgmtInput.Value(), "d?"; got != want {
+	if got, want := m.tagMgmtInput.Value(), "d?K"; got != want {
 		t.Fatalf("want every captured key typed into the input, got %q, want %q", got, want)
 	}
 }
@@ -1234,13 +1236,13 @@ func TestKeyTagManagementDeleteConfirmCapturesFullDispatchNoLeak(t *testing.T) {
 
 	m = step(t, m, runeMsg('d'))
 	m = step(t, m, runeMsg('?'))
-	m = step(t, m, keyMsg(tea.KeyCtrlK))
+	m = step(t, m, runeMsg('K')) // bt-mx4k: `K` replaces the retired ctrl+k
 
 	if m.helpOpen {
 		t.Fatal("'?' while Confirm is open must not open Help")
 	}
 	if m.paletteOpen {
-		t.Fatal("ctrl+k while Confirm is open must not open the Command-Center")
+		t.Fatal("`K` while Confirm is open must not open the Command-Center")
 	}
 	if !m.tagMgmtDeleteConfirm || m.tagMgmtDeleteTarget != "to-review" {
 		t.Fatalf("want Confirm to stay open and unchanged, got confirm=%v target=%q", m.tagMgmtDeleteConfirm, m.tagMgmtDeleteTarget)
@@ -1861,10 +1863,9 @@ func TestKeyTagMgmtInputCapturesEveryKeyNoLeakInRenameMode(t *testing.T) {
 	nm, _ := m.openTagMgmtInput("rename", "leak-probe")
 	m = nm.(model)
 
-	for _, r := range "d?" {
+	for _, r := range "d?K" { // bt-mx4k: `K` replaces the retired ctrl+k
 		m = step(t, m, runeMsg(r))
 	}
-	m = step(t, m, keyMsg(tea.KeyCtrlK))
 
 	if m.tagMgmtDeleteConfirm {
 		t.Fatal("'d' while typing (rename mode) must not open the page-local Delete-Confirm")
@@ -1876,7 +1877,7 @@ func TestKeyTagMgmtInputCapturesEveryKeyNoLeakInRenameMode(t *testing.T) {
 		t.Fatal("'?' while typing (rename mode) must not open Help")
 	}
 	if m.paletteOpen {
-		t.Fatal("ctrl+k while typing (rename mode) must not open the Command-Center")
+		t.Fatal("`K` while typing (rename mode) must not open the Command-Center")
 	}
 	if !m.tagMgmtInputActive || m.tagMgmtInputMode != "rename" {
 		t.Fatal("want the rename submode to stay active and unchanged")

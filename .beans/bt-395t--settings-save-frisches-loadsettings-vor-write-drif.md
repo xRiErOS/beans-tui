@@ -1,11 +1,11 @@
 ---
 # bt-395t
 title: 'Settings-Save: frisches LoadSettings vor Write (Drift-Fenster)'
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-07-17T11:55:08Z
-updated_at: 2026-07-17T11:55:08Z
+updated_at: 2026-07-18T15:05:06Z
 parent: bt-5uzr
 ---
 

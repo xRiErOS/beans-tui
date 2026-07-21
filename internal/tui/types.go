@@ -246,6 +246,60 @@ type model struct {
 	backlogList listState
 	backlogSort string
 
+	// Nested/Flat Browse toggle `G` (jira-style-ui experiment S5, D07
+	// uppercase = view/global group): flatView switches the Browse view's
+	// LEFT pane between the Tree (nested, default) and a flat, sorted list
+	// (columns) -- the master-detail split and the Detail pane itself are
+	// UNCHANGED (unlike the full-screen Backlog view, view_browse_backlog.go
+	// -- flat mode here is still Browse, master-detail stays intact). flatList
+	// is a minimal index-based cursor (listState, mirrors backlogList's own
+	// shape/rationale) over flatVisible()'s bean slice -- kept deliberately
+	// SEPARATE from the Tree's cursorID rather than reconciled into one
+	// shared cursor: the Tree's bean-ID cursor and a flat index cursor are
+	// different shapes with no natural unification, and the Tree's own
+	// cursorID/expanded state must survive a round-trip through flat mode
+	// untouched (toggling G back resumes the Tree exactly where it was).
+	// Default false -- existing tree goldens stay byte-identical.
+	flatView bool
+	flatList listState
+
+	// Box-form Detail-Pane scroll (jira-style-ui experiment, bean bt-ze10,
+	// epic bt-vy1q F1): detailBoxForm (box_detail_form.go) renders Title +
+	// scalar-grid + Body/Relations/History as ONE tall string with NO
+	// windowing of its own -- unlike the accordion's RELATIONS section
+	// (windowRelationsSection, view_browse_repo.go), a long Body used to
+	// simply get cut off, Relations/History unreachable. boxFormScroll is
+	// the offset renderAccordionPane's boxFormEnabled() branch windows that
+	// string to (scrollView, view.go), advanced/clamped by keyDetailFocus's
+	// up/down (update.go, boxFormEnabled()-gated) and wheelMove (mouse.go,
+	// wheel over the Detail pane) via mouse.go's adjustBoxFormScroll/
+	// boxFormScrollBounds. boxFormScrollBean is the bean ID the offset was
+	// last computed for -- a SELECTION change is detected lazily by
+	// comparing this against the currently focused bean's ID
+	// (boxFormEffectiveScroll, mouse.go) wherever the offset is READ, rather
+	// than hunted down at every one of the many cursor-move/click/jump call
+	// sites that can change the selected bean (Golden-Rule-Drift-Schutz: one
+	// derived check beats N independent, driftable reset sites). Both zero-
+	// valued by default -- accordion mode (boxFormEnabled() off) never reads
+	// either field.
+	boxFormScroll     int
+	boxFormScrollBean string
+
+	// Box-form Detail-Pane FIELD CURSOR (bean bt-1o4g, epic bt-vy1q, PO-
+	// Nebenbefund N8 "keyboard-first"): the index into boxFormFieldOrder
+	// (box_nav_field.go) the arrow keys move and enter activates while the
+	// Detail pane is focused. boxFormCursorBean mirrors boxFormScrollBean's
+	// derived-reset doctrine exactly (see above): the cursor is reset to the
+	// first field lazily, where it is READ (boxFormEffectiveCursor), by
+	// comparing this ID against the currently focused bean -- not at every
+	// call site that can change the selection. Zero-valued by default, which
+	// is ALSO the "cursor on Title" default, so no explicit init is needed;
+	// accordion mode (boxFormEnabled() off) never reads or writes either
+	// field, and an UNFOCUSED Detail pane renders with cursor -1 (no Mauve
+	// frame at all, so the flag-on goldens stay byte-identical).
+	boxFormCursor     int
+	boxFormCursorBean string
+
 	confirmQuit bool
 
 	// E3 (bean bt-dlgk): node-action overlays -- mutually exclusive by
@@ -258,11 +312,28 @@ type model struct {
 	// (design decision d). menu is the shared cursor for the value menu
 	// (T1) / future pickers (T2/T3) -- one open at a time, so one field
 	// suffices. menuItems is the value-menu's row list, built fresh at
-	// open time (openValueMenu, box_menu_value.go).
-	overlay   overlayID
-	mutTarget string
-	menu      listState
-	menuItems []valueMenuItem
+	// open time (openValueMenu, box_menu_value.go). valueMenuAnchorField
+	// (Slice C, bt-f0y9 "feld-verankertes Inline-Dropdown", D09 revidiert) is
+	// the boxFormFieldOrder (box_nav_field.go) index the open value menu is
+	// anchored to -- a STATIC group->field lookup (boxFormFieldIndexForGroup,
+	// box_menu_value.go), seeded by openValueMenu itself in the SAME call
+	// that flips overlay to overlayValueMenu, regardless of WHICH of the four
+	// trigger paths called it (keyboard s/o/u, field-cursor Enter, mouse
+	// click, Palette all funnel through openValueMenu(group) -- this is the
+	// ONE place that needs setting, not four). Only ever READ while
+	// m.overlay == overlayValueMenu (composeOverlays' placeValueMenuOverlay,
+	// view_browse_repo.go), which openValueMenu never sets without also
+	// freshly writing this field first -- so a stale value between opens can
+	// never be observed. boxFormFieldIndexForGroup returns -1 for an
+	// unrecognized group (defensive only, openValueMenu's callers never pass
+	// one); placeValueMenuOverlay falls back to the pre-existing centered
+	// placeOverlay whenever boxFormFieldRect can't resolve it (accordion mode
+	// off entirely ignores this field, same as boxScroll/boxCursor above).
+	overlay              overlayID
+	mutTarget            string
+	menu                 listState
+	menuItems            []valueMenuItem
+	valueMenuAnchorField int
 
 	// Tag-Picker `t` (E3 Task 2, bean bt-8v69, box_picker_tag.go): tagItems
 	// is the usage-counted, deterministically sorted row list (count desc,
@@ -328,6 +399,17 @@ type model struct {
 	// pending/original diff state here, a bean has exactly one parent.
 	parentItems []pickerItem
 
+	// parentFilter/parentFiltered (bean bt-a3a8, PO-Nebenbefund N7): the
+	// picker's own throwaway search+chip state and the subset of
+	// parentItems it currently admits. m.menu's cursor runs over
+	// parentFiltered, NOT parentItems -- "select what's on screen", the
+	// same semantics toggleTagPending gained under bt-9ipw/D01. The state
+	// is deliberately PICKER-LOCAL (box_picker_filter.go D1): it never
+	// touches m.filterStatus/Type/Priority/Tag, so opening a picker cannot
+	// re-filter the Browse view behind it.
+	parentFilter   pickerFilter
+	parentFiltered []pickerItem
+
 	// Blocking-Picker `B` (E3 Task 3, bean bt-p1uz, box_picker_blocking.go):
 	// blockItems lists every OTHER bean (self excluded, deliberately NO
 	// descendant/cycle exclusion -- design decision g: port-parity with
@@ -340,6 +422,14 @@ type model struct {
 	blockItems    []pickerItem
 	blockOriginal map[string]bool
 	blockPending  map[string]bool
+
+	// blockFilter/blockFiltered (bean bt-a3a8): the Blocking-Picker's own
+	// half of the same picker-local search+chip state parentFilter
+	// documents above. blockFiltered is what the cursor and every toggle
+	// address -- blockItems stays the untouched full candidate source, so
+	// clearing the query restores the whole list without a rebuild.
+	blockFilter   pickerFilter
+	blockFiltered []pickerItem
 
 	// huh-Form-Hosting (E3 Task 4, bean bt-y4ly, Port devd forms_shared.go):
 	// form is the embedded huh sub-model (nil when no form is open, the

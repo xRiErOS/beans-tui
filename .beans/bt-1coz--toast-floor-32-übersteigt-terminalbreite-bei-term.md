@@ -1,11 +1,11 @@
 ---
 # bt-1coz
 title: Toast-Floor 32 übersteigt Terminalbreite bei termW<32
-status: todo
+status: completed
 type: bug
 priority: low
 created_at: 2026-07-17T11:16:47Z
-updated_at: 2026-07-17T11:16:47Z
+updated_at: 2026-07-18T15:05:03Z
 parent: bt-5uzr
 ---
 

@@ -31,7 +31,7 @@ func TestBrowseRepoChromeHeaderShowsExactlyFourGlobals(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	head, _ := m.browseRepoChrome(200) // wide enough to never trigger breadcrumb's narrow-stack fallback
 	plain := stripHint(head)
-	for _, want := range []string{"ctrl+k commands", "p repos", "? help", "q quit"} {
+	for _, want := range []string{"K commands", "p repos", "? help", "q quit"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("browseRepoChrome header = %q, want it to contain %q", plain, want)
 		}
@@ -71,13 +71,13 @@ func TestBrowseRepoChromeFooterShowsFocusInFocusOut(t *testing.T) {
 // Footer-Liste (design-spec.md §15 PF-16, bean bt-ntoz/bt-d8kc): browseRepoLocalBindings()
 // renders EXACTLY "tab focus in · shift+tab focus out · / search · f Filter
 // · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank ·
-// a Parent · r Blocking" -- Navigation-Keys (Up/Down/Left/Right) are
+// a Parent · r Relations" -- Navigation-Keys (Up/Down/Left/Right) are
 // entirely gone.
 func TestBrowseRepoChromeFooterMatchesQ06List(t *testing.T) {
 	m := fixtureModel(t, fixtureBeans())
 	_, localKeys := m.browseRepoChrome(500) // wide enough for the whole list on one line
 	plain := stripHint(localKeys)
-	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Blocking"
+	want := "tab focus in · shift+tab focus out · / search · f Filter · s Status · c Create · d Delete · e Edit · b Backlog · t Tags · y Yank · a Parent · r Relations"
 	if plain != want {
 		t.Errorf("browseRepoChrome footer = %q, want exactly %q", plain, want)
 	}
@@ -329,7 +329,7 @@ func TestRenderAccordionPaneRelationsKeepsSelectedChildVisibleAcrossAllPositions
 	w, h := 60, 15 // avail = 15-5-4 = 6, winH = 5 -- forces windowing (12 > 5)
 
 	for i := 0; i < n; i++ {
-		out := renderAccordionPane(m.idx, b, w, h, relationsSectionIdx+1, relationsSectionIdx, i, 1, true)
+		out := renderAccordionPane(m.idx, b, w, h, relationsSectionIdx+1, relationsSectionIdx, i, 1, true, 0, -1)
 		plain := ansi.Strip(out)
 		wantID := fmt.Sprintf("ch-%02d", i)
 		if !strings.Contains(plain, wantID) {
@@ -346,7 +346,7 @@ func TestRenderAccordionPaneRelationsShowsMoreEntriesIndicatorWhenOverflowing(t 
 	m := fixtureModel(t, all)
 	b := m.idx.ByID["ep-many"]
 
-	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true)
+	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true, 0, -1)
 	plain := ansi.Strip(out)
 	// scrollView's indicator format is "L n–m/total" (view.go) -- total here
 	// counts BODY LINES (the "Children" subheader plus its 12 rows == 13),
@@ -369,7 +369,7 @@ func TestRenderAccordionPaneRelationsFewEntriesUnchangedByWindowing(t *testing.T
 	m := fixtureModel(t, all)
 	b := m.idx.ByID["ep-many"]
 
-	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true)
+	out := renderAccordionPane(m.idx, b, 60, 15, relationsSectionIdx+1, relationsSectionIdx, 0, 1, true, 0, -1)
 	plain := ansi.Strip(out)
 	if !strings.Contains(plain, "ch-00") || !strings.Contains(plain, "ch-01") {
 		t.Fatalf("few relations (2, under the pane's budget) must show ALL of them simultaneously (no windowing), got:\n%s", plain)
@@ -390,7 +390,7 @@ func TestRenderFullscreenBodyRelationsWindowsSameAsSplitPane(t *testing.T) {
 	m := fixtureModel(t, all)
 	b := m.idx.ByID["ep-many"]
 
-	out := renderFullscreenBody(fullscreenDetail, 60, 15, nil, true, m.idx, b, relationsSectionIdx, relationsSectionIdx+1, 7, 1)
+	out := renderFullscreenBody(fullscreenDetail, 60, 15, nil, true, m.idx, b, relationsSectionIdx, relationsSectionIdx+1, 7, 1, 0)
 	plain := ansi.Strip(out)
 	if !strings.Contains(plain, "ch-07") {
 		t.Fatalf("Vollbild-Detail must window RELATIONS the SAME way the Split pane does -- fieldCursor=7 must stay visible, got:\n%s", plain)

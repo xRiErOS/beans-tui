@@ -1,0 +1,187 @@
+package tui
+
+// footer_boxform_test.go — bean bt-fy5d (Nebenbefund N2, epic bt-vy1q):
+// while boxFormEnabled(), the Detail pane already shows every scalar field's
+// hotkey salient INSIDE its own box frame ((e) (s) (o) (u) (a) (t),
+// box_detail_form.go). Repeating those keys in the footer is pure redundancy
+// and costs a whole footer line at 80 columns. The footer therefore drops
+// exactly the inline-visible ones -- and ONLY while the flag is on.
+
+import (
+	"strings"
+	"testing"
+
+	keybind "github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+)
+
+// bindingKeys returns each binding's Help().Key -- the literal token
+// renderBindings puts in the footer.
+func bindingKeys(bs []keybind.Binding) []string {
+	out := make([]string, 0, len(bs))
+	for _, b := range bs {
+		if k := b.Help().Key; k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// boxFormInlineFooterKeys are the keys bt-fy5d removes from the footer while
+// the box form is on: every one of them is rendered as an inline (x) badge by
+// detailBoxForm/panelBox.
+//
+// bean bt-6nuz (PO finding #6): `r` USED to be in this list. It was the one
+// entry admitted on a looser test -- "its target IS the Relations panel the
+// same detail render shows" -- rather than on the actual criterion, an
+// inline badge. The Relations panel carries no (r) badge, so dropping `r`
+// from the footer removed the only place the key was advertised at all. The
+// rule is now literal, and TestBoxFormInlineKeysAllHaveAnInlineBadge below
+// enforces it structurally instead of by hand.
+var boxFormInlineFooterKeys = []string{"s", "e", "t", "a"}
+
+func TestBrowseRepoLocalBindingsDropInlineKeysWhileBoxForm(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+
+	got := bindingKeys(browseRepoLocalBindings())
+	for _, k := range boxFormInlineFooterKeys {
+		for _, have := range got {
+			if have == k {
+				t.Fatalf("footer still advertises %q although the box form shows it inline: %v", k, got)
+			}
+		}
+	}
+	// Everything that is NOT inline-visible must survive -- the point is to
+	// de-duplicate, not to strip the footer. `r` (bean bt-6nuz) is in this
+	// list precisely because the Relations panel gives it no badge.
+	for _, k := range []string{"tab", "shift+tab", "/", "f", "c", "d", "b", "y", "r", "v"} {
+		found := false
+		for _, have := range got {
+			if have == k {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("footer lost non-inline key %q: %v", k, got)
+		}
+	}
+}
+
+// TestBrowseRepoLocalBindingsUnchangedWithoutBoxForm is the flag-OFF pin
+// (bean bt-fy5d Akzeptanz: "Bei Flag AUS ist der Footer unveraendert"):
+// without the box form nothing is shown inline, so nothing may be dropped.
+func TestBrowseRepoLocalBindingsUnchangedWithoutBoxForm(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "")
+
+	// `v` (bean bt-oox1, #10) is deliberately absent here: the flag-OFF
+	// footer already fills its two lines at 80 columns, so Fullscreen is
+	// added under the box form only, where dropping the inline-badged keys
+	// makes room (browseRepoLocalBindings' own doc-stamp).
+	got := bindingKeys(browseRepoLocalBindings())
+	want := []string{"tab", "shift+tab", "/", "f", "s", "c", "d", "e", "b", "t", "y", "a", "r"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("flag-OFF footer set changed:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestBacklogFooterFollowsBrowseRepo: the Backlog renders the SAME box-form
+// detail pane, so its footer must thin out identically (backlogLocalBindings
+// delegates -- this pins that it keeps doing so).
+func TestBacklogFooterFollowsBrowseRepo(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+	if a, b := bindingKeys(backlogLocalBindings()), bindingKeys(browseRepoLocalBindings()); strings.Join(a, "|") != strings.Join(b, "|") {
+		t.Fatalf("Backlog footer diverged from Browse: %v vs %v", a, b)
+	}
+}
+
+// TestBoxFormInlineKeysAllHaveAnInlineBadge is bean bt-6nuz's structural
+// answer to the selection error itself, not to its two symptoms. bt-fy5d
+// thinned the footer on the premise "the box form already shows this key
+// inline" -- but nothing checked that premise, so `r` was dropped on a
+// judgement call and simply vanished from the UI. This renders the real
+// box-form Detail pane and requires every key boxFormInlineKeys hides to
+// actually appear as a literal (x) badge in that render. A future key
+// removed from the footer without a badge to justify it fails here.
+func TestBoxFormInlineKeysAllHaveAnInlineBadge(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+
+	m := fixtureModel(t, fixtureBeans())
+	m.width, m.height = 120, 40
+	m = focusBeanFull(m, "tk-2")
+	b := m.focusedBean()
+	if b == nil {
+		t.Fatal("setup: no focused bean")
+	}
+	rendered := ansi.Strip(detailBoxForm(m.idx, b, 80, -1))
+
+	for k := range boxFormInlineKeys {
+		if !strings.Contains(rendered, "("+k+")") {
+			t.Errorf("boxFormInlineKeys hides %q from the footer, but the box-form detail pane renders no (%s) badge -- the key would be advertised nowhere:\n%s", k, k, rendered)
+		}
+	}
+}
+
+// TestBoxFormFooterKeysStayFunctional guards the Grounding's drift-guard
+// pitfall from the other side: the keys only vanish from the FOOTER DISPLAY.
+// They must still be registered in the keymap (keymap.go is the single
+// source, TestHelpGroupsCoverEveryBindingExactlyOnce reflects over it), so
+// the Help overlay keeps documenting them and the handlers keep working.
+func TestBoxFormFooterKeysStayFunctional(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+
+	registered := map[string]bool{}
+	for _, g := range keys.helpGroups() {
+		for _, k := range bindingKeys(g.bindings) {
+			registered[k] = true
+		}
+	}
+	for _, k := range boxFormInlineFooterKeys {
+		if !registered[k] {
+			t.Fatalf("key %q disappeared from the keymap/help groups -- bt-fy5d may only thin the FOOTER, never the registration", k)
+		}
+	}
+}
+
+// --- bean bt-8d35: the footer names the REGION-local meaning of tab ---
+
+// TestFooterNamesTabAsFieldNavInsideTheDetailRegion guards bt-z4w7's derived-
+// label rule for the Fokus-Modell: while the Detail region has focus, tab
+// really moves the field cursor, so Footer Zone 3 must say so instead of
+// repeating the pane-swap's "focus in". The literals below carry the nbsp
+// renderBindings joins key and label with (view.go's wrap-atomic rule).
+func TestFooterNamesTabAsFieldNavInsideTheDetailRegion(t *testing.T) {
+	m := boxFormScrollModel(t) // BT_BOXFORM=1, Tree-focused
+
+	if got := m.contextualLocalHint(browseRepoLocalBindings()); !strings.Contains(got, "focus\u00a0in") {
+		t.Fatalf("Tree-focused footer lost the pane-swap label: %q", got)
+	}
+
+	m = step(t, m, keyMsg(tea.KeyTab))
+	got := m.contextualLocalHint(browseRepoLocalBindings())
+	for _, want := range []string{"next\u00a0field", "prev\u00a0field"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Detail-focused footer does not advertise %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "focus\u00a0in") {
+		t.Fatalf("Detail-focused footer still advertises the stale pane-swap label: %q", got)
+	}
+}
+
+// TestFooterKeepsFocusLabelsWithoutBoxForm is the flag-OFF pin: without the
+// experiment the Fokus-Modell does not exist and tab is still the pane swap,
+// in the footer as much as in handleKey.
+func TestFooterKeepsFocusLabelsWithoutBoxForm(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "")
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = step(t, m, keyMsg(tea.KeyTab))
+	if !m.detailFocus {
+		t.Fatal("setup: tab did not focus the Detail pane")
+	}
+	if got := m.contextualLocalHint(browseRepoLocalBindings()); !strings.Contains(got, "focus\u00a0in") {
+		t.Fatalf("flag-OFF footer must keep the pane-swap label: %q", got)
+	}
+}

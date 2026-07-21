@@ -385,6 +385,49 @@ func TestFilterMenuEnterAppliesUnchangedAcrossTabs(t *testing.T) {
 	}
 }
 
+// --- bean bt-8d35: the Filter-Strip as a REGION (boxFormEnabled only) ---
+
+// TestFilterStripEnterAppliesAndHoldsFocus is the PO's Flow #3 verbatim:
+// "Anwenden: enter -> Filter wirkt, **Fokus bleibt im Strip** (ausdrücklicher
+// PO-Wunsch)". Experiment-gated: with the flag OFF, enter keeps its
+// pre-existing close-the-menu meaning (TestFilterMenuEnterAppliesUnchanged
+// AcrossTabs, above, is the untouched guard for that).
+func TestFilterStripEnterAppliesAndHoldsFocus(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('f'))
+	m = step(t, m, keyMsg(tea.KeyTab)) // Type tab
+	it := m.filterItems[m.filterMenu.cursor]
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	if !m.filterOpen {
+		t.Fatal("enter closed the Filter-Strip -- the focus must STAY in the region (bt-8d35 Flow #3)")
+	}
+	if !m.facetOn(it) {
+		t.Fatal("enter did not apply the cursored facet")
+	}
+
+	m = step(t, m, keyMsg(tea.KeyEnter))
+	if m.facetOn(it) {
+		t.Fatal("a second enter did not un-apply the facet -- enter must apply the cursored value (multi-select)")
+	}
+	if !m.filterOpen {
+		t.Fatal("the second enter closed the Filter-Strip")
+	}
+}
+
+// TestFilterStripEscLeavesTheRegion pins bt-8d35's other half for the Strip:
+// esc (and only esc / the toggle key f) leaves the region.
+func TestFilterStripEscLeavesTheRegion(t *testing.T) {
+	t.Setenv("BT_BOXFORM", "1")
+	m := fixtureModel(t, fixtureBeans())
+	m = step(t, m, runeMsg('f'))
+	m = step(t, m, keyMsg(tea.KeyEsc))
+	if m.filterOpen {
+		t.Fatal("esc did not leave the Filter-Strip region")
+	}
+}
+
 // --- Querformat rendering (treeFilterBox) ---
 
 // TestTreeFilterBoxShowsTabBarAndOnlyActiveFacetRows guards the actual

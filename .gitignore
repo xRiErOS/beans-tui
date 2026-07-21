@@ -3,3 +3,4 @@ docs/_free-notes/
 docs/screenshots/_session.gif
 .DS_Store
 docs/tui-spec-okf-inbox/
+.claude/

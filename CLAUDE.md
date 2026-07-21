@@ -5,8 +5,14 @@ Binary `bt`, Go/bubbletea. Datenlayer: beans-CLI-Subprocess (`beans list --json 
 `update --if-match`, `-S` Bleve-Suche) + eigener fsnotify-Watcher — beans-Binary bleibt die
 eine Autorität; v0.4.2 exponiert keine importierbaren Packages (alles `internal/`).
 
+**Experimentelles Flag `BT_BOXFORM=1`** (Default AUS, opt-in per Env): jira-artige Box-Form-
+Detail-Ansicht statt Accordion (`boxFormEnabled()`, `internal/tui/box_form_flag.go`). Auf
+`main` gemerged als opt-in (Spike bt-vy1q, PO-Abnahme 2026-07-21). Bei Flag AUS ist die UI
+byte-identisch zum Accordion — Bestandsgolden dürfen nicht driften. User-Doku: README §Experimental.
+
 ## Pointer
 
+- **Sprache/Begriffe: `docs/GLOSSARY.md`** — verbindlich (boxed field, Box-Titel, Box-Badge, Region, Golden, Smoke …). Vor UI-Arbeit lesen; neue Elemente dort nachtragen.
 - Design (Quelle der Wahrheit): `docs/plans/v1-port/design-spec.md`
 - Plan: `docs/plans/v1-port/implementation-plan.md`
 - Stand/Weichen: `docs/SSTD.md` · Arbeit: `.beans/` (`beans list --ready`)
@@ -22,6 +28,8 @@ eine Autorität; v0.4.2 exponiert keine importierbaren Packages (alles `internal
 - Theme-Token nur aus `internal/theme/` (Catppuccin Macchiato, TrueColor) — keine Hex-Literale in Views.
 - Review-Flow-Konvention (gilt für **Epic-/Milestone-beans**): Tag `to-review` (Agent) → PO passt (`completed`) oder rejected (Tag `rework` + `## Review <datum>`-Body-Abschnitt). Agent setzt bei Epics/Milestones NIE `completed`. **Implementierungs-Task-beans** sind dagegen agent-abschließbar (completed nach grünen Tests + Review-Durchlauf) — Plan-Ritual in docs/plans/v1-port/implementation-plan.md.
 - **Footer-/Wrap-Änderungen brauchen einen tmux-Smoke bei Grenzbreite (80 Spalten)** — Unit-Tests bei 100/120 Spalten sehen Umbruch-Bugs strukturell nicht (NBSP-Wordwrap-Falle, E8/T8; Details docs/LESSONS-LEARNED.md Eintrag 4).
+- **Parallele Sub-Agenten (bewährt, 2026-07-20):** (1) `isolation: worktree` legt den Worktree **immer von `main`** an, nie vom Arbeitsbranch — Agenten im Prompt anweisen, VOR der ersten Code-Änderung `git merge-base --is-ancestor <arbeitsbranch> HEAD` zu prüfen und sonst `git reset --hard <arbeitsbranch>`. (2) **Nach jedem Merge bauen UND testen** — ein konfliktfreier Textmerge kann semantisch falsch sein (Signaturänderung in einem Test des anderen Strangs). (3) **Golden-Konflikte** paralleler Stränge NICHT von Hand lösen, sondern EINMAL auf dem gemergten Code regenerieren, dann per `git diff` prüfen. (4) `.claude/` ist gitignored, weil Agent-Worktrees dort landen.
+- **Vault-Symlink-Nebenwirkung:** `docs/` ist in den Obsidian-Vault gesymlinkt — Obsidian stempelt beim Öffnen `uid`-Frontmatter in Repo-Dokus und kann beim Aufräumen Dateien (z.B. `docs/screenshots/*`) vom Dateisystem entfernen. Vor Commits `git status` prüfen; Gelöschtes via `git checkout --` zurückholen.
 - **Schneller Lauf:** `command go test ./... -short` — überspringt die sieben teuersten huh-drive-Tests in `internal/tui/box_confirm_create_test.go` (7-Felder-Create-Form-Drive über echte `tea.Update`-Roundtrips, je ~16-19s wegen huhs selbst-perpetuierender Blink-Tick-Cmds — `skipSlowHuhDriveInShortMode`, E3 Task 6/bean bt-ppzb). Bringt `internal/tui` von ~121s auf ~3-5s. Vor jedem Commit bleibt der VOLLE Lauf (ohne `-short`) Pflicht — `-short` ist nur der lokale Iterationsloop.
 
 ## Status-Quellen (via /ce-start, 2026-07-15)

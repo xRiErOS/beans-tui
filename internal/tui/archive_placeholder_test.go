@@ -168,7 +168,7 @@ func TestFilteredBeanNodePlaceholderCases(t *testing.T) {
 // TestTreeNodeMarkerBlankForLeaf already locks for leaves -- B03 precedent).
 func TestTreeRowTextPlaceholderPattern(t *testing.T) {
 	n := treeNode{depth: 1, placeholder: true, hiddenCount: 3}
-	got := stripHint(treeRowText(n))
+	got := stripHint(treeRowText(n, ""))
 	want := "  " + "  " + "3 archiviert — f→Archive" // depth(1)*"  " indent + blank marker "  "
 	if got != want {
 		t.Fatalf("treeRowText(placeholder, hiddenCount=3) = %q, want %q", got, want)

@@ -45,7 +45,7 @@ type keyMap struct {
 	Back    keybind.Binding // esc — back
 	Quit    keybind.Binding // q / ctrl+c — quit (confirm)
 	Help    keybind.Binding // ? — help overlay
-	Palette keybind.Binding // ctrl+k / K — Command-Center
+	Palette keybind.Binding // K — Command-Center
 	Picker  keybind.Binding // p — repo-picker
 	Backlog keybind.Binding // b — Backlog
 	Search  keybind.Binding // / — search
@@ -57,9 +57,12 @@ type keyMap struct {
 	FilterClear keybind.Binding // X — reset filters
 	Toggle      keybind.Binding // space/x — toggle facet checkbox (E2 Task 4, bean bt-9ldr)
 	Sort        keybind.Binding // S — cycle Backlog sort mode (E2 Task 5, bean bt-gzu6)
+	FlatView    keybind.Binding // G — Nested/Flat Browse toggle (jira-style-ui experiment S5, D07 uppercase = view/global)
 
 	// Node-focused (act on the focused tree/list node).
 	Status    keybind.Binding // s — status menu (all node types)
+	Type      keybind.Binding // o — type menu (jira-style-ui experiment S4, D07 lowercase field action)
+	Priority  keybind.Binding // u — priority menu (jira-style-ui experiment S4, D07 lowercase field action)
 	Assign    keybind.Binding // a — parent assignment
 	Blocking  keybind.Binding // r — blocking picker (Q06 remap: was B, PF-14 freed r)
 	Create    keybind.Binding // c — create
@@ -88,6 +91,32 @@ type keyMap struct {
 	// Once identifies bindings by their OWN key set (" " alone vs " ,x"),
 	// so the two coexist without tripping that drift guard.
 	TagToggle keybind.Binding // space — toggle tag (Tag-Picker, space-only)
+
+	// PickerFacet* (bean bt-a3a8, PO-Nebenbefund N7) are the Blocking-/
+	// Parent-Picker's OWN chip-strip cycles (box_picker_filter.go). They are
+	// deliberately CTRL-CHORDS, not the mnemonic bare letters t/s/p: both
+	// pickers now host an always-focused search field, and a bare letter
+	// intercepted ahead of a textinput becomes permanently untypeable there
+	// -- the exact bug Review-R1 B01 found in the Tag-Picker (bean bt-9ipw,
+	// see TagToggle's doc-stamp above). A ctrl-chord can never be consumed
+	// as a literal character, so the control layer and the typing layer are
+	// structurally incapable of colliding. Tags takes ctrl+g because "t" was
+	// already spent on Type here; Status takes ctrl+n because design-spec.md
+	// §7 FORBIDS ctrl+s outright (XOFF/XON flow control -- on many terminal/
+	// tmux configs the sequence never reaches the app at all, guarded by
+	// TestKeymapNoCtrlSQ). Both non-mnemonic choices are self-documenting on
+	// screen: each chip renders its own hotkey badge (dropdownBox's hotkey
+	// slot, pickerFilter.strip), so nothing depends on the PO guessing them.
+	//
+	// Like NewTag/TagToggle these are OVERLAY-LOCAL, not global checkpoint
+	// keys: keyPickerFilter (box_picker_filter.go) dispatches on the raw
+	// tea.KeyType, and these typed Bindings exist so the Help-Overlay
+	// (helpGroups) documents them at all -- a raw msg.Type switch cannot be
+	// rendered.
+	PickerFacetType     keybind.Binding // ctrl+t — cycle the picker's Type chip
+	PickerFacetStatus   keybind.Binding // ctrl+n — cycle the picker's Status chip
+	PickerFacetPriority keybind.Binding // ctrl+p — cycle the picker's Priority chip
+	PickerFacetTag      keybind.Binding // ctrl+g — cycle the picker's Tags chip
 
 	// RenameTag (E10 Task 5, bean bt-y9my, epic bt-362n D13/D14) is a
 	// Tag-Management-page-LOCAL binding on "e" -- the SAME raw key as the
@@ -140,7 +169,11 @@ func newKeyMap() keyMap {
 		Back:    keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithHelp("esc", "back")),
 		Quit:    keybind.NewBinding(keybind.WithKeys("q", "ctrl+c"), keybind.WithHelp("q", "quit")),
 		Help:    keybind.NewBinding(keybind.WithKeys("?"), keybind.WithHelp("?", "help")),
-		Palette: keybind.NewBinding(keybind.WithKeys("ctrl+k", "K"), keybind.WithHelp("ctrl+k", "commands")),
+		// bt-mx4k: ctrl+k retired -- K was long since bound and matches the
+		// D07 case convention (uppercase = view/global). One key, one
+		// function; the header gets six characters shorter, which counts at
+		// 80 columns.
+		Palette: keybind.NewBinding(keybind.WithKeys("K"), keybind.WithHelp("K", "commands")),
 		Picker:  keybind.NewBinding(keybind.WithKeys("p"), keybind.WithHelp("p", "repos")),
 		Backlog: keybind.NewBinding(keybind.WithKeys("b"), keybind.WithHelp("b", "Backlog")),
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "search")),
@@ -152,10 +185,19 @@ func newKeyMap() keyMap {
 		FilterClear: keybind.NewBinding(keybind.WithKeys("X"), keybind.WithHelp("X", "Clear filters")),
 		Toggle:      keybind.NewBinding(keybind.WithKeys(" ", "x"), keybind.WithHelp("space/x", "Toggle facet")),
 		Sort:        keybind.NewBinding(keybind.WithKeys("S"), keybind.WithHelp("S", "Sort")),
+		FlatView:    keybind.NewBinding(keybind.WithKeys("G"), keybind.WithHelp("G", "Nested/Flat")),
 
 		Status:    keybind.NewBinding(keybind.WithKeys("s"), keybind.WithHelp("s", "Status")),
+		Type:      keybind.NewBinding(keybind.WithKeys("o"), keybind.WithHelp("o", "Type")),
+		Priority:  keybind.NewBinding(keybind.WithKeys("u"), keybind.WithHelp("u", "Priority")),
 		Assign:    keybind.NewBinding(keybind.WithKeys("a"), keybind.WithHelp("a", "Parent")),
-		Blocking:  keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "Blocking")),
+		// Label "Relations", nicht "Blocking" (PO-Befund #7): das Overlay heisst
+		// Relations und die Detail-Pane ueberschreibt ihr Panel ebenso. Der
+		// Bezeichner `Blocking` und `data.SetBlocking` bleiben, weil sie die
+		// konkrete Beziehungsart meinen -- ebenso appendGroup("Blocking", ...)
+		// in view_detail_bean.go, das eine Gruppe INNERHALB des Relations-Panels
+		// benennt. Nur das ANZEIGE-Label folgt der Ueberschrift.
+		Blocking:  keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "Relations")),
 		Create:    keybind.NewBinding(keybind.WithKeys("c"), keybind.WithHelp("c", "Create")),
 		Delete:    keybind.NewBinding(keybind.WithKeys("d"), keybind.WithHelp("d", "Delete")),
 		TagAssign: keybind.NewBinding(keybind.WithKeys("t"), keybind.WithHelp("t", "Tags")),
@@ -164,6 +206,11 @@ func newKeyMap() keyMap {
 		NewTag: keybind.NewBinding(keybind.WithKeys("n"), keybind.WithHelp("n", "New tag")),
 
 		TagToggle: keybind.NewBinding(keybind.WithKeys(" "), keybind.WithHelp("space", "Toggle tag")),
+
+		PickerFacetType:     keybind.NewBinding(keybind.WithKeys("ctrl+t"), keybind.WithHelp("^t", "picker: type filter")),
+		PickerFacetStatus:   keybind.NewBinding(keybind.WithKeys("ctrl+n"), keybind.WithHelp("^n", "picker: status filter")),
+		PickerFacetPriority: keybind.NewBinding(keybind.WithKeys("ctrl+p"), keybind.WithHelp("^p", "picker: priority filter")),
+		PickerFacetTag:      keybind.NewBinding(keybind.WithKeys("ctrl+g"), keybind.WithHelp("^g", "picker: tag filter")),
 
 		RenameTag: keybind.NewBinding(keybind.WithKeys("e"), keybind.WithHelp("e", "Rename")),
 
@@ -190,8 +237,14 @@ type helpGroup struct {
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Back, k.Section, k.FocusIn, k.FocusOut, k.Fullscreen, k.HistoryBack, k.HistoryForward}},
-		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit}},
-		{"Actions", []keybind.Binding{k.Status, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.TagToggle, k.Sort, k.NewTag, k.RenameTag}},
+		{"Views & Global", []keybind.Binding{k.Backlog, k.Picker, k.Search, k.Filter, k.FilterClear, k.Refresh, k.Palette, k.Help, k.Quit, k.FlatView}},
+		{"Actions", []keybind.Binding{k.Status, k.Type, k.Priority, k.Assign, k.TagAssign, k.Blocking, k.Create, k.Delete, k.Editor, k.Yank, k.Toggle, k.TagToggle, k.Sort, k.NewTag, k.RenameTag}},
+		// bean bt-a3a8: the Blocking-/Parent-Picker's own chip-strip cycles.
+		// Their own group rather than an append to "Actions" -- they are
+		// overlay-local controls that only exist while a picker is open, and
+		// burying four ctrl-chords at the tail of a 15-item global action
+		// list would read as if they worked anywhere.
+		{"Picker filter", []keybind.Binding{k.PickerFacetType, k.PickerFacetStatus, k.PickerFacetPriority, k.PickerFacetTag}},
 	}
 }
 
