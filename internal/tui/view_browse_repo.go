@@ -760,7 +760,6 @@ func (m model) renderBeanAccordionPane(b *data.Bean, w, h int, focused bool) str
 // Vollbild passes -1: there, up/down scroll instead of walking fields.
 func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, fieldCursor, detailLevel int, focused bool, boxScroll, boxCursor int) string {
 	var rows []string
-	pageBadge := "" // bean bt-adkn: box-form page indicator, overlaid on the frame below
 	if b != nil {
 		bodyW := w - 4
 		if bodyW < 1 {
@@ -797,17 +796,65 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 			// "Normalfall passt" claim), scrollView's own padding-to-h
 			// converges with renderPane's pre-existing pad-to-h loop below --
 			// byte-identical to the pre-F1 output, no golden drift.
-			form := detailBoxForm(idx, b, accW, boxCursor)
+			// bean bt-adkn Rework B3 (PO "Sticky Body-Kopfzeile", 2026-07-21):
+			// the page indicator no longer sits on the outer pane frame -- it
+			// rides in the BODY panel's own title row, and that row is pinned to
+			// the top of the viewport while the body is paged, so the section
+			// title and its indicator stay visible while the body text scrolls
+			// beneath. Built from BLOCKS (not the joined detailBoxForm string) so
+			// the Body block's boundaries are known: only its first line (the top
+			// border) is re-rendered with the dots, and only that line is pinned.
+			blocks := boxFormBlocks(idx, b, accW, boxCursor)
+			total := 0
+			for _, bl := range blocks {
+				total += lineCount(bl)
+			}
+			page, count := boxFormPageIndex(total, h, boxScroll)
+
+			// Re-render the Body top border with the page dots parked right of
+			// the (e) badge, in the Body block's OWN focus color (boxFormBlocks'
+			// same cursor->row rule) so the pinned copy matches the natural one.
+			// The dot budget is the header's ACTUAL free width (accW minus the
+			// corners, "─ Body ─" label, " (e) " hotkey and the minimum dashes =
+			// 18 cells), NOT accW: a long body has more pages than fit as dots, so
+			// a too-generous budget made boxFormPageBadge emit a dot row that then
+			// overflowed boxTopBorderBadges' fit check and was DROPPED whole (real
+			// 80c smoke: a 25-page body showed no indicator at all). Bounding the
+			// budget to what the header can hold makes boxFormPageBadge fall back
+			// to the compact "n/N" form instead, so the indicator always renders.
+			dotsBudget := accW - 18
+			if dotsBudget < 1 {
+				dotsBudget = 1
+			}
+			bodyBorder := theme.Overlay
+			if boxFormCursorRow(boxCursor) == boxFormRowBody {
+				bodyBorder = theme.Mauve
+			}
+			dots := boxFormPageBadge(page, count, dotsBudget)
+			bodyHeader := boxTopBorderBadges("Body", dots, "e", accW, lipgloss.NewStyle().Foreground(bodyBorder))
+			if rest := strings.SplitN(blocks[boxFormRowBody], "\n", 2); len(rest) == 2 {
+				blocks[boxFormRowBody] = bodyHeader + "\n" + rest[1]
+			} else {
+				blocks[boxFormRowBody] = bodyHeader
+			}
+
+			form := strings.Join(blocks, "\n")
 			win, _ := scrollView(form, h, boxScroll)
-			rows = append(rows, strings.Split(win, "\n")...)
-			// bean bt-adkn: turn the SAME (total, h, boxScroll) the window used
-			// into a page indicator. accW is the box-form's own width budget; the
-			// badge shares the outer frame's bottom border, so cap it a few cells
-			// short of accW to leave the corners/spacing overlayPaneBottomBadge
-			// needs. count<=1 (fits) yields "" -> the overlay is a no-op and the
-			// render stays byte-identical to the pre-bt-adkn box-form output.
-			page, count := boxFormPageIndex(lineCount(form), h, boxScroll)
-			pageBadge = boxFormPageBadge(page, count, accW-4)
+			winLines := strings.Split(win, "\n")
+
+			// Sticky pin: while the viewport top is scrolled INTO the body (the
+			// Body title has passed above the top edge but body content still
+			// fills the top), overlay the Body header onto the first content row.
+			// The one body line it covers is the topmost -- the least-missed.
+			bodyStart := 0
+			for i := 0; i < boxFormRowBody; i++ {
+				bodyStart += lineCount(blocks[i])
+			}
+			bodyEnd := bodyStart + lineCount(blocks[boxFormRowBody])
+			if boxScroll > bodyStart && boxScroll < bodyEnd && len(winLines) > 0 {
+				winLines[0] = bodyHeader
+			}
+			rows = append(rows, winLines...)
 		} else {
 			rows = append(rows, strings.Split(detailHeaderBlock(b, accW), "\n")...)
 			secs := beanSections(idx, b, bodyW, focused, secCursor, fieldCursor, detailLevel)
@@ -830,7 +877,7 @@ func renderAccordionPane(idx *data.Index, b *data.Bean, w, h, open, secCursor, f
 	} else {
 		rows = append(rows, theme.Dim.Render("(no selection)"))
 	}
-	return overlayPaneBottomBadge(renderPane(pane{rows: rows}, w, h, focused), pageBadge, w, focused)
+	return renderPane(pane{rows: rows}, w, h, focused)
 }
 
 // windowRelationsSection windows the RELATIONS section's body to fit the

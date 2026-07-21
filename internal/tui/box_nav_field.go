@@ -123,6 +123,17 @@ func boxFormRowCols(row int) int {
 	return n
 }
 
+// boxFormCursorRow returns the layout row the field cursor sits in, or -1 for
+// no cursor (the SAME derivation boxFormBlocks' own focusRow uses, box_detail_
+// form.go). Lets renderAccordionPane resolve the Body header's focus color
+// without restating the cursor->row rule (bean bt-adkn Rework B3).
+func boxFormCursorRow(cursor int) int {
+	if cursor >= 0 && cursor < len(boxFormFieldOrder) {
+		return boxFormFieldOrder[cursor].row
+	}
+	return -1
+}
+
 // boxFormFieldIndex resolves a (row, col) position back to its index in
 // boxFormFieldOrder, or -1 when the position carries no field.
 func boxFormFieldIndex(row, col int) int {

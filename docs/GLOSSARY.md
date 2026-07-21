@@ -95,13 +95,17 @@ brauchbar als Referenz, die Bezeichner nicht.
   darf nie außerhalb des sichtbaren Bereichs liegen. Beim Wandern über ein Feld, das höher
   als der Ausschnitt ist, wird es erst vollständig gezeigt und dann weitergesprungen
   (*reveal-then-move*).
-- **Seiten-Indikator** — Punktreihe unten rechts im **äußeren** Detail-Pane-Rahmen: ein
-  Punkt je Seite, hell = aktuelle, dunkel = übrige (`●○○`, Grau-Token aus `internal/theme/`).
-  Sitzt bewusst auf der fixen Chrome, nicht auf dem Body-Panel-Rahmen — der scrollt bei
-  langem Body weg, der Indikator soll aber **während des Blätterns sichtbar** bleiben. Eine
-  Seite = das sichtbare Zeilen-Budget des Panes (dieselbe Höhe, um die `pgup`/`pgdn`
-  springen), sodass Punkt-Grenze und Blätter-Halt exakt zusammenfallen. `boxFormPageIndex()`
-  / `boxFormPageBadge()` / `overlayPaneBottomBadge()`.
+- **Seiten-Indikator** — Punktreihe rechts in der **Body-Titelzeile** (`╭─ Body ── ●○○ (e) ─╮`):
+  ein Punkt je Seite, hell = aktuelle, dunkel = übrige (Grau-Token aus `internal/theme/`).
+  Bei mehr Seiten als Punkte passen, kompakte `n/N`-Form (`2/25`). Sitzt bewusst **in der
+  Body-Box**, nicht am äußeren Pane-Rahmen (B3, PO-Entscheidung 2026-07-21). Die Body-
+  Titelzeile ist **sticky**: solange man in den Body blättert, wird sie an die oberste
+  Viewport-Zeile geheftet und der Body-Text scrollt darunter — so bleibt Indikator **und**
+  Abschnittstitel **während des Blätterns sichtbar**, obwohl der Body-Box-Rahmen sonst
+  wegscrollen würde. Eine Seite = das sichtbare Zeilen-Budget des Panes (dieselbe Höhe, um
+  die `pgup`/`pgdn` springen), sodass Punkt-Grenze und Blätter-Halt exakt zusammenfallen.
+  `pgup`/`pgdn` blättern **fokus-unabhängig** (kein Tab nötig, wie das Mausrad — globaler
+  `handleKey`-Checkpoint). `boxFormPageIndex()` / `boxFormPageBadge()` / `boxTopBorderBadges()`.
 
 ## Arbeitsweise
 

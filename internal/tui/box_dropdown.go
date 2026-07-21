@@ -102,6 +102,39 @@ func boxTopBorderHotkey(label, hotkey string, width int, frame lipgloss.Style) s
 		badgeSeg + frame.Render(borderDashes(minRightDashes)) + frame.Render("╮")
 }
 
+// boxTopBorderBadges is boxTopBorderHotkey with an extra right-parked badge
+// sitting just LEFT of the hotkey: ╭─ label ─…─ <badge> (x) ─╮ (bean bt-adkn
+// Rework B3: the Body panel's page indicator rides in its own title row, right
+// of the (e) edit badge). Empty badge -> exactly boxTopBorderHotkey (byte-
+// identical, so the fits-case draws no page dots and shows no golden drift).
+// Same defensive contract as its siblings: if label + badge + hotkey + the
+// minimum dashes cannot fit, the badge is dropped (falling back to the plain
+// hotkey border) rather than overflowing the frame.
+func boxTopBorderBadges(label, badge, hotkey string, width int, frame lipgloss.Style) string {
+	if badge == "" {
+		return boxTopBorderHotkey(label, hotkey, width, frame)
+	}
+	labelStyle := lipgloss.NewStyle().Foreground(theme.Subtext)
+	labelText := clampVisible(label, width-6)
+	labelSeg := frame.Render("─ ") + labelStyle.Render(labelText) + frame.Render(" ")
+
+	rightSeg := " " + badge + " "
+	if hotkey != "" {
+		rightSeg += theme.BindingKey.Render("("+hotkey+")") + " "
+	}
+
+	const minRightDashes = 2
+	const minLeftDashes = 1
+	// width - 2 corners must fit: labelSeg + leftDashes(>=1) + rightSeg + rightDashes(2)
+	used := 2 + lipgloss.Width(labelText) + 1 + lipgloss.Width(rightSeg) + minRightDashes
+	if width-2-used < minLeftDashes {
+		return boxTopBorderHotkey(label, hotkey, width, frame)
+	}
+	fill := width - 2 - used
+	return frame.Render("╭") + labelSeg + frame.Render(borderDashes(fill)) +
+		rightSeg + frame.Render(borderDashes(minRightDashes)) + frame.Render("╮")
+}
+
 // dropdownBox rendert das 3-Zeilen-Widget in exakt width Zellen Breite.
 // focused = Mauve-Rahmen, sonst Overlay. R1 (design-spec.md D08): das Label
 // im oberen Rahmen ist NICHT Teil des Rahmens selbst -- es rendert in

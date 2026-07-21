@@ -1,13 +1,11 @@
 ---
 # bt-adkn
 title: Body seitenweise blaettern + Seiten-Indikator
-status: todo
+status: completed
 type: feature
 priority: normal
-tags:
-    - rework
 created_at: 2026-07-20T09:23:37Z
-updated_at: 2026-07-21T08:44:03Z
+updated_at: 2026-07-21T10:01:59Z
 parent: bt-vy1q
 ---
 
@@ -102,3 +100,45 @@ Body-Hotkey liegt bereits oben (bt-oox1, panelBoxTopHotkey). Der Seiten-Indikato
 **B2 · high · Indikator aktualisiert sich beim Blaettern nicht** — direkte Folge von B1 (kein Body-Scroll → Offset konstant → gleicher Punkt). Faellt mit B1, aber im Smoke separat verifizieren (Punkt wandert bei PageDown).
 
 **B3 · medium · Indikator-Platzierung (Design-Revision D02→?).** PO will den Indikator AN DER BODY-BOX, nicht am aeusseren Pane-Rahmen. Konflikt mit dem urspruenglichen Akzeptanzkriterium 'sichtbar auch waehrend des Blaetterns' (die Body-Box-Unterkante scrollt bei langem Body weg — genau die Kopplung zu bt-p78f #4). PO-Wunsch hat Vorrang; vor Reimplementierung klaeren, WIE der Indikator an der Body-Box sichtbar bleibt (z.B. an der Body-TOP-Border, wo schon das (e)-Badge sitzt, statt am Bottom). Zusaetzlich PO-Beobachtung 'im linken Pane' pruefen — overlayPaneBottomBadge soll nur die rechte Detail-Pane treffen; im realen Zwei-Pane-Layout gegenchecken.
+
+## Rework-Plan (2026-07-21, PO-Freigabe, empirisch gegroundet)
+
+**Smoke-Repro (BT_BOXFORM=1, 80x24, langer Body):**
+- Tree-Fokus (Default, kein Tab) + PageDown = NO-OP: Body pagt nicht, Punkt bleibt Seite 0.
+- Nach Tab (Detail-Fokus) + PageDown = pagt korrekt: Body scrollt, Punkt wandert (●→Seite2), Indikator am rechten Detail-Aussenrahmen, aktualisiert sich.
+
+**Revision der Review-Befunde:**
+- **B1 (Kern, high):** Paging haengt an detailFocus (keyDetailFocus, update.go:1191/1364). PO erwartet pgup/pgdn auf dem SICHTBAREN Body OHNE Tab — analog Mausrad (positions-/fokus-unabhaengig, boxFormWheelHit/wheelMove, mouse.go). Routing-Ursache: pgup/pgdn erreichen keyDetailFocus nur bei detailFocus; bei Tree-Fokus geht es an keyTree (navKey-Switch matcht pgup/pgdn nicht → no-op).
+- **B2:** KEIN eigener Bug — Symptom von B1 (kein Body-Scroll → Punkt statisch). Faellt mit B1 (im Smoke bewiesen: bei Detail-Fokus wandert der Punkt).
+- **B3 (medium, Design-Entscheidung offen):** PO will Indikator AN DER BODY-BOX statt am aeusseren Pane-Rahmen. Spannung zu 'sichtbar beim Blaettern' (Body-Box-Rahmen scrollt weg). PO-Beobachtung 'linkes Pane' im Repro NICHT bestaetigt (Indikator sitzt rechts) — vermutlich Fehldeutung; im Zwei-Pane-Layout final gegenchecken.
+
+**Task-Plan:**
+- T1 (B1+B2): pgup/pgdn zu GLOBALEM handleKey-Checkpoint (gated boxFormEnabled() + focusedBean()!=nil, ausser overlay/form/fullscreenList), route zu adjustBoxFormScroll um eine Seite — VOR keyNodeAction/detailFocus/keyTree-Dispatch. Aus keyDetailFocus entfernen (oder global faengt zuerst). TDD: Integrationstest ueber VOLLEN handleKey bei TREE-Fokus (nicht nur detailFocus) — pagt Body + Tree-Cursor bleibt. Gegentest: keyTree bewegt Cursor bei pgup/pgdn NICHT. Reales 80c-Smoke Pflicht (Unit-Test sah Routing strukturell nicht).
+- T2 (B3): Indikator-Platzierung nach PO-Entscheidung (siehe Chat). Zwei-Pane-Layout gegenchecken.
+
+Verifikation: command go test ./... (voll) + 80c-tmux-Smoke mit echtem PageDown bei Tree-Fokus.
+
+## B3 Design-Entscheidung (PO, 2026-07-21): Sticky Body-Kopfzeile
+Indikator sitzt rechts in der Body-Titelzeile ('Body ... (e)'), die als FIXE Zeile oben im Detail-Viewport gerendert wird; der Body-Text scrollt darunter. Ergebnis: an der Body-Box UND immer sichtbar. Umsetzung T2: Body-Panel in sticky-Header (Titel + (e)-Badge + Indikator rechts) + scrollenden Inhalt trennen; overlayPaneBottomBadge am Aussenrahmen entfaellt.
+
+## Rework umgesetzt (2026-07-21, agent-abgeschlossen)
+
+### Summary
+- **T1 (B1+B2):** pgup/pgdn zu FOKUS-UNABHAENGIGEM globalem handleKey-Checkpoint (update.go, nach Refresh/vor keyNodeAction; gated boxFormEnabled() + focusedBean()!=nil + fullscreen!=fullscreenList). Blaettert den Body OHNE Tab, analog Mausrad, durch dieselbe adjustBoxFormScroll-Mutation. Aus keyDetailFocus entfernt.
+- **T2 (B3):** Seiten-Indikator sitzt jetzt in der BODY-Titelzeile (boxTopBorderBadges, box_dropdown.go), rechts vor dem (e)-Badge; overlayPaneBottomBadge (Aussenrahmen) entfernt. Body-Titelzeile ist STICKY: sobald in den Body geblaettert wird, wird sie an Viewport-Zeile 0 geheftet, Body-Text scrollt darunter (renderAccordionPane). Bei mehr Seiten als Punkte passen: kompakte n/N-Form.
+
+### Test-Output (RED->GREEN)
+- RED: TestBoxFormPageKeysPageBodyAtTreeFocus — 'boxFormScroll after tree-focused pgdn = 0, want one page (18)' (B1 reproduziert: no-op bei Tree-Fokus).
+- RED: TestBoxFormBodyHeaderCarriesPageDots / ...StickyWhenPaged — Dots am Aussenrahmen statt Body-Header / kein Pin.
+- GREEN nach Fix: alle 3 + TestBoxFormBodyIndicatorRendersWhenPagesExceedDotBudget (Regression fuer den Smoke-Bug). Voller Lauf 'command go test ./...' gruen (internal/tui 152s).
+- Mutations-Stichprobe: dotsBudget accW-18 -> accW zuruck => TestBoxFormBodyIndicatorRendersWhenPagesExceedDotBudget FAILT (Indikator verworfen). Fix wiederhergestellt.
+
+### Smoke (80x24, BT_BOXFORM=1, echtes Repo)
+PageDown bei TREE-Fokus (kein Tab): Body pagt, Tree-Cursor bleibt auf vy1q (linkes Pane scrollt NICHT mehr — B1/PO-Reject behoben). Body-Header sticky oben, zeigt '2/25' (25-Seiten-Body -> n/N-Form). PageUp zurueck -> '1/25'. 80c-Rahmen sauber, kein Overflow.
+
+### Deviations/ERRATA
+- Smoke deckte einen Bug auf, den die Unit-Tests strukturell nicht sahen: bei VIELEN Seiten (count > Header-Dot-Budget) verwarf boxTopBorderBadges die zu breite Punktreihe KOMPLETT -> gar kein Indikator. Fix: Dot-Budget = tatsaechlicher Header-Freiraum (accW-18), dann greift die kompakte n/N-Form. Neuer Regressionstest schliesst die Luecke (mutations-verifiziert).
+- B3-Grenze: der Indikator ist an die Body-Titelzeile gekoppelt; blaettert man ganz PAST den Body in Relations/History (nur bei kurzem Body relevant), entpinnt der Header und der Indikator verschwindet. Bewusst so (PO-Entscheidung: Indikator = Body-Titelzeile). Beim langen Body (dem Blaetter-Anwendungsfall) ist man stets im Body -> immer sichtbar.
+
+### Notes
+GLOSSARY 'Seiten-Indikator' aktualisiert (Body-Header + sticky + fokus-unabhaengig). Kopplung bt-p78f (#4) obsolet — TOC-Experiment scrapped, Body-Hotkey bleibt oben.

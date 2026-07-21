@@ -1,12 +1,15 @@
 package tui
 
 // box_form_page.go — the box-form Detail pane's PAGE indicator (bean bt-adkn,
-// jira-style-ui experiment, epic bt-vy1q). pgup/pgdn (keyDetailFocus,
-// update.go) page the viewport by one full screen through adjustBoxFormScroll
-// (mouse.go); this file turns the resulting scroll offset into "page X of N"
-// and renders it as hell/dunkel dots parked on the pane's FIXED bottom frame
-// (overlayPaneBottomBadge, render_shared.go) -- fixed chrome that never
-// scrolls away, so the indicator stays visible WHILE paging (Akzeptanz).
+// jira-style-ui experiment, epic bt-vy1q). pgup/pgdn (handleKey's global
+// paging checkpoint, update.go -- focus-independent, Rework B1) page the
+// viewport by one full screen through adjustBoxFormScroll (mouse.go); this file
+// turns the resulting scroll offset into "page X of N" and renders it as hell/
+// dunkel dots. Rework B3 (PO "Sticky Body-Kopfzeile"): the dots ride in the
+// BODY panel's own title row (boxTopBorderBadges, box_dropdown.go), which
+// renderAccordionPane pins to the top of the viewport while the body is paged,
+// so the indicator stays visible WHILE paging (Akzeptanz) -- no longer on the
+// outer pane frame.
 //
 // A page == the pane's visible line budget (the same `height` boxFormScroll
 // Bounds clamps against and pgdn steps by), so a dot boundary lines up exactly

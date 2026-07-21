@@ -1171,6 +1171,38 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, loadCmd(m.client)
 	}
 
+	// bean bt-adkn Rework (B1, PO-Reject 2026-07-21 "PageDown/PageUp scrollt das
+	// gesamte linke pane"): pgup/pgdn page the Detail-Body by one FULL screen,
+	// FOCUS-INDEPENDENTLY -- exactly like the mouse wheel (mouse.go's
+	// boxFormWheelHit), which pages the Body no matter which pane has focus. The
+	// original bt-adkn wired this into keyDetailFocus, so it only fired AFTER a
+	// tab into the Detail region; at the default Tree focus pgdn fell through to
+	// keyTree (no pgup/pgdn binding there) and was a silent no-op -- the very
+	// symptom the PO reported. Lifting it to this global checkpoint (ahead of
+	// keyNodeAction/detailFocus/keyTree, the same position the node-action keys
+	// occupy for the same focus-agnostic reason) makes pgup/pgdn act on
+	// focusedBean() regardless of focus, through the SAME adjustBoxFormScroll
+	// mutation point line-wise up/down and the wheel use (one clamp/reset path,
+	// no drift -- SSTD load-bearing constraint). One page == the pane's own
+	// visible line budget (boxFormScrollBounds' height, fullscreen-aware).
+	//
+	// fullscreenList is excluded: it renders the Master list full-width with no
+	// Detail-Body to page. fullscreenDetail is INCLUDED (focusedBean() resolves
+	// the fullscreen bean, keyDetailFocus's own doc comment) so paging works in
+	// Vollbild-Detail too. Flag off -> inert (whole path experiment-gated).
+	if boxFormEnabled() && m.fullscreen != fullscreenList {
+		if b := m.focusedBean(); b != nil {
+			switch {
+			case keybind.Matches(msg, boxFormPageUp):
+				_, page := boxFormScrollBounds(m, b)
+				return m.adjustBoxFormScroll(b, -page), nil
+			case keybind.Matches(msg, boxFormPageDown):
+				_, page := boxFormScrollBounds(m, b)
+				return m.adjustBoxFormScroll(b, page), nil
+			}
+		}
+	}
+
 	// E3 (bean bt-dlgk): node-focused mutation keys (s/t/a/B/c/d/e) --
 	// checked BEFORE the detailFocus/keyBacklog/keyTree dispatch below so
 	// they act on m.focusedBean() regardless of which pane has focus (see
@@ -1354,20 +1386,11 @@ func (m model) keyDetailFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "down":
 			return m.adjustBoxFormScroll(b, 1), nil
 		}
-		// pgup/pgdn (bean bt-adkn): page the viewport by one FULL screen through
-		// the SAME adjustBoxFormScroll the line-wise up/down and the wheel use --
-		// one page == the pane's own visible line budget (boxFormScrollBounds'
-		// height), so the two scroll granularities share one clamp/reset path and
-		// cannot drift (SSTD load-bearing constraint). Everywhere up/down scroll
-		// (split AND Vollbild), so BEFORE the split-only field-cursor block below.
-		switch {
-		case keybind.Matches(msg, boxFormPageUp):
-			_, page := boxFormScrollBounds(m, b)
-			return m.adjustBoxFormScroll(b, -page), nil
-		case keybind.Matches(msg, boxFormPageDown):
-			_, page := boxFormScrollBounds(m, b)
-			return m.adjustBoxFormScroll(b, page), nil
-		}
+		// pgup/pgdn are NOT handled here anymore (bean bt-adkn Rework B1): they
+		// are a FOCUS-INDEPENDENT global paging checkpoint in handleKey now, so
+		// they page the Body without a prior tab into the Detail region. This
+		// function is only reached AFTER that checkpoint, so pgup/pgdn never
+		// arrive here.
 		if m.fullscreen != fullscreenDetail {
 			switch {
 			case keybind.Matches(msg, boxFormFieldNext):
