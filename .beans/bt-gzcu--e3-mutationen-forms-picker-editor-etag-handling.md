@@ -5,9 +5,9 @@ status: completed
 type: epic
 priority: high
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-14T18:33:30Z
-updated_at: 2026-07-18T15:04:25Z
+updated_at: 2026-07-21T08:39:00Z
 parent: bt-apmy
 blocked_by:
     - bt-aq5s

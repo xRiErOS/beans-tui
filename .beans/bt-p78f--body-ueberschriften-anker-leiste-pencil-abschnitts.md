@@ -1,11 +1,11 @@
 ---
 # bt-p78f
 title: 'Body-Ueberschriften: Anker-Leiste + Pencil-Abschnitts-Edit'
-status: in-progress
+status: scrapped
 type: feature
 priority: normal
 created_at: 2026-07-20T09:24:15Z
-updated_at: 2026-07-21T08:12:55Z
+updated_at: 2026-07-21T08:48:11Z
 parent: bt-vy1q
 ---
 
@@ -73,3 +73,9 @@ Slice 1 (#16 Ankerleiste + Klick-Sprung) ist fertig, gruen, gesmoked, committed 
 5. Parser `parseBodySections` (box_body_sections.go) liefert die Byte-Spans schon splice-sicher (fence-safe). renderedHeadingLines/boxFormAnchorRow fuer die Pencil-Klickzeilen wiederverwenden.
 
 **Offene Design-Q fuer Slice 2 (PO):** Pencil-Glyph-Wahl (Stift-Unicode?) + Position (vor Heading inline vs. rechts). Nicht geraten.
+
+## Reasons for Scrapping (2026-07-21, PO-Entscheidung D01)
+PO im Review: 'Wir bauen das Experiment mit dem Inhaltsverzeichnis zurueck. Die Relevanz ist gering und die Implementierung zu aufwaendig. Daher scrapped.'
+- US-03 (Ankerleiste rendert) war accepted, aber US-04 (Klick-Sprung) real kaputt und US-05 (80c-Kuerzung) macht das Inhaltsverzeichnis nutzlos, sobald gekuerzt.
+- Slice 2 (Pencil + ETag-Rueckschreiben) war ETag-riskant und nie gebaut.
+- Kosten/Nutzen negativ → verworfen. Code-Rollback: git revert der Commits 66dacaf (Ankerleiste) + 53e219f (Parser). bt-adkn (Paging) NICHT betroffen.

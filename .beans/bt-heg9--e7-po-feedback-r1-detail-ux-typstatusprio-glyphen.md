@@ -5,9 +5,9 @@ status: completed
 type: epic
 priority: high
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-15T13:56:25Z
-updated_at: 2026-07-18T15:04:02Z
+updated_at: 2026-07-21T08:39:00Z
 parent: bt-apmy
 ---
 

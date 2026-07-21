@@ -5,8 +5,8 @@ status: completed
 type: milestone
 priority: high
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-18T12:12:34Z
-updated_at: 2026-07-18T15:03:47Z
+updated_at: 2026-07-21T08:39:00Z
 ---
 

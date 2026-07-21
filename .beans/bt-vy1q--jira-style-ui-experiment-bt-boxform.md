@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: high
 created_at: 2026-07-20T07:24:38Z
-updated_at: 2026-07-20T14:43:54Z
+updated_at: 2026-07-21T08:48:11Z
 ---
 
 Spike: ist eine flachere, salientere jira-artige Darstellung eine Verbesserung fuer beans-tui?
@@ -73,3 +73,14 @@ Box-Badge, Panel, Region, Views mit Datei-Zuordnung, Terminal-Fallen. Pointer in
 ### Offen
 bt-adkn (Body blaettern) · bt-p78f (Anker-Leiste + Pencil) · bt-ty48 (GIF, bewusst zuletzt)
 · bt-dovm (draft, PO-Freigabe) · bt-2o9a (Merge auf main).
+
+## Review 2026-07-21 (PO, heutige Arbeit)
+
+- US-01 · Body seitenweise blaettern (pgup/pgdn) · r: PageDown/PageUp scrollt die Tree-Pane statt Body → bt-adkn (rework, B1)
+- US-02 · Seiten-Indikator Punkte · r: statisch + Platzierung falsch (soll an Body-Box) → bt-adkn (rework, B2/B3)
+- US-03 · Ankerleiste Chips oben in der Body-Box · a
+- US-04 · Klick auf Chip springt zur Ueberschrift · r: Klick scrollt real nicht an die Stelle → siehe Scrap-Entscheidung
+- US-05 · Ankerleiste bei 80 Spalten gekuerzt mit Ellipsis · Befund PO: 'abgeschnitten hilft als Inhaltsverzeichnis nicht' → Scrap-Entscheidung
+
+### PO-Entscheidung D01: Inhaltsverzeichnis-Experiment (bt-p78f) SCRAPPED
+Woertlich: 'Wir bauen das Experiment mit dem Inhaltsverzeichnis zurueck. Die Relevanz ist gering und die Implementierung zu aufwaendig. Daher scrapped.' Code (Parser + Ankerleiste) wird per git revert zurueckgebaut; bt-adkn (Paging) bleibt separat in rework.

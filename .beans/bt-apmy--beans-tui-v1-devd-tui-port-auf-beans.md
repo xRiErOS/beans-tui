@@ -5,10 +5,10 @@ status: completed
 type: milestone
 priority: high
 tags:
-    - to-review
     - smoke
+    - accepted
 created_at: 2026-07-14T18:32:41Z
-updated_at: 2026-07-18T15:04:35Z
+updated_at: 2026-07-21T08:39:00Z
 ---
 
 Ziel: Eigenständige TUI `bt`, die Look & Funktionalität der devd-TUI auf beans-Repos portiert — PO-Cockpit zum Ansehen, Bearbeiten und für den Review-Flow mit Agenten.

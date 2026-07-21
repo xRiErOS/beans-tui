@@ -1,11 +1,13 @@
 ---
 # bt-adkn
 title: Body seitenweise blaettern + Seiten-Indikator
-status: completed
+status: todo
 type: feature
 priority: normal
+tags:
+    - rework
 created_at: 2026-07-20T09:23:37Z
-updated_at: 2026-07-21T06:23:40Z
+updated_at: 2026-07-21T08:44:03Z
 parent: bt-vy1q
 ---
 
@@ -80,3 +82,23 @@ Initial `●○○…` (Seite 0), nach 2×PageDown `○○●○…` (Seite 2) �
 
 ## Notes for T(n+1) (bt-p78f #4)
 Body-Hotkey liegt bereits oben (bt-oox1, panelBoxTopHotkey). Der Seiten-Indikator sitzt auf dem AEUSSEREN renderPane-Rahmen (fix), NICHT auf boxBottomBorder — bt-p78f muss ihn daher NICHT mit verschieben. Falls bt-p78f am aeusseren Unterrahmen etwas aendert: overlayPaneBottomBadge teilt sich diese Zeile.
+
+## Review 2026-07-21 (PO, rejected)
+
+**US-01 (seitenweises Blaettern) · r:** woertlich: "wenn ich PageDown / PageUp verwende, dann scrollt das gesamte linke pane."
+
+**US-02 (Seiten-Indikator) · r:** "siehe US-01" + NB unten.
+
+**NB-A (PO):** "der [Indikator] wechselt nicht die Darstellung, wenn ich mit PageDown 'umblaettere'."
+**NB-B (PO):** "er sitzt falsch im linken Pane und muesste an der Box fuer 'Body' visualisiert werden."
+
+### Fix-Preludes
+
+**B1 · critical · PageDown/PageUp scrollen die Tree-Pane statt des Box-Form-Body.**
+- Fundort: Key-Routing in `handleKey`/`update.go` — die pgup/pgdn-Cases liegen in `keyDetailFocus`, werden real aber NICHT dorthin geroutet; die Tree/List-Viewport-Scroll-Ebene konsumiert pgup/pgdn zuerst.
+- Test-Luecke (Ursache, warum gruen trotz Bug): `TestBoxFormPageDownUpScrollsByPage` setzt `m.detailFocus=true` und schickt `keyMsg(tea.KeyPgDown)` durch `step`→`Update` — umgeht damit die reale `handleKey`-Routing-Reihenfolge. Es fehlt ein Integrationstest, der pgup/pgdn ueber den vollen handleKey-Pfad bei in-Detail-Fokus fuehrt (analog boxFormClickAt-Muster) UND einen Gegentest, dass die Tree-Pane pgup/pgdn NICHT mehr frisst, solange Detail fokussiert ist.
+- Fix-Rezept: pgup/pgdn im Detail-Fokus VOR dem Tree/List-Scroll abfangen (Checkpoint-Reihenfolge in handleKey), durch denselben `adjustBoxFormScroll`. Reales 80c-tmux-Smoke mit echtem PageDown ist Pflicht (Unit-Test hat den Routing-Bug strukturell nicht gesehen).
+
+**B2 · high · Indikator aktualisiert sich beim Blaettern nicht** — direkte Folge von B1 (kein Body-Scroll → Offset konstant → gleicher Punkt). Faellt mit B1, aber im Smoke separat verifizieren (Punkt wandert bei PageDown).
+
+**B3 · medium · Indikator-Platzierung (Design-Revision D02→?).** PO will den Indikator AN DER BODY-BOX, nicht am aeusseren Pane-Rahmen. Konflikt mit dem urspruenglichen Akzeptanzkriterium 'sichtbar auch waehrend des Blaetterns' (die Body-Box-Unterkante scrollt bei langem Body weg — genau die Kopplung zu bt-p78f #4). PO-Wunsch hat Vorrang; vor Reimplementierung klaeren, WIE der Indikator an der Body-Box sichtbar bleibt (z.B. an der Body-TOP-Border, wo schon das (e)-Badge sitzt, statt am Bottom). Zusaetzlich PO-Beobachtung 'im linken Pane' pruefen — overlayPaneBottomBadge soll nur die rechte Detail-Pane treffen; im realen Zwei-Pane-Layout gegenchecken.
