@@ -11,13 +11,14 @@ uid: e347d7f5-a3ec-4c1e-8f97-f2edfc23f8aa
 
 ## Aktiver Strang (2026-07-21)
 
-- **jira-Style-UI-Experiment** auf Branch `experiment/jira-style-ui` (~90 Commits vor `main`),
-  hinter Env-Flag `BT_BOXFORM=1`. Epos `bt-vy1q`, Design `docs/plans/jira-style-experiment/`.
-  **PO hat den Spike abgenommen** — voller Merge auf `main` beschlossen, Timing offen (`bt-2o9a`).
-  `bt-adkn` (Body-Blättern + Seiten-Indikator) am 2026-07-21 nach 3 Nacharbeits-Runden
-  **3/3 accepted** (fokus-unabh. pgup/pgdn · sticky Body-Header · stabile Indikator-Position).
-  `bt-p78f` (TOC/Ankerleiste) **scrapped** (PO, zu aufwändig). Offen: `bt-ty48` (GIF),
-  `bt-2o9a` (Merge-Gate PO), draft `bt-dovm` (S7, PO-Freigabe nötig).
+- **jira-Style-UI-Experiment GEMERGED auf `main`** (`bt-2o9a` done, Merge-Commit `ae2efe3`,
+  `--no-ff`, als opt-in `BT_BOXFORM=1`, Default AUS). Epos `bt-vy1q`, Design
+  `docs/plans/jira-style-experiment/`. Post-Merge Build + voller Testlauf grün.
+  `bt-adkn` (Body-Blättern + Seiten-Indikator) 3/3 accepted; `bt-p78f` (TOC) scrapped.
+  **Offen im Epos `bt-vy1q`:** `bt-ty48` (GIF), draft `bt-dovm` (S7 huh→Inline-Box, PO-Freigabe).
+  **Ausstehendes PO-Gate:** Push nach `origin/main` + Release-Tag (bewusst nicht ausgeführt —
+  Push nur mit PO-Freigabe UND Tag, git-Standard). Branch `experiment/jira-style-ui` voll
+  gemerged, noch nicht gelöscht (aufräumbar per `git branch -d`).
 
 ## Festlegungen
 

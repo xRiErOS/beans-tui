@@ -1,11 +1,11 @@
 ---
 # bt-2o9a
 title: 'Merge-Entscheidung: Spike auf main (Flag opt-in) oder verwerfen'
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-20T07:26:50Z
-updated_at: 2026-07-21T11:53:39Z
+updated_at: 2026-07-21T11:57:57Z
 parent: bt-vy1q
 ---
 
@@ -48,3 +48,6 @@ PO-Freigabe 'bt-2o9a >> jetzt mergen'. Ausgefuehrt als opt-in (BT_BOXFORM bleibt
 
 ### Merge
 experiment/jira-style-ui (112 Commits, 141 Dateien) --no-ff auf main. Inkl. der ueber d4a5367 mitgezogenen fremden .beans-Aenderungen (bt-ce7i Option B, PO-bestaetigt). Push/Tag bleibt separates PO-Gate (nicht ausgefuehrt).
+
+## Merge ausgefuehrt 2026-07-21 (main ae2efe3)
+experiment/jira-style-ui --no-ff auf main. GLOSSARY.md add/add-Konflikt (Obsidian-uid-Frontmatter + Superset) zugunsten der experiment-Version geloest (inhaltlicher Superset, kein main-only-Inhalt verloren). Post-Merge Build + voller 'command go test ./...' auf main GRUEN (EXIT=0). Push + Release-Tag bleibt separates PO-Gate (nicht ausgefuehrt).
