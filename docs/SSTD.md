@@ -16,9 +16,10 @@ uid: e347d7f5-a3ec-4c1e-8f97-f2edfc23f8aa
   `docs/plans/jira-style-experiment/`. Post-Merge Build + voller Testlauf grün.
   `bt-adkn` (Body-Blättern + Seiten-Indikator) 3/3 accepted; `bt-p78f` (TOC) scrapped.
   **Offen im Epos `bt-vy1q`:** `bt-ty48` (GIF), draft `bt-dovm` (S7 huh→Inline-Box, PO-Freigabe).
-  **Ausstehendes PO-Gate:** Push nach `origin/main` + Release-Tag (bewusst nicht ausgeführt —
-  Push nur mit PO-Freigabe UND Tag, git-Standard). Branch `experiment/jira-style-ui` voll
-  gemerged, noch nicht gelöscht (aufräumbar per `git branch -d`).
+  **Released 2026-07-21:** `main` nach `origin/main` gepusht + annotated Tag **`v0.1.0`**
+  (erster öffentlicher Release, `xRiErOS/beans-tui`). README-Screenshots aktualisiert
+  (5 Bestand + `boxform.png` für §Experimental; isoliertes Single-Repo-vhs-Setup, kein Leak).
+  Branch `experiment/jira-style-ui` voll gemerged, noch nicht gelöscht (aufräumbar per `git branch -d`).
 
 ## Festlegungen
 

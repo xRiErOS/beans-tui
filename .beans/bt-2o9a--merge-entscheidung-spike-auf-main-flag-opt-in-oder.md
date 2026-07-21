@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-20T07:26:50Z
-updated_at: 2026-07-21T11:57:57Z
+updated_at: 2026-07-21T13:13:44Z
 parent: bt-vy1q
 ---
 
@@ -51,3 +51,6 @@ experiment/jira-style-ui (112 Commits, 141 Dateien) --no-ff auf main. Inkl. der 
 
 ## Merge ausgefuehrt 2026-07-21 (main ae2efe3)
 experiment/jira-style-ui --no-ff auf main. GLOSSARY.md add/add-Konflikt (Obsidian-uid-Frontmatter + Superset) zugunsten der experiment-Version geloest (inhaltlicher Superset, kein main-only-Inhalt verloren). Post-Merge Build + voller 'command go test ./...' auf main GRUEN (EXIT=0). Push + Release-Tag bleibt separates PO-Gate (nicht ausgefuehrt).
+
+## Release 2026-07-21: gepusht + getaggt
+PO-Freigabe. main nach origin/main gepusht (2ad3879..76f9316). Annotated Tag v0.1.0 gesetzt + gepusht (erster oeffentlicher Release; opt-in Boxform dokumentiert). README-Screenshots vorher aktualisiert (5 Bestand + neuer boxform.png). Gate vollstaendig geschlossen.
