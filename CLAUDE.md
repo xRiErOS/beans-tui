@@ -5,6 +5,11 @@ Binary `bt`, Go/bubbletea. Datenlayer: beans-CLI-Subprocess (`beans list --json 
 `update --if-match`, `-S` Bleve-Suche) + eigener fsnotify-Watcher — beans-Binary bleibt die
 eine Autorität; v0.4.2 exponiert keine importierbaren Packages (alles `internal/`).
 
+**Experimentelles Flag `BT_BOXFORM=1`** (Default AUS, opt-in per Env): jira-artige Box-Form-
+Detail-Ansicht statt Accordion (`boxFormEnabled()`, `internal/tui/box_form_flag.go`). Auf
+`main` gemerged als opt-in (Spike bt-vy1q, PO-Abnahme 2026-07-21). Bei Flag AUS ist die UI
+byte-identisch zum Accordion — Bestandsgolden dürfen nicht driften. User-Doku: README §Experimental.
+
 ## Pointer
 
 - **Sprache/Begriffe: `docs/GLOSSARY.md`** — verbindlich (boxed field, Box-Titel, Box-Badge, Region, Golden, Smoke …). Vor UI-Arbeit lesen; neue Elemente dort nachtragen.

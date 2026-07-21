@@ -32,6 +32,23 @@ Release history: [`CHANGELOG.md`](CHANGELOG.md).
 - **Configurable** — editor, accent color, tree width
   (`~/.config/beans-tui/`)
 
+## Experimental: jira-style Detail (`BT_BOXFORM`)
+
+An opt-in, jira-style Detail pane that renders a bean's fields as titled
+boxes (Title / Status·Type·Priority / Parent·Tags / Body / Relations /
+History) instead of the classic Accordion. **Off by default** — enable per
+session with the environment flag:
+
+```sh
+BT_BOXFORM=1 bt
+```
+
+Highlights when enabled: field-anchored value menus (mouse-native), a
+focusable field cursor (`tab`/`shift+tab`), and paged Body scrolling
+(`pgup`/`pgdn`) with a sticky Body header carrying a page indicator. With
+the flag unset the UI is byte-for-byte the classic Accordion. Design notes:
+[`docs/plans/jira-style-experiment/`](docs/plans/jira-style-experiment/).
+
 ## Screenshots
 
 | Lobby / Repo-Picker |
